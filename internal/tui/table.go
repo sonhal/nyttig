@@ -2,7 +2,8 @@
 //
 // table.go implements a custom Lipgloss table renderer for the news item list.
 // It renders a scrollable viewport with unviewed indicators, colored tag chips,
-// truncated titles, right-aligned domains, and row highlighting.
+// a published date, truncated titles and descriptions, right-aligned domains,
+// and row highlighting.
 package tui
 
 import (
@@ -10,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	pb "github.com/sonhal/nyttig/internal/proto/nyttig/v1"
 )
@@ -30,12 +32,18 @@ var (
 	timeStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#808080"))
 
+	descStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#6A9955"))
+
 	domainStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#569CD6"))
 
 	tagBracketStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#808080"))
 )
+
+// dateColumnWidth is the fixed width of the published-date column ("dd.MM HH:mm").
+const dateColumnWidth = 11
 
 // ── Table ──────────────────────────────────────────────────────
 
@@ -197,7 +205,12 @@ func (t *Table) View() string {
 // renderRow renders a single item row. If selected, applies highlight styling.
 func (t *Table) renderRow(item *pb.Item, selected bool) string {
 	// Layout (columns):
-	//   viewed (2) | time (5) | tags (variable) | title (fill) | domain (right)
+	//   viewed (2) | date (11) | tags (variable) | title + description (fill) | domain (right)
+	const (
+		margin   = 1
+		minTitle = 20
+		minDesc  = 12
+	)
 
 	// 1. Viewed indicator.
 	viewedCol := "  "
@@ -205,54 +218,68 @@ func (t *Table) renderRow(item *pb.Item, selected bool) string {
 		viewedCol = unviewedDot + " "
 	}
 
-	// 2. Time.
-	timeCol := "     " // 5 spaces default
-	if item.Published != nil {
-		tm := item.Published.AsTime()
-		timeCol = tm.Format("15:04")
-	}
-	timeCol = timeStyle.Render(timeCol)
+	// 2. Date (blank-padded when unknown so columns stay aligned).
+	dateCol := timeStyle.Render(formatDate(item.Published))
 
 	// 3. Tags.
 	tagsCol := t.renderTags(item.Tags)
 
-	// 4. Title + domain.
-	// Compute available width for title+domain.
-	// viewed(2) + space(1) + time(5) + space(1) + tags(N) + space(1) + ...
-	const margin = 1
-	prefixLen := 2 + margin + 5 + margin
+	// 4. Title + description + domain.
+	// viewed(2) + space(1) + date(11) + space(1) + tags(N) + space(1) + ...
+	prefixLen := 2 + margin + dateColumnWidth + margin
 	tagsLen := lipgloss.Width(tagsCol)
 	if tagsLen > 0 {
 		tagsLen += margin
 	}
 
-	// Domain from link.
+	// Domain (the source) from link, right-aligned.
 	domain := extractDomain(item.Link)
 	domainCol := domainStyle.Render(domain)
 	domainLen := lipgloss.Width(domainCol)
 
-	titleAvail := t.width - prefixLen - tagsLen - margin - domainLen
-	if titleAvail < 5 {
-		titleAvail = 5
+	// Space available for the title and description, before the right-aligned domain.
+	avail := t.width - prefixLen - tagsLen - margin - domainLen
+	if avail < 5 {
+		avail = 5
 	}
 
-	title := truncateEllipsis(item.Title, titleAvail)
-	titleCol := title
+	// The description fills whatever space the title leaves, and is truncated
+	// with "..." when too long. It is only shown when there is room for a
+	// meaningful title and description side by side.
+	var titleCol, descCol string
+	descLen := 0
+	if item.Description != "" && avail >= minTitle+margin+minDesc {
+		titleW := avail * 3 / 5
+		descW := avail - titleW - margin // margin separates title and description
+		titleCol = truncateEllipsis(item.Title, titleW)
+		descCol = descStyle.Render(truncateWithSuffix(item.Description, descW, "..."))
+		descLen = lipgloss.Width(descCol)
+	} else {
+		titleCol = truncateEllipsis(item.Title, avail)
+	}
+	titleLen := lipgloss.Width(titleCol)
 
-	// Right-align domain by padding between title and domain.
-	titleActual := lipgloss.Width(titleCol)
-	between := t.width - prefixLen - tagsLen - margin - titleActual - domainLen
+	// Right-align domain by padding between the content and the domain.
+	used := prefixLen + tagsLen + titleLen
+	if descLen > 0 {
+		used += margin + descLen
+	}
+	between := t.width - used - domainLen
 	if between < 0 {
 		between = 0
 	}
 	padding := strings.Repeat(" ", between)
 
-	// Assemble.
-	row := viewedCol + timeCol + " "
+	// Assemble: viewed date tags title description <padding> domain
+	row := viewedCol + dateCol + " "
 	if tagsCol != "" {
 		row += tagsCol + " "
 	}
-	row += titleCol + padding + domainCol
+	row += titleCol
+	if descLen > 0 {
+		row += " " + descCol
+	}
+	row += padding + domainCol
 
 	// Pad or truncate to exact width.
 	row = lipgloss.NewStyle().Width(t.width).Render(row)
@@ -297,6 +324,16 @@ func (t *Table) renderTagChip(tag *pb.Tag) string {
 
 // ── Helpers ────────────────────────────────────────────────────
 
+// formatDate renders a published timestamp as a fixed-width "dd.MM HH:mm" string.
+// It returns dateColumnWidth spaces when the timestamp is missing, keeping
+// columns aligned. The time is formatted as-is (UTC) for deterministic output.
+func formatDate(published *timestamppb.Timestamp) string {
+	if published == nil {
+		return strings.Repeat(" ", dateColumnWidth)
+	}
+	return published.AsTime().Format("02.01 15:04")
+}
+
 // extractDomain extracts the host from a URL string for display.
 func extractDomain(link string) string {
 	u, err := url.Parse(link)
@@ -311,22 +348,25 @@ func extractDomain(link string) string {
 
 // truncateEllipsis truncates s to at most maxWidth rune-cells, appending "..".
 func truncateEllipsis(s string, maxWidth int) string {
+	return truncateWithSuffix(s, maxWidth, "..")
+}
+
+// truncateWithSuffix truncates s to at most maxWidth display cells, appending
+// suffix when s overflows.
+func truncateWithSuffix(s string, maxWidth int, suffix string) string {
 	if maxWidth <= 0 {
 		return ""
 	}
-	width := lipgloss.Width(s)
-	if width <= maxWidth {
+	if lipgloss.Width(s) <= maxWidth {
 		return s
 	}
-	if maxWidth <= 2 {
+	suffixW := lipgloss.Width(suffix)
+	if maxWidth <= suffixW {
 		return strings.Repeat(".", maxWidth)
 	}
-	// Iterate runes to count display width.
+	limit := maxWidth - suffixW
 	var runes []rune
 	w := 0
-	suffix := ".."
-	suffixW := lipgloss.Width(suffix)
-	limit := maxWidth - suffixW
 	for _, r := range s {
 		rw := lipgloss.Width(string(r))
 		if w+rw > limit {

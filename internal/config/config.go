@@ -19,9 +19,21 @@ type Config struct {
 	Socket   string    `toml:"socket"`
 	DBPath   string    `toml:"db_path"`
 	LogLevel string    `toml:"log_level"`
+	TLS      TLS       `toml:"tls"`
 	Sources  []Source  `toml:"sources"`
 	Tags     []Tag     `toml:"tags"`
 	TagRules []TagRule `toml:"tag_rules"`
+}
+
+// TLS configures mutual-TLS for the daemon's gRPC listener. When set, the
+// daemon presents Cert/Key and requires clients to present a certificate
+// signed by a CA in ClientCA. Paths may use a leading "~" for the home
+// directory. Leave the whole table out to listen in plaintext (the default,
+// appropriate for a local Unix socket).
+type TLS struct {
+	Cert     string `toml:"cert"`
+	Key      string `toml:"key"`
+	ClientCA string `toml:"client_ca"`
 }
 
 // Source is a feed source declared in the config file.

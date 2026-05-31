@@ -2,6 +2,15 @@ socket = "/tmp/nyttig.sock"
 db_path = "~/.local/share/nyttig/nyttig.db"
 log_level = "info"
 
+# Mutual TLS. Uncomment to expose nyttigd over a TCP port securely: the daemon
+# presents `cert`/`key` and only accepts clients holding a certificate signed
+# by `client_ca`. For a remote server you would typically set
+# socket = ":9090" above. Leave this table out for a plaintext local socket.
+# [tls]
+# cert = "~/.config/nyttig/certs/server.pem"
+# key = "~/.config/nyttig/certs/server.key"
+# client_ca = "~/.config/nyttig/certs/ca.pem"
+
 [[sources]]
 name = "Hacker News"
 url = "https://news.ycombinator.com/rss"

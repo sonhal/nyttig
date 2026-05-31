@@ -663,9 +663,31 @@ func TestFetch_DescriptionField(t *testing.T) {
 	if item.Description == nil {
 		t.Error("expected description to be set")
 	} else {
-		expected := "This is a description with <b>HTML</b> tags."
+		expected := "This is a description with HTML tags."
 		if *item.Description != expected {
 			t.Errorf("expected description %q, got %q", expected, *item.Description)
 		}
+	}
+}
+
+func TestSanitizeHTML(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"plain", "Just text", "Just text"},
+		{"strips tags", `<p><a href="https://news.ycombinator.com/item?id=1">Comments</a></p>`, "Comments"},
+		{"decodes entities", "Tom &amp; Jerry &lt;3", "Tom & Jerry <3"},
+		{"collapses whitespace", "lots\n\n  of   space", "lots of space"},
+		{"tags only", `<p><br/></p>`, ""},
+		{"empty", "", ""},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := sanitizeHTML(c.in); got != c.want {
+				t.Errorf("sanitizeHTML(%q) = %q, want %q", c.in, got, c.want)
+			}
+		})
 	}
 }

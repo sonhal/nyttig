@@ -40,8 +40,7 @@ var (
 
 	filterActiveSearchStyle = lipgloss.NewStyle().
 				Foreground(lipgloss.Color("#4EC9B0")).
-				Border(lipgloss.NormalBorder(), false, false, true, false).
-				BorderForeground(lipgloss.Color("#4EC9B0"))
+				Underline(true)
 )
 
 // ── Source and tag descriptors ─────────────────────────────────

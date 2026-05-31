@@ -142,6 +142,18 @@ nyttig refresh
 | `db_path`   | `~/.local/share/nyttig/nyttig.db` | SQLite database path               |
 | `log_level` | `info`                            | `debug`, `info`, `warn`, `error`   |
 
+### `[tls]`
+
+Optional. Enables [mutual TLS](#remote-access-with-mutual-tls) on the daemon's
+listener. Omit the whole table to serve in plaintext (fine for a local Unix
+socket). Paths may use a leading `~`.
+
+| Field        | Required | Description                                          |
+|--------------|----------|------------------------------------------------------|
+| `cert`       | yes      | Server certificate (PEM) the daemon presents         |
+| `key`        | yes      | Server private key (PEM)                             |
+| `client_ca`  | yes      | CA bundle (PEM) used to verify client certificates   |
+
 ### `[[sources]]`
 
 | Field         | Required | Default | Description                                      |
@@ -171,20 +183,30 @@ nyttig refresh
 
 ## Daemon Flags (`nyttigd`)
 
-| Flag         | Default                              | Description                          |
-|--------------|--------------------------------------|--------------------------------------|
-| `--socket`   | `/tmp/nyttig.sock`                   | Unix socket path (or `host:port`)    |
-| `--config`   | `~/.config/nyttig/config.toml`       | Config file path                     |
-| `--db-path`  | config value or default              | Override database path               |
-| `--log-level`| `info`                               | `debug`, `info`, `warn`, `error`     |
+| Flag              | Default                        | Description                                       |
+|-------------------|--------------------------------|---------------------------------------------------|
+| `--socket`        | `/tmp/nyttig.sock`             | Unix socket path (or `host:port`)                 |
+| `--config`        | `~/.config/nyttig/config.toml` | Config file path                                  |
+| `--db-path`       | config value or default        | Override database path                            |
+| `--log-level`     | `info`                         | `debug`, `info`, `warn`, `error`                  |
+| `--tls-cert`      | —                              | Server certificate (PEM); enables mTLS            |
+| `--tls-key`       | —                              | Server private key (PEM)                          |
+| `--tls-client-ca` | —                              | CA bundle (PEM) used to verify client certs       |
+
+Flags override the corresponding `[tls]` config values. All three TLS flags are
+required together.
 
 ## Client Flags (`nyttig`)
 
-| Flag       | Default              | Description                              |
-|------------|----------------------|------------------------------------------|
-| `--socket` | `/tmp/nyttig.sock`   | Daemon socket to connect to              |
-| `--tls`    | `false`              | Enable TLS for remote connections        |
-| `--tls-ca` | —                    | CA certificate file for TLS verification |
+These are global flags accepted by every subcommand and the TUI.
+
+| Flag                | Default            | Description                                          |
+|---------------------|--------------------|------------------------------------------------------|
+| `--socket`          | `/tmp/nyttig.sock` | Daemon Unix socket path or `host:port`               |
+| `--tls-cert`        | —                  | Client certificate (PEM); enables mTLS               |
+| `--tls-key`         | —                  | Client private key (PEM)                             |
+| `--tls-ca`          | —                  | CA bundle (PEM) used to verify the daemon            |
+| `--tls-server-name` | —                  | Override the name verified against the daemon's cert |
 
 ## TUI Keybindings
 
@@ -259,6 +281,68 @@ Items are deduplicated by GUID using `UNIQUE(source_id, guid)`:
 - If no GUID is present, the SHA-256 hash of the entry's `<link>` is used instead.
 
 This means an item will only appear once per source in the database.
+
+## Remote Access with Mutual TLS
+
+By default the daemon listens on a local Unix socket in plaintext. To run
+`nyttigd` on a server and connect from another machine, expose it on a TCP port
+protected by **mutual TLS (mTLS)**: the daemon proves its identity to the
+client *and* the client proves its identity to the daemon, so only holders of a
+certificate signed by your CA can connect — no extra password layer needed.
+
+### 1. Generate certificates
+
+A helper script issues a private CA plus a server and a client certificate.
+Pass the hostname (or IP) clients will dial:
+
+```bash
+./scripts/gen-certs.sh ./certs nyttig.example.com
+# → certs/ca.pem, certs/server.pem, certs/server.key,
+#   certs/client.pem, certs/client.key
+```
+
+Keep the `*.key` files private. The server needs `ca.pem`, `server.pem`,
+`server.key`; each client needs `ca.pem`, `client.pem`, `client.key`.
+
+### 2. Run the daemon with TLS
+
+Via flags:
+
+```bash
+nyttigd -socket :9090 \
+  -tls-cert certs/server.pem -tls-key certs/server.key -tls-client-ca certs/ca.pem
+```
+
+…or via the config file (see [`[tls]`](#tls)):
+
+```toml
+socket = ":9090"
+
+[tls]
+cert = "~/.config/nyttig/certs/server.pem"
+key = "~/.config/nyttig/certs/server.key"
+client_ca = "~/.config/nyttig/certs/ca.pem"
+```
+
+The daemon logs `mutual TLS enabled` on startup; it logs a warning if no TLS is
+configured.
+
+### 3. Connect the client
+
+```bash
+nyttig list-sources -socket nyttig.example.com:9090 \
+  -tls-cert certs/client.pem -tls-key certs/client.key -tls-ca certs/ca.pem
+
+# Launch the TUI against the remote daemon:
+nyttig -socket nyttig.example.com:9090 \
+  -tls-cert certs/client.pem -tls-key certs/client.key -tls-ca certs/ca.pem
+```
+
+Use `-tls-server-name` if you dial by an address that doesn't match the
+server certificate's name (e.g. connecting by raw IP).
+
+Connections without a valid client certificate, or whose certificate is signed
+by a different CA, are rejected at the TLS handshake.
 
 ## Running as a Systemd Service
 

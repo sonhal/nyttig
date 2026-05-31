@@ -22,6 +22,7 @@ import (
 	"google.golang.org/grpc/reflection"
 
 	"github.com/sonhal/nyttig/internal/config"
+	"github.com/sonhal/nyttig/internal/mtls"
 	pb "github.com/sonhal/nyttig/internal/proto/nyttig/v1"
 	"github.com/sonhal/nyttig/internal/server/db"
 	"github.com/sonhal/nyttig/internal/server/fetcher"
@@ -32,10 +33,13 @@ import (
 
 func main() {
 	var (
-		socket     = flag.String("socket", "/tmp/nyttig.sock", "Unix socket path or TCP address to listen on")
-		dbPath     = flag.String("db-path", "", "Path to SQLite database (default: ~/.local/share/nyttig/nyttig.db)")
-		logLevel   = flag.String("log-level", "info", "Log level: debug, info, warn, error")
-		configPath = flag.String("config", "", "Path to TOML config file (seeds sources/tags/rules; provides defaults for socket, db-path, log-level)")
+		socket      = flag.String("socket", "/tmp/nyttig.sock", "Unix socket path or TCP address to listen on")
+		dbPath      = flag.String("db-path", "", "Path to SQLite database (default: ~/.local/share/nyttig/nyttig.db)")
+		logLevel    = flag.String("log-level", "info", "Log level: debug, info, warn, error")
+		configPath  = flag.String("config", "", "Path to TOML config file (seeds sources/tags/rules; provides defaults for socket, db-path, log-level)")
+		tlsCert     = flag.String("tls-cert", "", "Server TLS certificate (PEM); enables mTLS together with -tls-key and -tls-client-ca")
+		tlsKey      = flag.String("tls-key", "", "Server TLS private key (PEM)")
+		tlsClientCA = flag.String("tls-client-ca", "", "CA bundle (PEM) used to verify client certificates")
 	)
 	flag.Parse()
 
@@ -62,6 +66,15 @@ func main() {
 		}
 		if cfg.LogLevel != "" && !setFlags["log-level"] {
 			*logLevel = cfg.LogLevel
+		}
+		if cfg.TLS.Cert != "" && !setFlags["tls-cert"] {
+			*tlsCert = cfg.TLS.Cert
+		}
+		if cfg.TLS.Key != "" && !setFlags["tls-key"] {
+			*tlsKey = cfg.TLS.Key
+		}
+		if cfg.TLS.ClientCA != "" && !setFlags["tls-client-ca"] {
+			*tlsClientCA = cfg.TLS.ClientCA
 		}
 	}
 
@@ -182,9 +195,30 @@ func main() {
 	logger.Info("scheduler started")
 
 	// ── gRPC server ──────────────────────────────────────────────────────
-	grpcServer := grpc.NewServer(
+	grpcOpts := []grpc.ServerOption{
 		grpc.MaxConcurrentStreams(100),
-	)
+	}
+
+	// Configure mutual TLS if any TLS option was provided (flag or config).
+	// All three are required together; mtls.ServerCredentials enforces this.
+	tlsOpts := mtls.ServerOptions{
+		CertFile:     config.ExpandHome(*tlsCert),
+		KeyFile:      config.ExpandHome(*tlsKey),
+		ClientCAFile: config.ExpandHome(*tlsClientCA),
+	}
+	if tlsOpts.Enabled() {
+		creds, err := mtls.ServerCredentials(tlsOpts)
+		if err != nil {
+			logger.Error("cannot configure mTLS", "error", err)
+			os.Exit(1)
+		}
+		grpcOpts = append(grpcOpts, grpc.Creds(creds))
+		logger.Info("mutual TLS enabled", "cert", tlsOpts.CertFile, "client_ca", tlsOpts.ClientCAFile)
+	} else {
+		logger.Warn("TLS not configured; serving in plaintext (use only on a local socket or trusted network)")
+	}
+
+	grpcServer := grpc.NewServer(grpcOpts...)
 	pb.RegisterNyttigServer(grpcServer, svc)
 	reflection.Register(grpcServer)
 

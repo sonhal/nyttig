@@ -7,8 +7,10 @@ import (
 	"database/sql"
 	"encoding/xml"
 	"fmt"
+	"html"
 	"io"
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
 
@@ -21,7 +23,7 @@ const userAgent = "Nyttig/0.1 (news-aggregator)"
 // ── RSS 2.0 types ───────────────────────────────────────────────
 
 type rssFeed struct {
-	XMLName xml.Name  `xml:"rss"`
+	XMLName xml.Name   `xml:"rss"`
 	Channel rssChannel `xml:"channel"`
 }
 
@@ -246,7 +248,7 @@ func parseRSS(body []byte) ([]parsedEntry, error) {
 		entry := parsedEntry{
 			Title:       strings.TrimSpace(item.Title),
 			Link:        strings.TrimSpace(item.Link),
-			Description: strings.TrimSpace(item.Description),
+			Description: sanitizeHTML(item.Description),
 			Author:      strings.TrimSpace(item.Author),
 			GUID:        strings.TrimSpace(item.GUID),
 		}
@@ -286,9 +288,9 @@ func parseAtom(body []byte) ([]parsedEntry, error) {
 		}
 
 		// Description: use summary, fallback to content.
-		if s := strings.TrimSpace(e.Summary); s != "" {
+		if s := sanitizeHTML(e.Summary); s != "" {
 			entry.Description = s
-		} else if c := strings.TrimSpace(e.Content); c != "" {
+		} else if c := sanitizeHTML(e.Content); c != "" {
 			entry.Description = c
 		}
 
@@ -351,4 +353,19 @@ func parseAtomDate(s string) (time.Time, error) {
 		}
 	}
 	return time.Time{}, fmt.Errorf("unrecognized Atom date %q", s)
+}
+
+// ── HTML sanitization ───────────────────────────────────────────
+
+// htmlTagRE matches HTML/XML tags (e.g. <p>, </a>, <a href="...">).
+var htmlTagRE = regexp.MustCompile(`<[^>]*>`)
+
+// sanitizeHTML turns an HTML description fragment into plain, readable text:
+// it removes tags, decodes HTML entities, and collapses runs of whitespace
+// into single spaces. Feed descriptions are frequently wrapped in markup
+// (e.g. "<p><a href=...>") which is noise in a compact terminal list.
+func sanitizeHTML(s string) string {
+	s = htmlTagRE.ReplaceAllString(s, " ")
+	s = html.UnescapeString(s)
+	return strings.Join(strings.Fields(s), " ")
 }

@@ -3,12 +3,12 @@
 // When invoked without subcommands, starts the interactive TUI.
 // Subcommands provide headless management of sources, tags, and manual refresh.
 //
-//   nyttig                                       # launch interactive TUI
-//   nyttig add-source -n "HN" -u "https://..."   # add a feed source
-//   nyttig list-sources                          # list all sources
-//   nyttig remove-source -i 1                    # remove source by ID
-//   nyttig add-tag -n "rust" -c "#FF6B35"        # create a tag
-//   nyttig refresh                               # force immediate fetch of all sources
+//	nyttig                                       # launch interactive TUI
+//	nyttig add-source -n "HN" -u "https://..."   # add a feed source
+//	nyttig list-sources                          # list all sources
+//	nyttig remove-source -i 1                    # remove source by ID
+//	nyttig add-tag -n "rust" -c "#FF6B35"        # create a tag
+//	nyttig refresh                               # force immediate fetch of all sources
 package main
 
 import (
@@ -16,6 +16,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strings"
 	"text/tabwriter"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -27,12 +28,35 @@ import (
 
 // Global flags shared across all subcommands.
 var (
-	socketPath string
+	socketPath    string
+	tlsCert       string
+	tlsKey        string
+	tlsCA         string
+	tlsServerName string
 )
 
+// registerClientFlags registers the connection flags shared by every
+// subcommand (and the TUI) on fs.
+func registerClientFlags(fs *flag.FlagSet) {
+	fs.StringVar(&socketPath, "socket", "/tmp/nyttig.sock", "Daemon Unix socket path or TCP address (host:port)")
+	fs.StringVar(&tlsCert, "tls-cert", "", "Client TLS certificate (PEM); enables mTLS together with -tls-key and -tls-ca")
+	fs.StringVar(&tlsKey, "tls-key", "", "Client TLS private key (PEM)")
+	fs.StringVar(&tlsCA, "tls-ca", "", "CA bundle (PEM) used to verify the daemon's certificate")
+	fs.StringVar(&tlsServerName, "tls-server-name", "", "Override the name verified against the daemon's certificate")
+}
+
 func main() {
-	if len(os.Args) < 2 {
-		// No subcommand: launch the interactive TUI.
+	// Print the curated help for the explicit help forms before the
+	// flag-routing check below; otherwise "-h"/"--help" would be treated
+	// as leading flags and launch the TUI.
+	if len(os.Args) >= 2 && (os.Args[1] == "help" || os.Args[1] == "-h" || os.Args[1] == "--help") {
+		printHelp()
+		return
+	}
+
+	// Launch the TUI when invoked with no subcommand, or when the first
+	// argument is a flag (e.g. "nyttig --socket host:9090 --tls-cert ...").
+	if len(os.Args) < 2 || strings.HasPrefix(os.Args[1], "-") {
 		runTUI()
 		return
 	}
@@ -50,8 +74,6 @@ func main() {
 		addTagCmd()
 	case "refresh":
 		refreshCmd()
-	case "help", "-h", "--help":
-		printHelp()
 	default:
 		fmt.Fprintf(os.Stderr, "Unknown command: %s. Run 'nyttig help' for usage.\n", cmd)
 		os.Exit(1)
@@ -67,22 +89,37 @@ func printHelp() {
 	fmt.Fprintf(os.Stderr, "  add-tag        Create a new tag\n")
 	fmt.Fprintf(os.Stderr, "  refresh        Force immediate fetch of all sources\n")
 	fmt.Fprintf(os.Stderr, "\nGlobal flags:\n")
-	fmt.Fprintf(os.Stderr, "  --socket PATH  Daemon Unix socket path (default: /tmp/nyttig.sock)\n")
+	fmt.Fprintf(os.Stderr, "  --socket PATH         Daemon Unix socket path or TCP address (default: /tmp/nyttig.sock)\n")
+	fmt.Fprintf(os.Stderr, "  --tls-cert PATH       Client TLS certificate (PEM) for mTLS\n")
+	fmt.Fprintf(os.Stderr, "  --tls-key PATH        Client TLS private key (PEM) for mTLS\n")
+	fmt.Fprintf(os.Stderr, "  --tls-ca PATH         CA bundle (PEM) to verify the daemon\n")
+	fmt.Fprintf(os.Stderr, "  --tls-server-name N   Override name verified against the daemon certificate\n")
 }
 
-// newClient creates a gRPC client connected to the daemon.
-func newClient() *client.Client {
+// clientOptions builds connection options from the parsed global flags.
+func clientOptions() client.Options {
 	sock := socketPath
 	if sock == "" {
 		sock = "/tmp/nyttig.sock"
 	}
-	return client.New(client.Options{Addr: sock})
+	return client.Options{
+		Addr:       sock,
+		TLSCert:    tlsCert,
+		TLSKey:     tlsKey,
+		TLSCA:      tlsCA,
+		ServerName: tlsServerName,
+	}
+}
+
+// newClient creates a gRPC client connected to the daemon.
+func newClient() *client.Client {
+	return client.New(clientOptions())
 }
 
 // addSourceCmd handles the "add-source" subcommand.
 func addSourceCmd() {
 	flags := flag.NewFlagSet("add-source", flag.ExitOnError)
-	flags.StringVar(&socketPath, "socket", "/tmp/nyttig.sock", "Daemon socket path")
+	registerClientFlags(flags)
 
 	var (
 		name       string
@@ -144,7 +181,7 @@ func addSourceCmd() {
 // listSourcesCmd handles the "list-sources" subcommand.
 func listSourcesCmd() {
 	flags := flag.NewFlagSet("list-sources", flag.ExitOnError)
-	flags.StringVar(&socketPath, "socket", "/tmp/nyttig.sock", "Daemon socket path")
+	registerClientFlags(flags)
 	flags.Parse(os.Args[2:])
 
 	c := newClient()
@@ -179,7 +216,7 @@ func listSourcesCmd() {
 // removeSourceCmd handles the "remove-source" subcommand.
 func removeSourceCmd() {
 	flags := flag.NewFlagSet("remove-source", flag.ExitOnError)
-	flags.StringVar(&socketPath, "socket", "/tmp/nyttig.sock", "Daemon socket path")
+	registerClientFlags(flags)
 
 	var id int64
 	flags.Int64Var(&id, "i", 0, "Source ID to remove (required)")
@@ -213,7 +250,7 @@ func removeSourceCmd() {
 // addTagCmd handles the "add-tag" subcommand.
 func addTagCmd() {
 	flags := flag.NewFlagSet("add-tag", flag.ExitOnError)
-	flags.StringVar(&socketPath, "socket", "/tmp/nyttig.sock", "Daemon socket path")
+	registerClientFlags(flags)
 
 	var (
 		name  string
@@ -261,7 +298,7 @@ func addTagCmd() {
 // refreshCmd handles the "refresh" subcommand.
 func refreshCmd() {
 	flags := flag.NewFlagSet("refresh", flag.ExitOnError)
-	flags.StringVar(&socketPath, "socket", "/tmp/nyttig.sock", "Daemon socket path")
+	registerClientFlags(flags)
 	flags.Parse(os.Args[2:])
 
 	c := newClient()
@@ -279,15 +316,13 @@ func refreshCmd() {
 
 // runTUI starts the interactive Bubble Tea TUI.
 func runTUI() {
-	// Check for --socket flag in the global args.
-	sock := "/tmp/nyttig.sock"
-	for i, a := range os.Args {
-		if a == "--socket" && i+1 < len(os.Args) {
-			sock = os.Args[i+1]
-		}
-	}
+	fs := flag.NewFlagSet("nyttig", flag.ExitOnError)
+	registerClientFlags(fs)
+	// os.Args[1:] is safe: when a subcommand is present main() dispatches
+	// elsewhere, so anything reaching here is global flags (or nothing).
+	fs.Parse(os.Args[1:])
 
-	c := client.New(client.Options{Addr: sock})
+	c := client.New(clientOptions())
 	defer c.Close()
 
 	m := tui.NewModel(c)

@@ -155,9 +155,9 @@ func ListItems(db *sql.DB, filter ItemFilter) ([]*Item, int, error) {
 	}
 
 	// Sort order.
-	orderClause := "i.fetched_at DESC"
+	orderClause := "i.published DESC NULLS LAST, i.fetched_at DESC"
 	if filter.Sort == "oldest" {
-		orderClause = "i.fetched_at ASC"
+		orderClause = "i.published ASC NULLS LAST, i.fetched_at ASC"
 	}
 
 	// Main query with source name and view flag.

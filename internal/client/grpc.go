@@ -15,10 +15,12 @@ import (
 	"time"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/keepalive"
 	"google.golang.org/protobuf/types/known/emptypb"
 
+	"github.com/sonhal/nyttig/internal/mtls"
 	pb "github.com/sonhal/nyttig/internal/proto/nyttig/v1"
 )
 
@@ -41,6 +43,29 @@ type Options struct {
 	// StreamBufferSize is the buffer size for the StreamItems output channel.
 	// Defaults to 256.
 	StreamBufferSize int
+
+	// ── Mutual TLS ──
+	// When TLSCert/TLSKey/TLSCA are set, the client connects over mutual TLS:
+	// it presents the client certificate and verifies the daemon against the CA.
+	// Leave them empty to connect in plaintext (e.g. over a local Unix socket).
+	TLSCert string // Client certificate (PEM).
+	TLSKey  string // Client private key (PEM).
+	TLSCA   string // CA bundle (PEM) used to verify the daemon's certificate.
+
+	// ServerName overrides the name verified against the daemon's certificate.
+	// Useful when dialing by IP or through a tunnel where the address does not
+	// match the certificate's SAN. Optional.
+	ServerName string
+}
+
+// tlsOptions projects the client Options onto mtls.ClientOptions.
+func (o Options) tlsOptions() mtls.ClientOptions {
+	return mtls.ClientOptions{
+		CertFile:   o.TLSCert,
+		KeyFile:    o.TLSKey,
+		CAFile:     o.TLSCA,
+		ServerName: o.ServerName,
+	}
 }
 
 // Client is a gRPC client for the Nyttig daemon.
@@ -105,7 +130,16 @@ func (c *Client) Dial(ctx context.Context) error {
 func (c *Client) dialLocked(ctx context.Context) error {
 	target := c.target()
 
-	creds := insecure.NewCredentials()
+	var creds credentials.TransportCredentials
+	if c.opts.tlsOptions().Enabled() {
+		tc, err := mtls.ClientCredentials(c.opts.tlsOptions())
+		if err != nil {
+			return err
+		}
+		creds = tc
+	} else {
+		creds = insecure.NewCredentials()
+	}
 	dialOpts := []grpc.DialOption{
 		grpc.WithTransportCredentials(creds),
 		grpc.WithKeepaliveParams(keepalive.ClientParameters{
