@@ -1,0 +1,196 @@
+syntax = "proto3";
+
+package nyttig.v1;
+
+import "google/protobuf/empty.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/sonhal/nyttig/internal/proto/nyttig/v1";
+
+// ── Common types ────────────────────────────────────────────
+
+message Source {
+    int64  id          = 1;
+    string name        = 2;
+    string url         = 3;
+    string type        = 4;  // rss, atom
+    int32  refresh_sec = 5;
+    bool   enabled     = 6;
+    google.protobuf.Timestamp created_at = 7;
+    google.protobuf.Timestamp last_fetch = 8;
+    string fetch_error = 9;
+}
+
+message Item {
+    int64  id          = 1;
+    int64  source_id   = 2;
+    string source_name = 3;
+    string guid        = 4;
+    string link        = 5;
+    string title       = 6;
+    string description = 7;
+    string author      = 8;
+    google.protobuf.Timestamp published  = 9;
+    google.protobuf.Timestamp fetched_at = 10;
+    repeated Tag tags  = 11;
+    bool   viewed      = 12;
+}
+
+message Tag {
+    int64  id    = 1;
+    string name  = 2;
+    string color = 3;  // hex color, e.g. "#FF6B35"
+}
+
+message TagRule {
+    int64  id        = 1;
+    int64  source_id = 2;  // 0 = global
+    int64  tag_id    = 3;
+    string tag_name  = 4;
+    string field     = 5;  // title, description, both
+    string pattern   = 6;  // regex pattern
+    int32  priority  = 7;
+}
+
+// ── Source management ───────────────────────────────────────
+
+message AddSourceRequest {
+    string name        = 1;
+    string url         = 2;
+    string type        = 3;  // rss, atom; defaults to "rss"
+    int32  refresh_sec = 4;
+    bool   enabled     = 5;
+}
+
+message RemoveSourceRequest {
+    int64 id = 1;
+}
+
+message UpdateSourceRequest {
+    int64  id          = 1;
+    string name        = 2;
+    string url         = 3;
+    string type        = 4;
+    int32  refresh_sec = 5;
+    bool   enabled     = 6;
+}
+
+message ListSourcesResponse {
+    repeated Source sources = 1;
+}
+
+message RefreshSourceRequest {
+    int64 source_id = 1;  // 0 = all sources
+}
+
+// ── Tag management ──────────────────────────────────────────
+
+message AddTagRequest {
+    string name  = 1;
+    string color = 2;
+}
+
+message RemoveTagRequest {
+    int64 id = 1;
+}
+
+message ListTagsResponse {
+    repeated Tag tags = 1;
+}
+
+// ── Tag rules ───────────────────────────────────────────────
+
+message AddTagRuleRequest {
+    int64  source_id = 1;  // 0 = global
+    int64  tag_id    = 2;
+    string field     = 3;  // title, description, both
+    string pattern   = 4;
+    int32  priority  = 5;
+}
+
+message RemoveTagRuleRequest {
+    int64 id = 1;
+}
+
+message ListTagRulesResponse {
+    repeated TagRule rules = 1;
+}
+
+// ── Full-text search ────────────────────────────────────────
+
+message SearchRequest {
+    string query     = 1;
+    int64  source_id = 2;  // 0 = all sources
+    int64  tag_id    = 3;  // 0 = all tags
+    int32  limit     = 4;  // default: 100
+    int32  offset    = 5;  // default: 0
+}
+
+message SearchResponse {
+    repeated Item items = 1;
+    int32         total = 2;
+}
+
+// ── View tracking ───────────────────────────────────────────
+
+message MarkViewedRequest {
+    repeated int64 item_ids = 1;
+}
+
+// ── StreamItems (bidirectional) ─────────────────────────────
+
+message ClientMessage {
+    oneof msg {
+        StreamFilter filter = 1;
+    }
+}
+
+message StreamFilter {
+    int64  source_id = 1;  // 0 = all
+    int64  tag_id    = 2;  // 0 = all
+    string search    = 3;  // FTS5 query string, empty = no filter
+    string sort      = 4;  // newest, oldest; default newest
+    int32  limit     = 5;
+    bool   unviewed_only = 6;
+}
+
+message ServerMessage {
+    oneof msg {
+        Item     item     = 1;
+        Reset    reset    = 2;
+        Complete complete = 3;
+    }
+}
+
+message Reset {}
+message Complete {}
+
+// ── Service definition ──────────────────────────────────────
+
+service Nyttig {
+    // Source management
+    rpc AddSource(AddSourceRequest) returns (Source);
+    rpc RemoveSource(RemoveSourceRequest) returns (google.protobuf.Empty);
+    rpc UpdateSource(UpdateSourceRequest) returns (Source);
+    rpc ListSources(google.protobuf.Empty) returns (ListSourcesResponse);
+    rpc RefreshSource(RefreshSourceRequest) returns (google.protobuf.Empty);
+
+    // Tag management
+    rpc AddTag(AddTagRequest) returns (Tag);
+    rpc RemoveTag(RemoveTagRequest) returns (google.protobuf.Empty);
+    rpc ListTags(google.protobuf.Empty) returns (ListTagsResponse);
+
+    // Tag rules
+    rpc AddTagRule(AddTagRuleRequest) returns (TagRule);
+    rpc RemoveTagRule(RemoveTagRuleRequest) returns (google.protobuf.Empty);
+    rpc ListTagRules(google.protobuf.Empty) returns (ListTagRulesResponse);
+
+    // Core feed stream (bidirectional)
+    rpc StreamItems(stream ClientMessage) returns (stream ServerMessage);
+
+    // Full-text search
+    rpc Search(SearchRequest) returns (SearchResponse);
+
+    // View tracking
+    rpc MarkViewed(MarkViewedRequest) returns (google.protobuf.Empty);
+}

@@ -1,0 +1,10 @@
+version: v2
+modules:
+  - path: proto
+    name: buf.build/sonhal/nyttig
+lint:
+  use:
+    - DEFAULT
+breaking:
+  use:
+    - FILE

@@ -1,0 +1,15 @@
+version: v2
+managed:
+  enabled: true
+  override:
+    - file_option: go_package_prefix
+      value: github.com/sonhal/nyttig/internal/proto
+plugins:
+  - remote: buf.build/protocolbuffers/go:v1.37.0-1
+    out: internal/proto
+    opt:
+      - paths=source_relative
+  - remote: buf.build/grpc/go:v1.5.1-1
+    out: internal/proto
+    opt:
+      - paths=source_relative

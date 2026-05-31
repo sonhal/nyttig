@@ -1,0 +1,58 @@
+socket = "/tmp/nyttig.sock"
+db_path = "~/.local/share/nyttig/nyttig.db"
+log_level = "info"
+
+[[sources]]
+name = "Hacker News"
+url = "https://news.ycombinator.com/rss"
+refresh_sec = 600
+type = "rss"
+
+[[sources]]
+name = "Lobsters"
+url = "https://lobste.rs/rss"
+refresh_sec = 1800
+type = "rss"
+
+[[sources]]
+name = "Go Blog"
+url = "https://go.dev/blog/feed.atom"
+refresh_sec = 3600
+type = "atom"
+
+[[tags]]
+name = "rust"
+color = "#FF6B35"
+
+[[tags]]
+name = "go"
+color = "#00ADD8"
+
+[[tags]]
+name = "database"
+color = "#336791"
+
+[[tags]]
+name = "linux"
+color = "#FCC624"
+
+[[tag_rules]]
+tag = "rust"
+pattern = "(?i)\\brust\\b"
+field = "both"
+
+[[tag_rules]]
+tag = "go"
+pattern = "(?i)\\bgolang?\\b"
+field = "both"
+
+[[tag_rules]]
+tag = "database"
+pattern = "(?i)(sqlite|postgres|mysql|mariadb|database|db|nosql)"
+field = "both"
+
+[[tag_rules]]
+tag = "linux"
+pattern = "(?i)\\blinux\\b"
+field = "both"
+
