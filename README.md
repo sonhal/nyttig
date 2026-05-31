@@ -1,5 +1,8 @@
 # Nyttig
 
+> Warning: This project is generated using LLMs
+
+
 Nyttig is a news aggregator with a developer-oriented terminal UI. Subscribe to RSS/Atom feeds, apply regex-based tags, full-text search, and browse your collected news stream in a compact, keyboard-driven interface inspired by [K9s](https://k9scli.io/) and Kibana.
 
 ## Architecture
