@@ -38,10 +38,12 @@ type TLS struct {
 
 // Source is a feed source declared in the config file.
 type Source struct {
-	Name       string `toml:"name"`
-	URL        string `toml:"url"`
-	RefreshSec int    `toml:"refresh_sec"`
-	Type       string `toml:"type"`
+	Name         string `toml:"name"`
+	URL          string `toml:"url"`
+	RefreshSec   int    `toml:"refresh_sec"`
+	Type         string `toml:"type"`
+	Color        string `toml:"color"`
+	Abbreviation string `toml:"abbreviation"`
 }
 
 // Tag is a tag declared in the config file.

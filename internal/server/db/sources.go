@@ -7,22 +7,24 @@ import (
 
 // Source represents a feed source stored in the database.
 type Source struct {
-	ID         int64
-	Name       string
-	URL        string
-	Type       string
-	RefreshSec int
-	Enabled    bool
-	CreatedAt  time.Time
-	LastFetch  *time.Time
-	FetchError *string
+	ID           int64
+	Name         string
+	URL          string
+	Type         string
+	RefreshSec   int
+	Enabled      bool
+	Color        *string
+	Abbreviation *string
+	CreatedAt    time.Time
+	LastFetch    *time.Time
+	FetchError   *string
 }
 
 // InsertSource creates a new source and returns its ID.
 func InsertSource(db *sql.DB, s *Source) (int64, error) {
-	result, err := db.Exec(`INSERT INTO sources (name, url, type, refresh_sec, enabled)
-		VALUES (?, ?, ?, ?, ?)`,
-		s.Name, s.URL, s.Type, s.RefreshSec, s.Enabled)
+	result, err := db.Exec(`INSERT INTO sources (name, url, type, refresh_sec, enabled, color, abbreviation)
+		VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		s.Name, s.URL, s.Type, s.RefreshSec, s.Enabled, s.Color, s.Abbreviation)
 	if err != nil {
 		return 0, err
 	}
@@ -34,10 +36,12 @@ func GetSource(db *sql.DB, id int64) (*Source, error) {
 	s := &Source{}
 	var lastFetch sql.NullTime
 	var fetchError sql.NullString
-	err := db.QueryRow(`SELECT id, name, url, type, refresh_sec, enabled, created_at, last_fetch, fetch_error
+	var color sql.NullString
+	var abbreviation sql.NullString
+	err := db.QueryRow(`SELECT id, name, url, type, refresh_sec, enabled, color, abbreviation, created_at, last_fetch, fetch_error
 		FROM sources WHERE id = ?`, id).Scan(
 		&s.ID, &s.Name, &s.URL, &s.Type, &s.RefreshSec, &s.Enabled,
-		&s.CreatedAt, &lastFetch, &fetchError)
+		&color, &abbreviation, &s.CreatedAt, &lastFetch, &fetchError)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -50,12 +54,18 @@ func GetSource(db *sql.DB, id int64) (*Source, error) {
 	if fetchError.Valid {
 		s.FetchError = &fetchError.String
 	}
+	if color.Valid {
+		s.Color = &color.String
+	}
+	if abbreviation.Valid {
+		s.Abbreviation = &abbreviation.String
+	}
 	return s, nil
 }
 
 // ListSources returns all sources ordered by creation time.
 func ListSources(db *sql.DB) ([]*Source, error) {
-	rows, err := db.Query(`SELECT id, name, url, type, refresh_sec, enabled, created_at, last_fetch, fetch_error
+	rows, err := db.Query(`SELECT id, name, url, type, refresh_sec, enabled, color, abbreviation, created_at, last_fetch, fetch_error
 		FROM sources ORDER BY created_at DESC`)
 	if err != nil {
 		return nil, err
@@ -67,8 +77,10 @@ func ListSources(db *sql.DB) ([]*Source, error) {
 		s := &Source{}
 		var lastFetch sql.NullTime
 		var fetchError sql.NullString
+		var color sql.NullString
+		var abbreviation sql.NullString
 		if err := rows.Scan(&s.ID, &s.Name, &s.URL, &s.Type, &s.RefreshSec, &s.Enabled,
-			&s.CreatedAt, &lastFetch, &fetchError); err != nil {
+			&color, &abbreviation, &s.CreatedAt, &lastFetch, &fetchError); err != nil {
 			return nil, err
 		}
 		if lastFetch.Valid {
@@ -77,6 +89,12 @@ func ListSources(db *sql.DB) ([]*Source, error) {
 		if fetchError.Valid {
 			s.FetchError = &fetchError.String
 		}
+		if color.Valid {
+			s.Color = &color.String
+		}
+		if abbreviation.Valid {
+			s.Abbreviation = &abbreviation.String
+		}
 		sources = append(sources, s)
 	}
 	return sources, rows.Err()
@@ -84,7 +102,7 @@ func ListSources(db *sql.DB) ([]*Source, error) {
 
 // ListEnabledSources returns only enabled sources.
 func ListEnabledSources(db *sql.DB) ([]*Source, error) {
-	rows, err := db.Query(`SELECT id, name, url, type, refresh_sec, enabled, created_at, last_fetch, fetch_error
+	rows, err := db.Query(`SELECT id, name, url, type, refresh_sec, enabled, color, abbreviation, created_at, last_fetch, fetch_error
 		FROM sources WHERE enabled = 1 ORDER BY created_at DESC`)
 	if err != nil {
 		return nil, err
@@ -96,9 +114,17 @@ func ListEnabledSources(db *sql.DB) ([]*Source, error) {
 		s := &Source{}
 		var lastFetch sql.NullTime
 		var fetchError sql.NullString
+		var color sql.NullString
+		var abbreviation sql.NullString
 		if err := rows.Scan(&s.ID, &s.Name, &s.URL, &s.Type, &s.RefreshSec, &s.Enabled,
-			&s.CreatedAt, &lastFetch, &fetchError); err != nil {
+			&color, &abbreviation, &s.CreatedAt, &lastFetch, &fetchError); err != nil {
 			return nil, err
+		}
+		if color.Valid {
+			s.Color = &color.String
+		}
+		if abbreviation.Valid {
+			s.Abbreviation = &abbreviation.String
 		}
 		if lastFetch.Valid {
 			s.LastFetch = &lastFetch.Time
@@ -113,8 +139,8 @@ func ListEnabledSources(db *sql.DB) ([]*Source, error) {
 
 // UpdateSource modifies an existing source. The ID field must be set.
 func UpdateSource(db *sql.DB, s *Source) error {
-	_, err := db.Exec(`UPDATE sources SET name = ?, url = ?, type = ?, refresh_sec = ?, enabled = ? WHERE id = ?`,
-		s.Name, s.URL, s.Type, s.RefreshSec, s.Enabled, s.ID)
+	_, err := db.Exec(`UPDATE sources SET name = ?, url = ?, type = ?, refresh_sec = ?, enabled = ?, color = ?, abbreviation = ? WHERE id = ?`,
+		s.Name, s.URL, s.Type, s.RefreshSec, s.Enabled, s.Color, s.Abbreviation, s.ID)
 	return err
 }
 

@@ -122,11 +122,13 @@ func addSourceCmd() {
 	registerClientFlags(flags)
 
 	var (
-		name       string
-		url        string
-		sourceType string
-		refreshSec int
-		enabled    bool = true
+		name         string
+		url          string
+		sourceType   string
+		refreshSec   int
+		enabled      bool = true
+		color        string
+		abbreviation string
 	)
 
 	flags.StringVar(&name, "n", "", "Source display name (required)")
@@ -138,6 +140,8 @@ func addSourceCmd() {
 	flags.IntVar(&refreshSec, "r", 3600, "Refresh interval in seconds")
 	flags.IntVar(&refreshSec, "refresh", 3600, "Refresh interval in seconds")
 	flags.BoolVar(&enabled, "enabled", true, "Enable the source immediately")
+	flags.StringVar(&color, "color", "", "Hex color for source chip in TUI (e.g. '#FF6600')")
+	flags.StringVar(&abbreviation, "abbreviation", "", "Short display name for TUI (e.g. 'HN')")
 
 	// Parse args starting after "add-source".
 	args := os.Args[2:]
@@ -162,11 +166,13 @@ func addSourceCmd() {
 
 	ctx := context.Background()
 	req := &pb.AddSourceRequest{
-		Name:       name,
-		Url:        url,
-		Type:       sourceType,
-		RefreshSec: int32(refreshSec),
-		Enabled:    enabled,
+		Name:         name,
+		Url:          url,
+		Type:         sourceType,
+		RefreshSec:   int32(refreshSec),
+		Enabled:      enabled,
+		Color:        color,
+		Abbreviation: abbreviation,
 	}
 
 	src, err := c.AddSource(ctx, req)

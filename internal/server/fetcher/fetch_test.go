@@ -33,6 +33,8 @@ func setupDB(t *testing.T) *sql.DB {
 			type        TEXT NOT NULL DEFAULT 'rss',
 			refresh_sec INTEGER NOT NULL DEFAULT 3600,
 			enabled     BOOLEAN NOT NULL DEFAULT 1,
+			color       TEXT,
+			abbreviation TEXT,
 			created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			last_fetch  DATETIME,
 			fetch_error TEXT

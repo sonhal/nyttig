@@ -319,8 +319,19 @@ func seedFromConfig(database *sql.DB, cfg *config.Config, logger *slog.Logger) e
 		if refresh == 0 {
 			refresh = 3600
 		}
+		var color *string
+		if cs.Color != "" {
+			c := cs.Color
+			color = &c
+		}
+		var abbreviation *string
+		if cs.Abbreviation != "" {
+			a := cs.Abbreviation
+			abbreviation = &a
+		}
 		id, err := db.InsertSource(database, &db.Source{
 			Name: cs.Name, URL: cs.URL, Type: typ, RefreshSec: refresh, Enabled: true,
+			Color: color, Abbreviation: abbreviation,
 		})
 		if err != nil {
 			return fmt.Errorf("insert source %q: %w", cs.URL, err)

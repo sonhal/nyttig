@@ -24,9 +24,10 @@ type tickMsg time.Time
 
 // sourcesLoadedMsg carries source/tag metadata and tag color map fetched on startup.
 type sourcesLoadedMsg struct {
-	sources   []SourceInfo
-	tags      []TagInfo
-	tagColors map[string]string
+	sources    []SourceInfo
+	tags       []TagInfo
+	tagColors  map[string]string
+	sourceMeta map[int64]sourceDisplay
 }
 
 // ── Model ─────────────────────────────────────────────────────
@@ -97,7 +98,12 @@ func (m *Model) connectAndLoad() tea.Msg {
 
 	srcs := make([]SourceInfo, 0, len(srcResp.Sources))
 	for _, src := range srcResp.Sources {
-		srcs = append(srcs, SourceInfo{ID: src.Id, Name: src.Name})
+		srcs = append(srcs, SourceInfo{
+			ID:           src.Id,
+			Name:         src.Name,
+			Color:        src.Color,
+			Abbreviation: src.Abbreviation,
+		})
 	}
 
 	// Load tags for the filter dropdown.
@@ -115,7 +121,16 @@ func (m *Model) connectAndLoad() tea.Msg {
 		}
 	}
 
-	return sourcesLoadedMsg{sources: srcs, tags: tags, tagColors: tagColors}
+	sourceMeta := make(map[int64]sourceDisplay)
+	for _, src := range srcResp.Sources {
+		display := src.Name
+		if src.Abbreviation != "" {
+			display = src.Abbreviation
+		}
+		sourceMeta[src.Id] = sourceDisplay{Name: display, Color: src.Color}
+	}
+
+	return sourcesLoadedMsg{sources: srcs, tags: tags, tagColors: tagColors, sourceMeta: sourceMeta}
 }
 
 // startStream sends the initial StreamFilter and begins listening for items.
@@ -219,6 +234,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.filter.SetSources(msg.sources)
 		m.filter.SetTags(msg.tags)
 		m.table.SetTagColors(msg.tagColors)
+		m.table.SetSourceMeta(msg.sourceMeta)
 		m.status.SetConnected(true)
 		m.status.SetSourceCount(len(msg.sources))
 		return m, tea.Batch(m.startStream(), startViewTicker())

@@ -34,6 +34,8 @@ type Source struct {
 	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	LastFetch     *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=last_fetch,json=lastFetch,proto3" json:"last_fetch,omitempty"`
 	FetchError    string                 `protobuf:"bytes,9,opt,name=fetch_error,json=fetchError,proto3" json:"fetch_error,omitempty"`
+	Color         string                 `protobuf:"bytes,10,opt,name=color,proto3" json:"color,omitempty"`       // hex color, e.g. "#FF6600"
+	Abbreviation  string                 `protobuf:"bytes,11,opt,name=abbreviation,proto3" json:"abbreviation,omitempty"` // short display name
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -127,6 +129,20 @@ func (x *Source) GetLastFetch() *timestamppb.Timestamp {
 func (x *Source) GetFetchError() string {
 	if x != nil {
 		return x.FetchError
+	}
+	return ""
+}
+
+func (x *Source) GetColor() string {
+	if x != nil {
+		return x.Color
+	}
+	return ""
+}
+
+func (x *Source) GetAbbreviation() string {
+	if x != nil {
+		return x.Abbreviation
 	}
 	return ""
 }
@@ -422,6 +438,8 @@ type AddSourceRequest struct {
 	Type          string                 `protobuf:"bytes,3,opt,name=type,proto3" json:"type,omitempty"` // rss, atom; defaults to "rss"
 	RefreshSec    int32                  `protobuf:"varint,4,opt,name=refresh_sec,json=refreshSec,proto3" json:"refresh_sec,omitempty"`
 	Enabled       bool                   `protobuf:"varint,5,opt,name=enabled,proto3" json:"enabled,omitempty"`
+	Color         string                 `protobuf:"bytes,6,opt,name=color,proto3" json:"color,omitempty"`          // optional hex color for source chip
+	Abbreviation  string                 `protobuf:"bytes,7,opt,name=abbreviation,proto3" json:"abbreviation,omitempty"` // optional short display name
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -489,6 +507,20 @@ func (x *AddSourceRequest) GetEnabled() bool {
 		return x.Enabled
 	}
 	return false
+}
+
+func (x *AddSourceRequest) GetColor() string {
+	if x != nil {
+		return x.Color
+	}
+	return ""
+}
+
+func (x *AddSourceRequest) GetAbbreviation() string {
+	if x != nil {
+		return x.Abbreviation
+	}
+	return ""
 }
 
 type RemoveSourceRequest struct {

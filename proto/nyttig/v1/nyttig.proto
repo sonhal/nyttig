@@ -19,6 +19,8 @@ message Source {
     google.protobuf.Timestamp created_at = 7;
     google.protobuf.Timestamp last_fetch = 8;
     string fetch_error = 9;
+    string color       = 10;  // hex color, e.g. "#FF6600"
+    string abbreviation = 11;  // short display name
 }
 
 message Item {
@@ -60,6 +62,8 @@ message AddSourceRequest {
     string type        = 3;  // rss, atom; defaults to "rss"
     int32  refresh_sec = 4;
     bool   enabled     = 5;
+    string color       = 6;  // optional hex color for source chip
+    string abbreviation = 7;  // optional short display name
 }
 
 message RemoveSourceRequest {

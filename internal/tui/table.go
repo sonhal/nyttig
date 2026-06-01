@@ -47,6 +47,13 @@ const dateColumnWidth = 11
 
 // ── Table ──────────────────────────────────────────────────────
 
+// sourceDisplay holds display metadata for a single source, used to render
+// source chips in the table.
+type sourceDisplay struct {
+	Name  string // abbreviation if set, full name otherwise
+	Color string // hex color, empty means default gray
+}
+
 // Table renders a scrollable viewport of news items using custom Lipgloss styles.
 type Table struct {
 	items  []*pb.Item
@@ -58,6 +65,9 @@ type Table struct {
 
 	// Tag lookup maps tag name to color (from status bar context).
 	tagColors map[string]string
+
+	// sourceMeta maps source_id to display info (abbreviation or name, plus color).
+	sourceMeta map[int64]sourceDisplay
 }
 
 // NewTable creates a Table with the given dimensions.
@@ -103,6 +113,11 @@ func (t *Table) SetSize(width, height int) {
 // SetTagColors sets the color lookup for tag chip rendering.
 func (t *Table) SetTagColors(colors map[string]string) {
 	t.tagColors = colors
+}
+
+// SetSourceMeta sets the source metadata lookup for source chip rendering.
+func (t *Table) SetSourceMeta(meta map[int64]sourceDisplay) {
+	t.sourceMeta = meta
 }
 
 // MoveDown moves the selection down by n rows.
@@ -221,12 +236,19 @@ func (t *Table) renderRow(item *pb.Item, selected bool) string {
 	// 2. Date (blank-padded when unknown so columns stay aligned).
 	dateCol := timeStyle.Render(formatDate(item.Published))
 
-	// 3. Tags.
+	// 3. Source chip.
+	sourceCol := t.renderSourceChip(item.SourceId)
+
+	// 4. Tags.
 	tagsCol := t.renderTags(item.Tags)
 
-	// 4. Title + description + domain.
-	// viewed(2) + space(1) + date(11) + space(1) + tags(N) + space(1) + ...
+	// 5. Title + description + domain.
+	// viewed(2) + space(1) + date(11) + space(1) + source(variable) + space(1) + tags(variable) + space(1) + ...
 	prefixLen := 2 + margin + dateColumnWidth + margin
+	sourceLen := lipgloss.Width(sourceCol)
+	if sourceLen > 0 {
+		sourceLen += margin
+	}
 	tagsLen := lipgloss.Width(tagsCol)
 	if tagsLen > 0 {
 		tagsLen += margin
@@ -238,7 +260,7 @@ func (t *Table) renderRow(item *pb.Item, selected bool) string {
 	domainLen := lipgloss.Width(domainCol)
 
 	// Space available for the title and description, before the right-aligned domain.
-	avail := t.width - prefixLen - tagsLen - margin - domainLen
+	avail := t.width - prefixLen - sourceLen - tagsLen - margin - domainLen
 	if avail < 5 {
 		avail = 5
 	}
@@ -260,7 +282,7 @@ func (t *Table) renderRow(item *pb.Item, selected bool) string {
 	titleLen := lipgloss.Width(titleCol)
 
 	// Right-align domain by padding between the content and the domain.
-	used := prefixLen + tagsLen + titleLen
+	used := prefixLen + sourceLen + tagsLen + titleLen
 	if descLen > 0 {
 		used += margin + descLen
 	}
@@ -270,8 +292,11 @@ func (t *Table) renderRow(item *pb.Item, selected bool) string {
 	}
 	padding := strings.Repeat(" ", between)
 
-	// Assemble: viewed date tags title description <padding> domain
+	// Assemble: viewed date source tags title description <padding> domain
 	row := viewedCol + dateCol + " "
+	if sourceCol != "" {
+		row += sourceCol + " "
+	}
 	if tagsCol != "" {
 		row += tagsCol + " "
 	}
@@ -318,6 +343,27 @@ func (t *Table) renderTagChip(tag *pb.Tag) string {
 	name := tag.Name
 	if color != "" {
 		name = lipgloss.NewStyle().Foreground(lipgloss.Color(color)).Render(name)
+	}
+	return lb + name + rb
+}
+
+// renderSourceChip renders a source chip using its source_id to look up display
+// metadata in the sourceMeta map. Returns empty string when no metadata is found.
+func (t *Table) renderSourceChip(sourceID int64) string {
+	meta, ok := t.sourceMeta[sourceID]
+	if !ok {
+		return ""
+	}
+
+	lb := tagBracketStyle.Render("[")
+	rb := tagBracketStyle.Render("]")
+
+	name := meta.Name
+	if name == "" {
+		return ""
+	}
+	if meta.Color != "" {
+		name = lipgloss.NewStyle().Foreground(lipgloss.Color(meta.Color)).Render(name)
 	}
 	return lb + name + rb
 }

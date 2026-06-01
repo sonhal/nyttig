@@ -47,8 +47,10 @@ var (
 
 // SourceInfo describes a source shown in the dropdown.
 type SourceInfo struct {
-	ID   int64
-	Name string
+	ID           int64
+	Name         string
+	Color        string
+	Abbreviation string
 }
 
 // TagInfo describes a tag shown in the dropdown.

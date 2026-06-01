@@ -89,6 +89,12 @@ func (s *Service) AddSource(ctx context.Context, req *pb.AddSourceRequest) (*pb.
 		RefreshSec: int(req.RefreshSec),
 		Enabled:    req.Enabled,
 	}
+	if req.Color != "" {
+		src.Color = &req.Color
+	}
+	if req.Abbreviation != "" {
+		src.Abbreviation = &req.Abbreviation
+	}
 	if src.Type == "" {
 		src.Type = "rss"
 	}
@@ -572,6 +578,12 @@ func dbSourceToProto(src *db.Source) *pb.Source {
 		RefreshSec: int32(src.RefreshSec),
 		Enabled:    src.Enabled,
 		CreatedAt:  timestamppb.New(src.CreatedAt),
+	}
+	if src.Color != nil {
+		p.Color = *src.Color
+	}
+	if src.Abbreviation != nil {
+		p.Abbreviation = *src.Abbreviation
 	}
 	if src.LastFetch != nil {
 		p.LastFetch = timestamppb.New(*src.LastFetch)

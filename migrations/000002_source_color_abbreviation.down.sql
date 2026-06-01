@@ -1,0 +1,2 @@
+-- No-op: SQLite ALTER TABLE DROP COLUMN requires v3.35.0+.
+-- Downgrading is a manual operation if needed.

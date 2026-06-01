@@ -16,18 +16,24 @@ name = "Hacker News"
 url = "https://news.ycombinator.com/rss"
 refresh_sec = 600
 type = "rss"
+# color = "#FF6600"        # optional: hex color for source chip in TUI
+# abbreviation = "HN"       # optional: short display name for TUI, falls back to name
 
 [[sources]]
 name = "Lobsters"
 url = "https://lobste.rs/rss"
 refresh_sec = 1800
 type = "rss"
+# color = "#A41E35"        # optional: hex color for source chip in TUI
+# abbreviation = "LOB"     # optional: short display name for TUI
 
 [[sources]]
 name = "Go Blog"
 url = "https://go.dev/blog/feed.atom"
 refresh_sec = 3600
 type = "atom"
+# color = "#00ADD8"        # optional: hex color for source chip in TUI
+# abbreviation = "Go"      # optional: short display name for TUI
 
 [[tags]]
 name = "rust"
