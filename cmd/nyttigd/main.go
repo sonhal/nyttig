@@ -114,7 +114,7 @@ func main() {
 		}
 	}
 
-	database, err := db.Open(dsn + "?_journal_mode=WAL&_foreign_keys=ON")
+	database, err := db.Open(dsn + "?_journal_mode=WAL&_foreign_keys=ON&_busy_timeout=5000")
 	if err != nil {
 		logger.Error("cannot open database", "dsn", dsn, "error", err)
 		os.Exit(1)

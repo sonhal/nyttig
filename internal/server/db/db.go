@@ -26,6 +26,11 @@ func Open(dsn string) (*sql.DB, error) {
 		return nil, fmt.Errorf("sql.Open: %w", err)
 	}
 
+	// SQLite serializes writes via a single lock; capping the pool at 1 connection
+	// makes writers wait on the Go side rather than hitting SQLITE_BUSY, and WAL
+	// keeps reads concurrent.
+	db.SetMaxOpenConns(1)
+
 	// Enable WAL mode and foreign keys.
 	if _, err := db.Exec("PRAGMA journal_mode=WAL"); err != nil {
 		db.Close()
