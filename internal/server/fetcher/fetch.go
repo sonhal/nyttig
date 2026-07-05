@@ -20,6 +20,9 @@ import (
 // userAgent is the standard User-Agent string sent with HTTP requests.
 const userAgent = "Nyttig/0.1 (news-aggregator)"
 
+// httpClient is the HTTP client with timeout for feed fetching.
+var httpClient = &http.Client{Timeout: 30 * time.Second}
+
 // ── RSS 2.0 types ───────────────────────────────────────────────
 
 type rssFeed struct {
@@ -95,7 +98,7 @@ type FetchResult struct {
 // new items into the database. It updates the source's last_fetch and
 // fetch_error columns before returning.
 func Fetch(database *sql.DB, src *db.Source) (*FetchResult, error) {
-	return fetchInternal(database, src, http.DefaultClient)
+	return fetchInternal(database, src, httpClient)
 }
 
 // FetchWithClient is like Fetch but accepts a custom HTTP client (useful
@@ -120,6 +123,7 @@ func fetchInternal(database *sql.DB, src *db.Source, client doer) (*FetchResult,
 		return nil, fmt.Errorf("create request: %w", err)
 	}
 	req.Header.Set("User-Agent", userAgent)
+	req.Header.Set("Accept", "application/rss+xml, application/atom+xml, application/xml, */*")
 
 	// 2. Issue HTTP GET.
 	resp, err := client.Do(req)
@@ -139,9 +143,17 @@ func fetchInternal(database *sql.DB, src *db.Source, client doer) (*FetchResult,
 		return result, nil
 	}
 
-	// 3. Read response body.
-	body, err := io.ReadAll(resp.Body)
+	// 3. Read response body with size limit.
+	const maxBodySize = 10 * 1024 * 1024 // 10 MiB
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxBodySize+1))
 	if err != nil {
+		result.FetchError = err.Error()
+		_ = db.UpdateSourceFetchError(database, src.ID, err.Error())
+		_ = db.UpdateSourceLastFetch(database, src.ID, time.Now())
+		return result, nil
+	}
+	if int64(len(body)) > maxBodySize {
+		err := fmt.Errorf("response body exceeds 10MiB limit")
 		result.FetchError = err.Error()
 		_ = db.UpdateSourceFetchError(database, src.ID, err.Error())
 		_ = db.UpdateSourceLastFetch(database, src.ID, time.Now())

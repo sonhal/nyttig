@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -669,6 +670,49 @@ func TestFetch_DescriptionField(t *testing.T) {
 		if *item.Description != expected {
 			t.Errorf("expected description %q, got %q", expected, *item.Description)
 		}
+	}
+}
+
+func TestFetch_ResponseSizeLimit(t *testing.T) {
+	database := setupDB(t)
+	defer database.Close()
+
+	// Create a feed body larger than 10 MiB
+	largeBody := make([]byte, 11*1024*1024) // 11 MiB
+	for i := range largeBody {
+		largeBody[i] = 'x'
+	}
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/rss+xml")
+		w.WriteHeader(http.StatusOK)
+		w.Write(largeBody)
+	}))
+	defer srv.Close()
+
+	src := insertTestSource(t, database, "Large Feed", srv.URL)
+
+	result, err := Fetch(database, src)
+	if err != nil {
+		t.Fatalf("Fetch returned unexpected error: %v", err)
+	}
+	if result.FetchError == "" {
+		t.Error("expected fetch error for oversized response")
+	}
+	if !strings.Contains(result.FetchError, "10MiB limit") {
+		t.Errorf("expected error to mention 10MiB limit, got: %s", result.FetchError)
+	}
+	if len(result.NewItems) != 0 {
+		t.Errorf("expected 0 new items from oversized response, got %d", len(result.NewItems))
+	}
+
+	// Source fetch_error should be updated
+	updated, err := db.GetSource(database, src.ID)
+	if err != nil {
+		t.Fatalf("GetSource: %v", err)
+	}
+	if updated.FetchError == nil || *updated.FetchError == "" {
+		t.Error("expected fetch_error to be set on source")
 	}
 }
 
