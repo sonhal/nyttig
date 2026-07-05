@@ -53,14 +53,22 @@ func (fc *fakeClock) deliverAllN(n int) {
 type fakeTicker struct {
 	c    chan time.Time
 	d    time.Duration
+	mu   sync.Mutex
 	stop bool
 }
 
 func (ft *fakeTicker) C() <-chan time.Time { return ft.c }
-func (ft *fakeTicker) Stop()               { ft.stop = true }
+func (ft *fakeTicker) Stop() {
+	ft.mu.Lock()
+	defer ft.mu.Unlock()
+	ft.stop = true
+}
 
 func (ft *fakeTicker) tick() {
-	if ft.stop {
+	ft.mu.Lock()
+	stop := ft.stop
+	ft.mu.Unlock()
+	if stop {
 		return
 	}
 	select {
@@ -70,9 +78,13 @@ func (ft *fakeTicker) tick() {
 	}
 }
 
+
 // deliverTick blocks until a buffered tick is consumed, then sends one.
 func (ft *fakeTicker) deliverTick() {
-	if ft.stop {
+	ft.mu.Lock()
+	stop := ft.stop
+	ft.mu.Unlock()
+	if stop {
 		return
 	}
 	ft.c <- time.Time{}
