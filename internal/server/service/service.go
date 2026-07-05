@@ -156,10 +156,11 @@ func (s *Service) UpdateSource(ctx context.Context, req *pb.UpdateSourceRequest)
 	if req.RefreshSec > 0 {
 		existing.RefreshSec = int(req.RefreshSec)
 	}
-	// Enabled: only update if the caller explicitly sets it.
-	// Because proto3 defaults bool to false, we cannot distinguish "not set"
-	// from "set to false" without a wrapper (e.g., optional).
-	// Leave enabled unchanged unless the request explicitly intends a toggle.
+	// Enabled: proto3 cannot distinguish "unset" from "false", so callers
+	// MUST send the intended enabled value on every UpdateSource call. The
+	// CLI (update-source) always sends the current value, toggling only when
+	// --enable/--disable is given.
+	existing.Enabled = req.Enabled
 
 	if err := db.UpdateSource(s.db, existing); err != nil {
 		return nil, status.Errorf(codes.Internal, "update source: %v", err)

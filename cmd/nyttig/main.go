@@ -72,6 +72,8 @@ func main() {
 		removeSourceCmd()
 	case "add-tag":
 		addTagCmd()
+	case "update-source":
+		updateSourceCmd()
 	case "refresh":
 		refreshCmd()
 	default:
@@ -86,6 +88,7 @@ func printHelp() {
 	fmt.Fprintf(os.Stderr, "  add-source     Add a new feed source\n")
 	fmt.Fprintf(os.Stderr, "  list-sources   List all configured sources\n")
 	fmt.Fprintf(os.Stderr, "  remove-source  Remove a source by ID\n")
+	fmt.Fprintf(os.Stderr, "  update-source  Update an existing source (name/url/type/refresh/enable/disable)\n")
 	fmt.Fprintf(os.Stderr, "  add-tag        Create a new tag\n")
 	fmt.Fprintf(os.Stderr, "  refresh        Force immediate fetch of all sources\n")
 	fmt.Fprintf(os.Stderr, "\nGlobal flags:\n")
@@ -251,6 +254,116 @@ func removeSourceCmd() {
 	}
 
 	fmt.Printf("Source %d removed.\n", id)
+}
+
+// updateSourceCmd handles the "update-source" subcommand.
+func updateSourceCmd() {
+	flags := flag.NewFlagSet("update-source", flag.ExitOnError)
+	registerClientFlags(flags)
+
+	var (
+		id       int64
+		name     string
+		url      string
+		sourceType string
+		refresh  int
+		enable   bool
+		disable  bool
+	)
+
+	flags.Int64Var(&id, "i", 0, "Source ID to update (required)")
+	flags.Int64Var(&id, "id", 0, "Source ID to update (required)")
+	flags.StringVar(&name, "n", "", "New source name")
+	flags.StringVar(&name, "name", "", "New source name")
+	flags.StringVar(&url, "u", "", "New feed URL")
+	flags.StringVar(&url, "url", "", "New feed URL")
+	flags.StringVar(&sourceType, "t", "", "New feed type: rss or atom")
+	flags.StringVar(&sourceType, "type", "", "New feed type: rss or atom")
+	flags.IntVar(&refresh, "r", 0, "New refresh interval in seconds")
+	flags.IntVar(&refresh, "refresh", 0, "New refresh interval in seconds")
+	flags.BoolVar(&enable, "enable", false, "Enable the source")
+	flags.BoolVar(&disable, "disable", false, "Disable the source")
+
+	// Parse args starting after "update-source".
+	args := os.Args[2:]
+	if len(args) == 0 || args[0] == "--help" {
+		fmt.Fprintf(os.Stderr, "Usage: nyttig update-source -i <id> [flags]\n\n")
+		flags.PrintDefaults()
+		os.Exit(0)
+	}
+	flags.Parse(args)
+
+	if id == 0 {
+		fmt.Fprintf(os.Stderr, "Error: --id (-i) is required\n")
+		os.Exit(1)
+	}
+
+	if enable && disable {
+		fmt.Fprintf(os.Stderr, "Error: --enable and --disable are mutually exclusive\n")
+		os.Exit(1)
+	}
+
+	c := newClient()
+	defer c.Close()
+
+	ctx := context.Background()
+	
+	// Fetch current source to get existing values
+	resp, err := c.ListSources(ctx)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+
+	var src *pb.Source
+	for _, s := range resp.Sources {
+		if s.Id == id {
+			src = s
+			break
+		}
+	}
+	if src == nil {
+		fmt.Fprintf(os.Stderr, "Error: source %d not found\n", id)
+		os.Exit(1)
+	}
+
+	// Build update request with current values
+	req := &pb.UpdateSourceRequest{
+		Id:         id,
+		Name:       src.Name,
+		Url:        src.Url,
+		Type:       src.Type,
+		RefreshSec: src.RefreshSec,
+		Enabled:    src.Enabled,
+	}
+
+	// Override with user-provided values
+	if name != "" {
+		req.Name = name
+	}
+	if url != "" {
+		req.Url = url
+	}
+	if sourceType != "" {
+		req.Type = sourceType
+	}
+	if refresh > 0 {
+		req.RefreshSec = int32(refresh)
+	}
+	if enable {
+		req.Enabled = true
+	}
+	if disable {
+		req.Enabled = false
+	}
+
+	updated, err := c.UpdateSource(ctx, req)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("Source updated: [%d] %s (%s)\n", updated.Id, updated.Name, updated.Url)
 }
 
 // addTagCmd handles the "add-tag" subcommand.
