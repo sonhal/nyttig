@@ -33,6 +33,12 @@ type Item struct {
 	Description string
 }
 
+// compiledRule pairs a TagRule with its pre-compiled regex pattern.
+type compiledRule struct {
+	rule TagRule
+	re   *regexp.Regexp
+}
+
 // RuleStore is the minimal database interface the tagger needs to load rules and
 // insert tag assignments. The real implementation lives in internal/server/db/.
 type RuleStore interface {
@@ -58,6 +64,27 @@ func New(store RuleStore, logger *slog.Logger) *Tagger {
 	return &Tagger{store: store, logger: logger}
 }
 
+// loadCompiledRules loads rules from the store, sorts by priority, and
+// compiles each pattern. Rules whose pattern fails to compile are logged
+// and skipped (matching the previous ruleMatches behavior).
+func (t *Tagger) loadCompiledRules() ([]compiledRule, error) {
+	rules, err := t.store.LoadRules()
+	if err != nil {
+		return nil, fmt.Errorf("load rules: %w", err)
+	}
+	sort.Slice(rules, func(i, j int) bool { return rules[i].Priority < rules[j].Priority })
+	out := make([]compiledRule, 0, len(rules))
+	for _, r := range rules {
+		re, err := regexp.Compile(r.Pattern)
+		if err != nil {
+			t.logger.Warn("invalid regex pattern in rule", "rule_id", r.ID, "pattern", r.Pattern, "error", err)
+			continue
+		}
+		out = append(out, compiledRule{rule: r, re: re})
+	}
+	return out, nil
+}
+
 // TagItem evaluates all applicable rules against a single item, inserting
 // matching tag assignments via the RuleStore. Rules are evaluated in priority
 // order. Global rules (SourceID == 0) and per-source rules that match the
@@ -65,31 +92,26 @@ func New(store RuleStore, logger *slog.Logger) *Tagger {
 //
 // Returns the number of tags assigned.
 func (t *Tagger) TagItem(item Item) (int, error) {
-	rules, err := t.store.LoadRules()
+	compiledRules, err := t.loadCompiledRules()
 	if err != nil {
-		return 0, fmt.Errorf("load rules: %w", err)
+		return 0, err
 	}
 
-	// Sort by priority (lower = higher priority).
-	sort.Slice(rules, func(i, j int) bool {
-		return rules[i].Priority < rules[j].Priority
-	})
-
 	assigned := 0
-	for _, rule := range rules {
-		if !t.ruleAppliesToItem(rule, item) {
+	for _, cr := range compiledRules {
+		if !t.ruleAppliesToItem(cr.rule, item) {
 			continue
 		}
 
-		if !t.ruleMatches(rule, item) {
+		if !t.matchCompiled(cr, item) {
 			continue
 		}
 
-		if err := t.store.AssignTag(item.ID, rule.TagID); err != nil {
+		if err := t.store.AssignTag(item.ID, cr.rule.TagID); err != nil {
 			t.logger.Warn("failed to assign tag",
 				"item_id", item.ID,
-				"tag_id", rule.TagID,
-				"tag_name", rule.TagName,
+				"tag_id", cr.rule.TagID,
+				"tag_name", cr.rule.TagName,
 				"error", err,
 			)
 			continue
@@ -98,9 +120,9 @@ func (t *Tagger) TagItem(item Item) (int, error) {
 		assigned++
 		t.logger.Debug("tag assigned",
 			"item_id", item.ID,
-			"tag_id", rule.TagID,
-			"tag_name", rule.TagName,
-			"rule_id", rule.ID,
+			"tag_id", cr.rule.TagID,
+			"tag_name", cr.rule.TagName,
+			"rule_id", cr.rule.ID,
 		)
 	}
 
@@ -110,31 +132,27 @@ func (t *Tagger) TagItem(item Item) (int, error) {
 // TagItems is a convenience method that calls TagItem for each item in the
 // slice. Returns the total number of tags assigned.
 func (t *Tagger) TagItems(items []Item) (int, error) {
-	// Load rules once for the batch.
-	rules, err := t.store.LoadRules()
+	// Load and compile rules once for the batch.
+	compiledRules, err := t.loadCompiledRules()
 	if err != nil {
-		return 0, fmt.Errorf("load rules: %w", err)
+		return 0, err
 	}
-
-	sort.Slice(rules, func(i, j int) bool {
-		return rules[i].Priority < rules[j].Priority
-	})
 
 	total := 0
 	for _, item := range items {
-		for _, rule := range rules {
-			if !t.ruleAppliesToItem(rule, item) {
+		for _, cr := range compiledRules {
+			if !t.ruleAppliesToItem(cr.rule, item) {
 				continue
 			}
 
-			if !t.ruleMatches(rule, item) {
+			if !t.matchCompiled(cr, item) {
 				continue
 			}
 
-			if err := t.store.AssignTag(item.ID, rule.TagID); err != nil {
+			if err := t.store.AssignTag(item.ID, cr.rule.TagID); err != nil {
 				t.logger.Warn("failed to assign tag",
 					"item_id", item.ID,
-					"tag_id", rule.TagID,
+					"tag_id", cr.rule.TagID,
 					"error", err,
 				)
 				continue
@@ -155,31 +173,20 @@ func (t *Tagger) ruleAppliesToItem(rule TagRule, item Item) bool {
 	return rule.SourceID == item.SourceID
 }
 
-// ruleMatches compiles the regex pattern and tests it against the correct
-// field(s) of the item. Returns true if the pattern matches.
-func (t *Tagger) ruleMatches(rule TagRule, item Item) bool {
-	re, err := regexp.Compile(rule.Pattern)
-	if err != nil {
-		t.logger.Warn("invalid regex pattern in rule",
-			"rule_id", rule.ID,
-			"pattern", rule.Pattern,
-			"error", err,
-		)
-		return false
-	}
-
-	switch rule.Field {
+// matchCompiled tests a pre-compiled regex against the correct field(s) of the item.
+func (t *Tagger) matchCompiled(cr compiledRule, item Item) bool {
+	switch cr.rule.Field {
 	case "title":
-		return re.MatchString(item.Title)
+		return cr.re.MatchString(item.Title)
 	case "description":
-		return re.MatchString(item.Description)
+		return cr.re.MatchString(item.Description)
 	case "both", "": // default to both
-		return re.MatchString(item.Title) || re.MatchString(item.Description)
+		return cr.re.MatchString(item.Title) || cr.re.MatchString(item.Description)
 	default:
 		t.logger.Warn("unknown field in rule, defaulting to both",
-			"rule_id", rule.ID,
-			"field", rule.Field,
+			"rule_id", cr.rule.ID,
+			"field", cr.rule.Field,
 		)
-		return re.MatchString(item.Title) || re.MatchString(item.Description)
+		return cr.re.MatchString(item.Title) || cr.re.MatchString(item.Description)
 	}
 }

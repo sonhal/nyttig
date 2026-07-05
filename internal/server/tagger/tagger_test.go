@@ -505,3 +505,29 @@ func TestTagItem_UnknownFieldDefaults(t *testing.T) {
 		t.Errorf("unknown field should default to both matching description, got %d", n)
 	}
 }
+
+func TestTagger_InvalidPatternSkipped(t *testing.T) {
+	store := &mockStore{
+		rules: []TagRule{
+			{ID: 1, SourceID: 0, TagID: 10, TagName: "valid", Field: "both", Pattern: `(?i)valid`},
+			{ID: 2, SourceID: 0, TagID: 20, TagName: "invalid", Field: "both", Pattern: `[`}, // invalid pattern
+		},
+	}
+	tagger := New(store, nil)
+
+	items := []Item{
+		{ID: 1, SourceID: 1, Title: "valid pattern test", Description: ""},
+		{ID: 2, SourceID: 1, Title: "no match", Description: ""},
+	}
+
+	n, err := tagger.TagItems(items)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("expected 1 tag from valid rule, got %d", n)
+	}
+	if len(store.assigned) != 1 || store.assigned[0].tagID != 10 {
+		t.Errorf("expected only tagID 10 assigned, got %+v", store.assigned)
+	}
+}
