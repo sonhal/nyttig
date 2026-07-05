@@ -6,6 +6,17 @@ import (
 	"time"
 )
 
+// ftsQuote wraps a user-supplied FTS5 query in double quotes so it is
+// treated as a phrase string rather than interpreted as FTS5 query
+// syntax. Embedded double-quotes are escaped by doubling them, per the
+// FTS5 string syntax. An empty input is returned unchanged (no filter).
+func ftsQuote(q string) string {
+	if q == "" {
+		return ""
+	}
+	return `"` + strings.ReplaceAll(q, `"`, `""`) + `"`
+}
+
 // Item represents a news item stored in the database.
 type Item struct {
 	ID          int64
@@ -141,7 +152,7 @@ func ListItems(db *sql.DB, filter ItemFilter) ([]*Item, int, error) {
 	}
 	if filter.Search != "" {
 		conditions = append(conditions, "i.id IN (SELECT rowid FROM items_fts WHERE items_fts MATCH ?)")
-		args = append(args, filter.Search)
+		args = append(args, ftsQuote(filter.Search))
 	}
 
 	// Count total first.
