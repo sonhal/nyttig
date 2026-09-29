@@ -50,6 +50,27 @@ func (fc *fakeClock) deliverAllN(n int) {
 	}
 }
 
+// waitForTickers blocks until at least n tickers have been created.
+// runSource does its immediate fetch before it creates its ticker, so having
+// observed that fetch does not mean the ticker exists yet. Call this before
+// deliverAllN, which only delivers to tickers that already exist.
+func (fc *fakeClock) waitForTickers(t *testing.T, n int) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		fc.mu.Lock()
+		got := len(fc.tickers)
+		fc.mu.Unlock()
+		if got >= n {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("timed out waiting for %d tickers, have %d", n, got)
+		}
+		time.Sleep(time.Millisecond)
+	}
+}
+
 type fakeTicker struct {
 	c    chan time.Time
 	d    time.Duration
@@ -77,7 +98,6 @@ func (ft *fakeTicker) tick() {
 		// Channel already has a pending tick; skip to avoid blocking.
 	}
 }
-
 
 // deliverTick blocks until a buffered tick is consumed, then sends one.
 func (ft *fakeTicker) deliverTick() {
@@ -227,6 +247,7 @@ func TestScheduler_TickerFiresPeriodically(t *testing.T) {
 	_ = readN(fetchCh, 1)
 
 	// Deliver 3 guaranteed ticks.
+	clock.waitForTickers(t, 1)
 	clock.deliverAllN(3)
 
 	calls := readN(fetchCh, 3)
@@ -271,6 +292,7 @@ func TestScheduler_RefetchSourceWithoutReset(t *testing.T) {
 	}
 
 	// Now advance the ticker; it should still fire.
+	clock.waitForTickers(t, 1)
 	clock.deliverAllN(1)
 	calls = readN(fetchCh, 1)
 	if len(calls) != 1 {
@@ -302,6 +324,7 @@ func TestScheduler_AddSourceRuntime(t *testing.T) {
 	}
 
 	// Advance ticker; should get another fetch.
+	clock.waitForTickers(t, 1)
 	clock.deliverAllN(1)
 	calls = readN(fetchCh, 1)
 	if len(calls) != 1 || calls[0] != 5 {
@@ -388,6 +411,7 @@ func TestScheduler_EnableDisableSource(t *testing.T) {
 	}
 
 	// Ticker should resume.
+	clock.waitForTickers(t, 2)
 	clock.deliverAllN(1)
 	calls = readN(fetchCh, 1)
 	if len(calls) != 1 || calls[0] != 1 {
@@ -493,6 +517,7 @@ func TestScheduler_MultipleTickerIntervals(t *testing.T) {
 	_ = readN(fetchCh, 2)
 
 	// Deliver 2 ticks to all tickers. Both sources are ticked together.
+	clock.waitForTickers(t, 2)
 	clock.deliverAllN(2)
 
 	// Both sources should have 2 more fetches each = 4 fetches.
@@ -556,6 +581,7 @@ func TestScheduler_ZeroRefreshSecUsesDefault(t *testing.T) {
 	}
 
 	// Ticker should still work.
+	clock.waitForTickers(t, 1)
 	clock.deliverAllN(1)
 	calls = readN(fetchCh, 1)
 	if len(calls) != 1 {

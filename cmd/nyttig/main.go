@@ -285,13 +285,13 @@ func updateSourceCmd() {
 	registerClientFlags(flags)
 
 	var (
-		id       int64
-		name     string
-		url      string
+		id         int64
+		name       string
+		url        string
 		sourceType string
-		refresh  int
-		enable   bool
-		disable  bool
+		refresh    int
+		enable     bool
+		disable    bool
 	)
 
 	flags.Int64Var(&id, "i", 0, "Source ID to update (required)")
@@ -330,7 +330,7 @@ func updateSourceCmd() {
 	defer c.Close()
 
 	ctx := context.Background()
-	
+
 	// Fetch current source to get existing values
 	resp, err := c.ListSources(ctx)
 	if err != nil {
