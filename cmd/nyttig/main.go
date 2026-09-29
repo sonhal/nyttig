@@ -739,19 +739,13 @@ func searchCmd() {
 			tags = "-"
 		}
 		fmt.Fprintf(w, "%d\t%s\t%s\t%s\t%s\t%s\n",
-			it.Id, published, it.SourceName, tags, oneLine(it.Title), it.Link)
+			it.Id, published, tui.SanitizeLine(it.SourceName), tui.SanitizeLine(tags), tui.SanitizeLine(it.Title), tui.SanitizeLine(it.Link))
 	}
 	w.Flush()
 
 	if shown := offset + len(resp.Items); int(resp.Total) > shown {
 		fmt.Printf("\nShowing %d–%d of %d. Use -offset %d for more.\n", offset+1, shown, resp.Total, shown)
 	}
-}
-
-// oneLine collapses whitespace (including newlines and tabs, which would
-// break tabwriter columns) into single spaces.
-func oneLine(s string) string {
-	return strings.Join(strings.Fields(s), " ")
 }
 
 // refreshCmd handles the "refresh" subcommand.

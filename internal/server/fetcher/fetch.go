@@ -13,6 +13,7 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/sonhal/nyttig/internal/server/db"
 )
@@ -258,10 +259,10 @@ func parseRSS(body []byte) ([]parsedEntry, error) {
 	var entries []parsedEntry
 	for _, item := range feed.Channel.Items {
 		entry := parsedEntry{
-			Title:       strings.TrimSpace(item.Title),
+			Title:       cleanText(item.Title),
 			Link:        strings.TrimSpace(item.Link),
 			Description: sanitizeHTML(item.Description),
-			Author:      strings.TrimSpace(item.Author),
+			Author:      cleanText(item.Author),
 			GUID:        strings.TrimSpace(item.GUID),
 		}
 		if item.PubDate != "" {
@@ -285,7 +286,7 @@ func parseAtom(body []byte) ([]parsedEntry, error) {
 	var entries []parsedEntry
 	for _, e := range feed.Entries {
 		entry := parsedEntry{
-			Title: strings.TrimSpace(e.Title),
+			Title: cleanText(e.Title),
 			GUID:  strings.TrimSpace(e.ID),
 		}
 
@@ -307,7 +308,7 @@ func parseAtom(body []byte) ([]parsedEntry, error) {
 		}
 
 		if e.Author != nil {
-			entry.Author = strings.TrimSpace(e.Author.Name)
+			entry.Author = cleanText(e.Author.Name)
 		}
 
 		// Date: prefer published, fallback to updated.
@@ -379,5 +380,21 @@ var htmlTagRE = regexp.MustCompile(`<[^>]*>`)
 func sanitizeHTML(s string) string {
 	s = htmlTagRE.ReplaceAllString(s, " ")
 	s = html.UnescapeString(s)
+	return cleanText(s)
+}
+
+// cleanText collapses runs of whitespace into single spaces and drops all
+// other control characters. Feed text is untrusted and is eventually written
+// to a terminal: XML rejects a raw ESC, but C1 controls (e.g. U+009B, the
+// 8-bit CSI) pass through, and HTML-unescaping a double-encoded "&amp;#27;"
+// yields a real ESC. Stripping them keeps feeds from injecting terminal
+// escape sequences.
+func cleanText(s string) string {
+	s = strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) && !unicode.IsSpace(r) {
+			return -1
+		}
+		return r
+	}, s)
 	return strings.Join(strings.Fields(s), " ")
 }
