@@ -11,6 +11,7 @@ package client
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -147,6 +148,11 @@ func (c *Client) dialLocked(ctx context.Context) error {
 			Timeout:             10 * time.Second,
 			PermitWithoutStream: true,
 		}),
+	}
+	// gRPC applies HTTPS_PROXY to every target, but a proxy can never reach
+	// a local Unix socket, so dial it directly.
+	if strings.HasPrefix(target, "unix:") {
+		dialOpts = append(dialOpts, grpc.WithNoProxy())
 	}
 
 	conn, err := grpc.DialContext(ctx, target, dialOpts...)
