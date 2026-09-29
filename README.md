@@ -44,7 +44,6 @@ mkdir -p ~/.config/nyttig
 Create `~/.config/nyttig/config.toml`:
 
 ```toml
-[server]
 socket = "/tmp/nyttig.sock"
 db_path = "~/.local/share/nyttig/nyttig.db"
 log_level = "info"
@@ -107,13 +106,15 @@ field = "both"
 ### 2. Start the daemon
 
 ```bash
-nyttigd
+nyttigd --config ~/.config/nyttig/config.toml
 ```
 
-Or with explicit options:
+`nyttigd` only reads a config file when `--config` is given; without it, the
+daemon starts with the built-in defaults and no seeded sources, tags, or rules.
+Flags override the file's values:
 
 ```bash
-nyttigd --socket /tmp/nyttig.sock --config ~/.config/nyttig/config.toml --log-level debug
+nyttigd --config ~/.config/nyttig/config.toml --log-level debug
 ```
 
 ### 3. Open the TUI
@@ -122,10 +123,11 @@ nyttigd --socket /tmp/nyttig.sock --config ~/.config/nyttig/config.toml --log-le
 nyttig
 ```
 
-The TUI connects to the daemon via the default Unix socket (`/tmp/nyttig.sock`). To connect to a remote daemon over TCP+TLS:
+The TUI connects to the daemon via the default Unix socket (`/tmp/nyttig.sock`). To connect to a remote daemon over TCP, use mutual TLS (see [Remote Access with Mutual TLS](#remote-access-with-mutual-tls)):
 
 ```bash
-nyttig --socket daemon.example.com:8443 --tls --tls-ca /path/to/ca.pem
+nyttig --socket daemon.example.com:9090 \
+  --tls-cert client.pem --tls-key client.key --tls-ca ca.pem
 ```
 
 ### 4. Manage sources from the CLI (no TUI needed)
@@ -142,7 +144,13 @@ nyttig refresh
 
 ## Configuration Reference
 
-### `[server]`
+The file is only read when `nyttigd` is started with `--config`. Unknown keys
+are rejected, so a typo stops the daemon with an error rather than being
+silently ignored.
+
+### Top-level settings
+
+These go at the top of the file, before any `[table]`.
 
 | Field       | Default                           | Description                        |
 |-------------|-----------------------------------|------------------------------------|
@@ -170,7 +178,8 @@ socket). Paths may use a leading `~`.
 | `url`         | yes      | —       | Feed URL (RSS or Atom)                           |
 | `type`        | no       | `rss`   | Feed type: `rss` or `atom`                       |
 | `refresh_sec` | no       | `3600`  | Fetch interval in seconds                        |
-| `enabled`     | no       | `true`  | Whether the source is enabled on startup         |
+| `color`       | no       | —       | Hex color for the source chip in the TUI         |
+| `abbreviation`| no       | —       | Short display name in the TUI (falls back to `name`) |
 
 ### `[[tags]]`
 
@@ -194,7 +203,7 @@ socket). Paths may use a leading `~`.
 | Flag              | Default                        | Description                                       |
 |-------------------|--------------------------------|---------------------------------------------------|
 | `--socket`        | `/tmp/nyttig.sock`             | Unix socket path (or `host:port`)                 |
-| `--config`        | `~/.config/nyttig/config.toml` | Config file path                                  |
+| `--config`        | — (no config file is read)     | Config file path                                  |
 | `--db-path`       | config value or default        | Override database path                            |
 | `--log-level`     | `info`                         | `debug`, `info`, `warn`, `error`                  |
 | `--tls-cert`      | —                              | Server certificate (PEM); enables mTLS            |
@@ -405,7 +414,7 @@ Nyttig uses SQLite with FTS5 for full-text search. The default database path is 
 | Database      | SQLite with FTS5                    |
 | Migrations    | Embedded SQL files                  |
 | Configuration | TOML                                |
-| Feed parsing  | gofeed (RSS 2.0 / Atom)            |
+| Feed parsing  | `encoding/xml` (RSS 2.0 / Atom)     |
 | Logging       | `slog` with JSON output             |
 
 ## License
