@@ -1,0 +1,12 @@
+# Build output (see AGENT.md). Anchored to the repo root so the cmd/nyttig and
+# cmd/nyttigd source directories are not matched.
+/bin/
+/dist/
+/main
+/nyttig
+/nyttigd
+
+# Tool caches
+/.deps/
+/.modcache/
+/.pi/
