@@ -117,5 +117,10 @@ jobs:
 
       - uses: golang/govulncheck-action@v1
         with:
+          # The action defaults go-version-input to "stable", which setup-go
+          # prefers over go-version-file. Clear it so the scan uses the same
+          # toolchain as go.mod, and so the standard library it checks is the
+          # one the binaries are actually built with.
+          go-version-input: ""
           go-version-file: go.mod
           go-package: ./...
