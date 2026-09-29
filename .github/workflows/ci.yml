@@ -1,0 +1,127 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# Least privilege: jobs only need to read the repo. golangci-lint's
+# only-new-issues additionally reads the PR diff through the API.
+permissions:
+  contents: read
+
+# Cancel superseded runs on the same PR/branch, but never on main so every
+# commit there gets a complete result.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - name: gofmt
+        run: |
+          unformatted=$(gofmt -l $(git ls-files '*.go' | grep -v '^third_party/'))
+          if [ -n "$unformatted" ]; then
+            echo "::error::These files need gofmt:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: go mod tidy
+        run: go mod tidy -diff
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v9
+        with:
+          version: latest
+          # The codebase has existing findings; only fail on ones a change
+          # introduces. Drop this once the backlog is cleared.
+          only-new-issues: true
+
+  test:
+    name: Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    env:
+      # SQLite is compiled in through cgo; the race detector needs it too.
+      CGO_ENABLED: "1"
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - name: go test
+        run: go test -race -shuffle=on -covermode=atomic -coverprofile=coverage.out ./...
+
+      - name: Coverage summary
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          {
+            echo '### Coverage'
+            echo '```'
+            go tool cover -func=coverage.out | tail -n 1
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v7
+        if: matrix.os == 'ubuntu-latest'
+        with:
+          name: coverage
+          path: coverage.out
+          retention-days: 14
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    needs: [lint, test]
+    env:
+      CGO_ENABLED: "1"
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - name: go build
+        run: |
+          mkdir -p dist
+          go build -trimpath -ldflags="-s -w" -o dist/ ./cmd/nyttig ./cmd/nyttigd
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: nyttig-linux-amd64
+          path: dist/
+          retention-days: 14
+
+  vulncheck:
+    name: Vulnerability check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: golang/govulncheck-action@v1
+        with:
+          go-version-file: go.mod
+          go-package: ./...
