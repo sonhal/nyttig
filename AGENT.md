@@ -50,6 +50,7 @@ scripts/gen-certs.sh        Generates a private CA plus server/client certs for 
 .github/dependabot.yml      Weekly grouped dependency updates
 sample_config.toml          Example config
 nyttigd.service             Example systemd user unit
+deploy/                     VPS deployment: system unit (mTLS), backup timer, config, guide
 ```
 
 ## Architecture notes (read before changing server code)

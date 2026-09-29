@@ -7,7 +7,6 @@ Wants=network-online.target
 [Service]
 Type=simple
 ExecStart=%h/bin/nyttigd --socket /tmp/nyttig.sock --config %h/.config/nyttig/config.toml
-ExecReload=/bin/kill -HUP $MAINPID
 Restart=on-failure
 RestartSec=5
 Environment="PATH=%h/bin:/usr/local/bin:/usr/bin:/bin"

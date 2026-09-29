@@ -387,6 +387,9 @@ systemctl --user status nyttigd
 
 The service runs under your user account and uses the default socket path at `/tmp/nyttig.sock`. Adjust the `ExecStart` path if you installed the binary to a different location.
 
+To run the daemon on a server and connect to it remotely over mutual TLS, see
+[`deploy/`](deploy/README.md).
+
 ## Database
 
 Nyttig uses SQLite with FTS5 for full-text search. The default database path is `~/.local/share/nyttig/nyttig.db`. The database is created and migrated automatically on first daemon start.

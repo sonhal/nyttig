@@ -1,0 +1,16 @@
+# /etc/nyttigd/config.toml (root:nyttig, 0640). Apply changes with
+# `systemctl restart nyttigd`.
+
+# TCP on all interfaces. Never expose this port without the [tls] table.
+socket = ":9090"
+db_path = "/var/lib/nyttigd/nyttig.db"
+log_level = "info"
+
+# Copied here by LoadCredential= in nyttigd.service from /etc/nyttigd/tls/.
+[tls]
+cert = "/run/credentials/nyttigd.service/server.pem"
+key = "/run/credentials/nyttigd.service/server.key"
+client_ca = "/run/credentials/nyttigd.service/ca.pem"
+
+# Add [[sources]], [[tags]] and [[tag_rules]] as in sample_config.toml, or
+# manage them remotely with the nyttig CLI.
