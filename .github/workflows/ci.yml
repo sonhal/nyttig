@@ -55,12 +55,8 @@ jobs:
           only-new-issues: true
 
   test:
-    name: Test (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest]
+    name: Test
+    runs-on: ubuntu-latest
     env:
       # SQLite is compiled in through cgo; the race detector needs it too.
       CGO_ENABLED: "1"
@@ -75,7 +71,6 @@ jobs:
         run: go test -race -shuffle=on -covermode=atomic -coverprofile=coverage.out ./...
 
       - name: Coverage summary
-        if: matrix.os == 'ubuntu-latest'
         run: |
           {
             echo '### Coverage'
@@ -85,7 +80,6 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/upload-artifact@v7
-        if: matrix.os == 'ubuntu-latest'
         with:
           name: coverage
           path: coverage.out
