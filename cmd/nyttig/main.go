@@ -8,6 +8,10 @@
 //	nyttig list-sources                          # list all sources
 //	nyttig remove-source -i 1                    # remove source by ID
 //	nyttig add-tag -n "rust" -c "#FF6B35"        # create a tag
+//	nyttig list-tags                             # list all tags
+//	nyttig add-tag-rule -tag rust -p '(?i)\brust\b'  # auto-tag matching items
+//	nyttig list-tag-rules                        # list all tag rules
+//	nyttig search -q "sqlite"                    # full-text search stored items
 //	nyttig refresh                               # force immediate fetch of all sources
 package main
 
@@ -16,6 +20,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"text/tabwriter"
 
@@ -72,6 +77,18 @@ func main() {
 		removeSourceCmd()
 	case "add-tag":
 		addTagCmd()
+	case "list-tags":
+		listTagsCmd()
+	case "remove-tag":
+		removeTagCmd()
+	case "add-tag-rule":
+		addTagRuleCmd()
+	case "list-tag-rules":
+		listTagRulesCmd()
+	case "remove-tag-rule":
+		removeTagRuleCmd()
+	case "search":
+		searchCmd()
 	case "update-source":
 		updateSourceCmd()
 	case "refresh":
@@ -90,7 +107,13 @@ func printHelp() {
 	fmt.Fprintf(os.Stderr, "  remove-source  Remove a source by ID\n")
 	fmt.Fprintf(os.Stderr, "  update-source  Update an existing source (name/url/type/refresh/enable/disable)\n")
 	fmt.Fprintf(os.Stderr, "  add-tag        Create a new tag\n")
-	fmt.Fprintf(os.Stderr, "  refresh        Force immediate fetch of all sources\n")
+	fmt.Fprintf(os.Stderr, "  list-tags      List all tags\n")
+	fmt.Fprintf(os.Stderr, "  remove-tag     Remove a tag (and its rules and assignments) by ID\n")
+	fmt.Fprintf(os.Stderr, "  add-tag-rule   Add a regex rule that auto-tags matching items\n")
+	fmt.Fprintf(os.Stderr, "  list-tag-rules List all tag rules\n")
+	fmt.Fprintf(os.Stderr, "  remove-tag-rule Remove a tag rule by ID\n")
+	fmt.Fprintf(os.Stderr, "  search         Full-text search stored items\n")
+	fmt.Fprintf(os.Stderr, "  refresh        Force immediate fetch of all sources (or one with -i)\n")
 	fmt.Fprintf(os.Stderr, "\nGlobal flags:\n")
 	fmt.Fprintf(os.Stderr, "  --socket PATH         Daemon Unix socket path or TCP address (default: /tmp/nyttig.sock)\n")
 	fmt.Fprintf(os.Stderr, "  --tls-cert PATH       Client TLS certificate (PEM) for mTLS\n")
@@ -414,10 +437,325 @@ func addTagCmd() {
 	fmt.Println()
 }
 
+// listTagsCmd handles the "list-tags" subcommand.
+func listTagsCmd() {
+	flags := flag.NewFlagSet("list-tags", flag.ExitOnError)
+	registerClientFlags(flags)
+	flags.Parse(os.Args[2:])
+
+	c := newClient()
+	defer c.Close()
+
+	resp, err := c.ListTags(context.Background())
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+
+	if len(resp.Tags) == 0 {
+		fmt.Println("No tags configured.")
+		return
+	}
+
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	fmt.Fprintf(w, "ID\tNAME\tCOLOR\n")
+	fmt.Fprintf(w, "--\t----\t-----\n")
+	for _, tag := range resp.Tags {
+		color := tag.Color
+		if color == "" {
+			color = "-"
+		}
+		fmt.Fprintf(w, "%d\t%s\t%s\n", tag.Id, tag.Name, color)
+	}
+	w.Flush()
+}
+
+// removeTagCmd handles the "remove-tag" subcommand.
+func removeTagCmd() {
+	flags := flag.NewFlagSet("remove-tag", flag.ExitOnError)
+	registerClientFlags(flags)
+
+	var id int64
+	flags.Int64Var(&id, "i", 0, "Tag ID to remove (required)")
+	flags.Int64Var(&id, "id", 0, "Tag ID to remove (required)")
+
+	args := os.Args[2:]
+	if len(args) == 0 || args[0] == "--help" {
+		fmt.Fprintf(os.Stderr, "Usage: nyttig remove-tag -i <id>\n\n")
+		fmt.Fprintf(os.Stderr, "Also removes the tag's rules and its assignments to items.\n\n")
+		flags.PrintDefaults()
+		os.Exit(0)
+	}
+	flags.Parse(args)
+
+	if id == 0 {
+		fmt.Fprintf(os.Stderr, "Error: --id (-i) is required\n")
+		os.Exit(1)
+	}
+
+	c := newClient()
+	defer c.Close()
+
+	if err := c.RemoveTag(context.Background(), id); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("Tag %d removed (with its rules and item assignments).\n", id)
+}
+
+// resolveTagID turns a tag reference into a tag ID. A numeric reference is
+// used as-is; anything else is looked up by exact tag name.
+func resolveTagID(ctx context.Context, c *client.Client, ref string) (int64, error) {
+	if id, err := strconv.ParseInt(ref, 10, 64); err == nil {
+		return id, nil
+	}
+	resp, err := c.ListTags(ctx)
+	if err != nil {
+		return 0, err
+	}
+	for _, tag := range resp.Tags {
+		if tag.Name == ref {
+			return tag.Id, nil
+		}
+	}
+	return 0, fmt.Errorf("tag %q not found (create it with 'nyttig add-tag -n %s')", ref, ref)
+}
+
+// addTagRuleCmd handles the "add-tag-rule" subcommand.
+func addTagRuleCmd() {
+	flags := flag.NewFlagSet("add-tag-rule", flag.ExitOnError)
+	registerClientFlags(flags)
+
+	var (
+		tagRef   string
+		pattern  string
+		field    string
+		sourceID int64
+		priority int
+	)
+
+	flags.StringVar(&tagRef, "tag", "", "Tag name or ID to assign (required)")
+	flags.StringVar(&pattern, "p", "", "Regex pattern, Go syntax (required)")
+	flags.StringVar(&pattern, "pattern", "", "Regex pattern, Go syntax (required)")
+	flags.StringVar(&field, "f", "both", "Field to match: title, description, or both")
+	flags.StringVar(&field, "field", "both", "Field to match: title, description, or both")
+	flags.Int64Var(&sourceID, "s", 0, "Restrict rule to this source ID (default: all sources)")
+	flags.Int64Var(&sourceID, "source", 0, "Restrict rule to this source ID (default: all sources)")
+	flags.IntVar(&priority, "priority", 0, "Evaluation order (lower = evaluated first)")
+
+	args := os.Args[2:]
+	if len(args) == 0 || args[0] == "--help" {
+		fmt.Fprintf(os.Stderr, "Usage: nyttig add-tag-rule -tag <name|id> -p <pattern> [flags]\n\n")
+		fmt.Fprintf(os.Stderr, "Rules apply to items fetched after the rule is added.\n\n")
+		flags.PrintDefaults()
+		os.Exit(0)
+	}
+	flags.Parse(args)
+
+	if tagRef == "" {
+		fmt.Fprintf(os.Stderr, "Error: --tag is required\n")
+		os.Exit(1)
+	}
+	if pattern == "" {
+		fmt.Fprintf(os.Stderr, "Error: --pattern (-p) is required\n")
+		os.Exit(1)
+	}
+
+	c := newClient()
+	defer c.Close()
+
+	ctx := context.Background()
+	tagID, err := resolveTagID(ctx, c, tagRef)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+
+	rule, err := c.AddTagRule(ctx, &pb.AddTagRuleRequest{
+		SourceId: sourceID,
+		TagId:    tagID,
+		Field:    field,
+		Pattern:  pattern,
+		Priority: int32(priority),
+	})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("Tag rule added: [%d] %s ← /%s/ on %s\n", rule.Id, rule.TagName, rule.Pattern, rule.Field)
+}
+
+// listTagRulesCmd handles the "list-tag-rules" subcommand.
+func listTagRulesCmd() {
+	flags := flag.NewFlagSet("list-tag-rules", flag.ExitOnError)
+	registerClientFlags(flags)
+	flags.Parse(os.Args[2:])
+
+	c := newClient()
+	defer c.Close()
+
+	resp, err := c.ListTagRules(context.Background())
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+
+	if len(resp.Rules) == 0 {
+		fmt.Println("No tag rules configured.")
+		return
+	}
+
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	fmt.Fprintf(w, "ID\tTAG\tFIELD\tSOURCE\tPRIORITY\tPATTERN\n")
+	fmt.Fprintf(w, "--\t---\t-----\t------\t--------\t-------\n")
+	for _, r := range resp.Rules {
+		source := "all"
+		if r.SourceId != 0 {
+			source = strconv.FormatInt(r.SourceId, 10)
+		}
+		fmt.Fprintf(w, "%d\t%s\t%s\t%s\t%d\t%s\n",
+			r.Id, r.TagName, r.Field, source, r.Priority, r.Pattern)
+	}
+	w.Flush()
+}
+
+// removeTagRuleCmd handles the "remove-tag-rule" subcommand.
+func removeTagRuleCmd() {
+	flags := flag.NewFlagSet("remove-tag-rule", flag.ExitOnError)
+	registerClientFlags(flags)
+
+	var id int64
+	flags.Int64Var(&id, "i", 0, "Tag rule ID to remove (required)")
+	flags.Int64Var(&id, "id", 0, "Tag rule ID to remove (required)")
+
+	args := os.Args[2:]
+	if len(args) == 0 || args[0] == "--help" {
+		fmt.Fprintf(os.Stderr, "Usage: nyttig remove-tag-rule -i <id>\n\n")
+		flags.PrintDefaults()
+		os.Exit(0)
+	}
+	flags.Parse(args)
+
+	if id == 0 {
+		fmt.Fprintf(os.Stderr, "Error: --id (-i) is required\n")
+		os.Exit(1)
+	}
+
+	c := newClient()
+	defer c.Close()
+
+	if err := c.RemoveTagRule(context.Background(), id); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("Tag rule %d removed.\n", id)
+}
+
+// searchCmd handles the "search" subcommand.
+func searchCmd() {
+	flags := flag.NewFlagSet("search", flag.ExitOnError)
+	registerClientFlags(flags)
+
+	var (
+		query    string
+		sourceID int64
+		tagRef   string
+		limit    int
+		offset   int
+	)
+
+	flags.StringVar(&query, "q", "", "Full-text search query (or pass it as trailing arguments)")
+	flags.StringVar(&query, "query", "", "Full-text search query (or pass it as trailing arguments)")
+	flags.Int64Var(&sourceID, "s", 0, "Only items from this source ID")
+	flags.Int64Var(&sourceID, "source", 0, "Only items from this source ID")
+	flags.StringVar(&tagRef, "tag", "", "Only items with this tag (name or ID)")
+	flags.IntVar(&limit, "l", 20, "Maximum number of results")
+	flags.IntVar(&limit, "limit", 20, "Maximum number of results")
+	flags.IntVar(&offset, "offset", 0, "Skip this many results (for paging)")
+
+	args := os.Args[2:]
+	if len(args) > 0 && args[0] == "--help" {
+		fmt.Fprintf(os.Stderr, "Usage: nyttig search [flags] [query...]\n\n")
+		fmt.Fprintf(os.Stderr, "With no query, lists the newest items matching the source/tag filters.\n\n")
+		flags.PrintDefaults()
+		os.Exit(0)
+	}
+	flags.Parse(args)
+
+	if rest := flags.Args(); len(rest) > 0 {
+		if query != "" {
+			query += " "
+		}
+		query += strings.Join(rest, " ")
+	}
+
+	c := newClient()
+	defer c.Close()
+
+	ctx := context.Background()
+	var tagID int64
+	if tagRef != "" {
+		var err error
+		if tagID, err = resolveTagID(ctx, c, tagRef); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+	}
+
+	resp, err := c.Search(ctx, &pb.SearchRequest{
+		Query:    query,
+		SourceId: sourceID,
+		TagId:    tagID,
+		Limit:    int32(limit),
+		Offset:   int32(offset),
+	})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+
+	if len(resp.Items) == 0 {
+		fmt.Println("No matching items.")
+		return
+	}
+
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	fmt.Fprintf(w, "ID\tPUBLISHED\tSOURCE\tTAGS\tTITLE\tLINK\n")
+	fmt.Fprintf(w, "--\t---------\t------\t----\t-----\t----\n")
+	for _, it := range resp.Items {
+		published := "-"
+		if it.Published != nil {
+			published = it.Published.AsTime().Local().Format("2006-01-02 15:04")
+		}
+		tagNames := make([]string, len(it.Tags))
+		for i, t := range it.Tags {
+			tagNames[i] = t.Name
+		}
+		tags := strings.Join(tagNames, ",")
+		if tags == "" {
+			tags = "-"
+		}
+		fmt.Fprintf(w, "%d\t%s\t%s\t%s\t%s\t%s\n",
+			it.Id, published, tui.SanitizeLine(it.SourceName), tui.SanitizeLine(tags), tui.SanitizeLine(it.Title), tui.SanitizeLine(it.Link))
+	}
+	w.Flush()
+
+	if shown := offset + len(resp.Items); int(resp.Total) > shown {
+		fmt.Printf("\nShowing %d–%d of %d. Use -offset %d for more.\n", offset+1, shown, resp.Total, shown)
+	}
+}
+
 // refreshCmd handles the "refresh" subcommand.
 func refreshCmd() {
 	flags := flag.NewFlagSet("refresh", flag.ExitOnError)
 	registerClientFlags(flags)
+
+	var id int64
+	flags.Int64Var(&id, "i", 0, "Source ID to refresh (default: all sources)")
+	flags.Int64Var(&id, "id", 0, "Source ID to refresh (default: all sources)")
 	flags.Parse(os.Args[2:])
 
 	c := newClient()
@@ -425,12 +763,16 @@ func refreshCmd() {
 
 	ctx := context.Background()
 	// sourceID=0 means refresh all sources.
-	if err := c.RefreshSource(ctx, 0); err != nil {
+	if err := c.RefreshSource(ctx, id); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
 
-	fmt.Println("Refresh triggered for all sources.")
+	if id == 0 {
+		fmt.Println("Refresh triggered for all sources.")
+	} else {
+		fmt.Printf("Refresh triggered for source %d.\n", id)
+	}
 }
 
 // runTUI starts the interactive Bubble Tea TUI.

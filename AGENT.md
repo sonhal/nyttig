@@ -84,6 +84,9 @@ go run ./cmd/nyttig list-sources     # CLI subcommand
 
 Note: `go.mod` has a `replace` directive pointing `mattn/go-sqlite3` at
 `./third_party/...`. Keep that vendored copy in place; builds depend on it.
+It carries one local addition, `sqlite3_opt_fts5_default.go`, which enables
+FTS5 without the `sqlite_fts5` build tag. The schema needs FTS5, so keep that
+file if you ever update the vendored driver.
 
 ### Regenerating protobuf code
 

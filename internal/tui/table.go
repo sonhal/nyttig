@@ -9,6 +9,7 @@ package tui
 import (
 	"net/url"
 	"strings"
+	"unicode"
 
 	"github.com/charmbracelet/lipgloss"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -89,6 +90,21 @@ func (t *Table) SetItems(items []*pb.Item) {
 // AppendItems adds items to the end of the list.
 func (t *Table) AppendItems(items []*pb.Item) {
 	t.items = append(t.items, items...)
+}
+
+// PrependItems adds items to the start of the list. If the user is at the
+// very top, the view stays there so the new items become visible; otherwise
+// the cursor and scroll offset shift so the selection stays on the same item.
+func (t *Table) PrependItems(items []*pb.Item) {
+	if len(items) == 0 {
+		return
+	}
+	t.items = append(append(make([]*pb.Item, 0, len(items)+len(t.items)), items...), t.items...)
+	if t.cursor == 0 && t.offset == 0 {
+		return
+	}
+	t.cursor += len(items)
+	t.offset += len(items)
 }
 
 // GetItems returns all items currently in the table.
@@ -268,16 +284,22 @@ func (t *Table) renderRow(item *pb.Item, selected bool) string {
 	// The description fills whatever space the title leaves, and is truncated
 	// with "..." when too long. It is only shown when there is room for a
 	// meaningful title and description side by side.
+	// Feed text is untrusted: flatten it to one line and drop control
+	// characters so it can neither break the row layout nor inject
+	// terminal escape sequences.
+	title := SanitizeLine(item.Title)
+	desc := SanitizeLine(item.Description)
+
 	var titleCol, descCol string
 	descLen := 0
-	if item.Description != "" && avail >= minTitle+margin+minDesc {
+	if desc != "" && avail >= minTitle+margin+minDesc {
 		titleW := avail * 3 / 5
 		descW := avail - titleW - margin // margin separates title and description
-		titleCol = truncateEllipsis(item.Title, titleW)
-		descCol = descStyle.Render(truncateWithSuffix(item.Description, descW, "..."))
+		titleCol = truncateEllipsis(title, titleW)
+		descCol = descStyle.Render(truncateWithSuffix(desc, descW, "..."))
 		descLen = lipgloss.Width(descCol)
 	} else {
-		titleCol = truncateEllipsis(item.Title, avail)
+		titleCol = truncateEllipsis(title, avail)
 	}
 	titleLen := lipgloss.Width(titleCol)
 
@@ -390,6 +412,19 @@ func extractDomain(link string) string {
 	// Strip www. prefix for compactness.
 	host = strings.TrimPrefix(host, "www.")
 	return host
+}
+
+// SanitizeLine prepares untrusted text for single-line terminal output: runs
+// of whitespace (including newlines and tabs) collapse into one space and all
+// other control characters, such as ESC and the C1 range, are removed.
+func SanitizeLine(s string) string {
+	s = strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) && !unicode.IsSpace(r) {
+			return -1
+		}
+		return r
+	}, s)
+	return strings.Join(strings.Fields(s), " ")
 }
 
 // truncateEllipsis truncates s to at most maxWidth rune-cells, appending "..".

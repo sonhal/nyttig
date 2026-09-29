@@ -728,6 +728,8 @@ func TestSanitizeHTML(t *testing.T) {
 		{"collapses whitespace", "lots\n\n  of   space", "lots of space"},
 		{"tags only", `<p><br/></p>`, ""},
 		{"empty", "", ""},
+		{"double-encoded ESC is stripped", "hi &#27;[2J&#27;[31mFAKE", "hi [2J[31mFAKE"},
+		{"C1 CSI is stripped", "a\u009b31mb", "a31mb"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -735,5 +737,32 @@ func TestSanitizeHTML(t *testing.T) {
 				t.Errorf("sanitizeHTML(%q) = %q, want %q", c.in, got, c.want)
 			}
 		})
+	}
+}
+
+func TestParseRSS_StripsControlCharacters(t *testing.T) {
+	// U+009B passes XML validation; the description double-encodes ESC so
+	// that HTML-unescaping would produce a real ESC.
+	feed := []byte(`<?xml version="1.0"?><rss version="2.0"><channel><title>T</title>
+<item><title>Go 1.27	with
+newlines&#155;31m</title><link>http://x/1</link><guid>1</guid>
+<description>hi &amp;#27;[2J clear</description><author>a&#155;b</author></item>
+</channel></rss>`)
+	entries, err := parseRSS(feed)
+	if err != nil {
+		t.Fatalf("parseRSS: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("got %d entries, want 1", len(entries))
+	}
+	e := entries[0]
+	if want := "Go 1.27 with newlines31m"; e.Title != want {
+		t.Errorf("Title = %q, want %q", e.Title, want)
+	}
+	if want := "hi [2J clear"; e.Description != want {
+		t.Errorf("Description = %q, want %q", e.Description, want)
+	}
+	if want := "ab"; e.Author != want {
+		t.Errorf("Author = %q, want %q", e.Author, want)
 	}
 }

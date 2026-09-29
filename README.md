@@ -21,11 +21,17 @@ nyttig           client (TUI/CLI) — connects to the daemon over a Unix socket
 ## Install
 
 ```bash
-go install github.com/sonhal/nyttig/cmd/nyttigd@latest
-go install github.com/sonhal/nyttig/cmd/nyttig@latest
+git clone https://github.com/sonhal/nyttig.git
+cd nyttig
+go install ./cmd/nyttigd ./cmd/nyttig
 ```
 
-Requires Go 1.26+.
+Requires Go 1.26+ and a C compiler (cgo), since SQLite is compiled in.
+
+`go install github.com/sonhal/nyttig/cmd/...@latest` does not work: the module
+uses a `replace` directive for its vendored SQLite driver, which Go refuses for
+remote installs. FTS5 is enabled in that driver by default, so no build tags are
+needed.
 
 ## Quick Start
 
@@ -129,6 +135,8 @@ nyttig add-source -n "Rust Blog" -u "https://blog.rust-lang.org/feed.xml"
 nyttig list-sources
 nyttig remove-source -id 3
 nyttig add-tag -n "security" -c "#FF0000"
+nyttig add-tag-rule -tag security -p '(?i)\b(cve|exploit)\b'
+nyttig search -tag security openssl
 nyttig refresh
 ```
 
@@ -216,6 +224,7 @@ These are global flags accepted by every subcommand and the TUI.
 | `Esc`        | Clear search and defocus search bar.                     |
 | `s`          | Cycle source filter (all → specific source → all).       |
 | `t`          | Cycle tag filter (all → specific tag → all).             |
+| `o`          | Toggle sort order (newest ↔ oldest).                     |
 | `r`          | Force refresh all sources immediately.                   |
 | `Enter`      | Open selected item's link in default browser.            |
 | `j` / `↓`    | Move selection down.                                     |
@@ -252,14 +261,25 @@ Items are automatically marked as viewed when you scroll past them in the TUI (K
 When invoked with arguments, `nyttig` acts as a CLI management tool:
 
 ```
-nyttig add-source    -n <name> -u <url> [-t rss|atom] [-i refresh_sec]
+nyttig add-source      -n <name> -u <url> [-t rss|atom] [-r refresh_sec]
 nyttig list-sources
-nyttig remove-source -id <source_id>
-nyttig add-tag       -n <name> [-c <hex_color>]
-nyttig refresh       [-id <source_id>]   # omit -id to refresh all
+nyttig update-source   -id <source_id> [-n <name>] [-u <url>] [-t rss|atom] [-r refresh_sec] [-enable|-disable]
+nyttig remove-source   -id <source_id>
+nyttig add-tag         -n <name> [-c <hex_color>]
+nyttig list-tags
+nyttig remove-tag      -id <tag_id>      # also removes the tag's rules and item assignments
+nyttig add-tag-rule    -tag <name|id> -p <regex> [-f title|description|both] [-s source_id] [-priority N]
+nyttig list-tag-rules
+nyttig remove-tag-rule -id <rule_id>
+nyttig search          [-tag <name|id>] [-s source_id] [-l limit] [-offset N] [query...]
+nyttig refresh         [-id <source_id>]   # omit -id to refresh all
 ```
 
 Each subcommand calls the corresponding gRPC RPC against the daemon. The daemon must be running for these to work.
+
+Tag rules added with `add-tag-rule` apply to items fetched after the rule is
+created; existing items are not retagged. The daemon rejects invalid regex
+patterns and unknown `field` values.
 
 ## Tagging System
 

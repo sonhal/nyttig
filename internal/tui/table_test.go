@@ -213,3 +213,46 @@ func TestRenderRow_SourceChipMissingMeta(t *testing.T) {
 		t.Errorf("expected date in row, got %q", row)
 	}
 }
+
+func TestSanitizeLine(t *testing.T) {
+	tests := []struct {
+		name, in, want string
+	}{
+		{"plain", "Hello world", "Hello world"},
+		{"newlines and tabs", "Go 1.27\twith\nnewlines\r\n", "Go 1.27 with newlines"},
+		{"ESC sequence", "a\x1b[2Jb", "a[2Jb"},
+		{"C1 CSI", "a\u009b31mb", "a31mb"},
+		{"keeps unicode", "Æøå — 日本", "Æøå — 日本"},
+		{"empty", "", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := SanitizeLine(tt.in); got != tt.want {
+				t.Errorf("SanitizeLine(%q) = %q, want %q", tt.in, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestRenderRow_SingleLineWithoutControlChars(t *testing.T) {
+	tb := newTestTable(120)
+	item := &pb.Item{
+		Id:          1,
+		Title:       "Go 1.27\twith\nnewlines",
+		Description: "evil \x1b[2J\x1b]0;pwned\x07 text",
+		Link:        "https://example.com/a",
+	}
+	row := tb.renderRow(item, false)
+	plain := stripANSI(row)
+	if strings.Contains(plain, "\n") {
+		t.Errorf("row spans multiple lines: %q", plain)
+	}
+	if !strings.Contains(plain, "Go 1.27 with newlines") {
+		t.Errorf("row missing flattened title: %q", plain)
+	}
+	// Only lipgloss's own SGR color sequences may remain; the feed's clear
+	// screen and OSC title-set sequences must not.
+	if strings.Contains(row, "\x1b[2J") || strings.Contains(row, "\x1b]") || strings.Contains(row, "\x07") {
+		t.Errorf("row contains injected escape sequences: %q", row)
+	}
+}

@@ -1,7 +1,7 @@
 // Package tui provides the Nyttig terminal UI components.
 //
 // filter.go implements the filter bar component: a search input (activated by /),
-// source dropdown (cycled by s), tag dropdown (cycled by t), and sort dropdown.
+// source dropdown (cycled by s), tag dropdown (cycled by t), and sort dropdown (cycled by o).
 // It emits FilterChangedMsg when any filter parameter changes.
 package tui
 

@@ -11,6 +11,7 @@ import (
 	"database/sql"
 	"io"
 	"log/slog"
+	"regexp"
 	"sync"
 
 	"google.golang.org/grpc/codes"
@@ -277,6 +278,22 @@ func (s *Service) AddTagRule(ctx context.Context, req *pb.AddTagRuleRequest) (*p
 	}
 	if rule.Field == "" {
 		rule.Field = "both"
+	}
+	switch rule.Field {
+	case "title", "description", "both":
+	default:
+		return nil, status.Errorf(codes.InvalidArgument, "field must be title, description, or both; got %q", rule.Field)
+	}
+	if req.TagId == 0 {
+		return nil, status.Error(codes.InvalidArgument, "tag_id is required")
+	}
+	if req.Pattern == "" {
+		return nil, status.Error(codes.InvalidArgument, "pattern is required")
+	}
+	// Reject bad patterns up front; the tagger would otherwise skip the rule
+	// silently on every fetch.
+	if _, err := regexp.Compile(req.Pattern); err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "invalid pattern: %v", err)
 	}
 
 	id, err := db.InsertTagRule(s.db, rule)
