@@ -21,11 +21,17 @@ nyttig           client (TUI/CLI) — connects to the daemon over a Unix socket
 ## Install
 
 ```bash
-go install github.com/sonhal/nyttig/cmd/nyttigd@latest
-go install github.com/sonhal/nyttig/cmd/nyttig@latest
+git clone https://github.com/sonhal/nyttig.git
+cd nyttig
+go install ./cmd/nyttigd ./cmd/nyttig
 ```
 
-Requires Go 1.26+.
+Requires Go 1.26+ and a C compiler (cgo), since SQLite is compiled in.
+
+`go install github.com/sonhal/nyttig/cmd/...@latest` does not work: the module
+uses a `replace` directive for its vendored SQLite driver, which Go refuses for
+remote installs. FTS5 is enabled in that driver by default, so no build tags are
+needed.
 
 ## Quick Start
 
