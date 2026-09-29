@@ -91,6 +91,21 @@ func (t *Table) AppendItems(items []*pb.Item) {
 	t.items = append(t.items, items...)
 }
 
+// PrependItems adds items to the start of the list. If the user is at the
+// very top, the view stays there so the new items become visible; otherwise
+// the cursor and scroll offset shift so the selection stays on the same item.
+func (t *Table) PrependItems(items []*pb.Item) {
+	if len(items) == 0 {
+		return
+	}
+	t.items = append(append(make([]*pb.Item, 0, len(items)+len(t.items)), items...), t.items...)
+	if t.cursor == 0 && t.offset == 0 {
+		return
+	}
+	t.cursor += len(items)
+	t.offset += len(items)
+}
+
 // GetItems returns all items currently in the table.
 func (t *Table) GetItems() []*pb.Item {
 	return t.items

@@ -187,7 +187,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// ── Stream messages ─────────────────────────────────
 	case ItemMsg:
-		m.table.AppendItems([]*pb.Item{msg.Item})
+		// The initial batch arrives already sorted by the server. Items pushed
+		// live after it are newer than everything shown, so under "newest"
+		// they belong at the top.
+		if m.batchComplete && m.filter.CurrentSort() == "newest" {
+			m.table.PrependItems([]*pb.Item{msg.Item})
+		} else {
+			m.table.AppendItems([]*pb.Item{msg.Item})
+		}
 		// Continue reading.
 		if m.sub != nil {
 			return m, tea.Batch(ListenStream(m.sub), m.trackVisible())
@@ -292,6 +299,9 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case "t":
 		return m, m.broadcastFilterChange(m.filter.CycleTag())
+
+	case "o":
+		return m, m.broadcastFilterChange(m.filter.CycleSort())
 
 	case "r":
 		return m, m.refreshAll()
