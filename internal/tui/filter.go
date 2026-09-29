@@ -69,8 +69,8 @@ type FilterBar struct {
 	search    string
 
 	// Source dropdown.
-	sourceIdx  int // index into sources slice
-	sources    []SourceInfo
+	sourceIdx int // index into sources slice
+	sources   []SourceInfo
 
 	// Tag dropdown.
 	tagIdx int // index into tags slice

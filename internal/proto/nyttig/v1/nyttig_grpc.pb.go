@@ -21,20 +21,20 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	Nyttig_AddSource_FullMethodName      = "/nyttig.v1.Nyttig/AddSource"
-	Nyttig_RemoveSource_FullMethodName   = "/nyttig.v1.Nyttig/RemoveSource"
-	Nyttig_UpdateSource_FullMethodName   = "/nyttig.v1.Nyttig/UpdateSource"
-	Nyttig_ListSources_FullMethodName    = "/nyttig.v1.Nyttig/ListSources"
-	Nyttig_RefreshSource_FullMethodName  = "/nyttig.v1.Nyttig/RefreshSource"
-	Nyttig_AddTag_FullMethodName         = "/nyttig.v1.Nyttig/AddTag"
-	Nyttig_RemoveTag_FullMethodName      = "/nyttig.v1.Nyttig/RemoveTag"
-	Nyttig_ListTags_FullMethodName       = "/nyttig.v1.Nyttig/ListTags"
-	Nyttig_AddTagRule_FullMethodName     = "/nyttig.v1.Nyttig/AddTagRule"
-	Nyttig_RemoveTagRule_FullMethodName  = "/nyttig.v1.Nyttig/RemoveTagRule"
-	Nyttig_ListTagRules_FullMethodName   = "/nyttig.v1.Nyttig/ListTagRules"
-	Nyttig_StreamItems_FullMethodName    = "/nyttig.v1.Nyttig/StreamItems"
-	Nyttig_Search_FullMethodName         = "/nyttig.v1.Nyttig/Search"
-	Nyttig_MarkViewed_FullMethodName     = "/nyttig.v1.Nyttig/MarkViewed"
+	Nyttig_AddSource_FullMethodName     = "/nyttig.v1.Nyttig/AddSource"
+	Nyttig_RemoveSource_FullMethodName  = "/nyttig.v1.Nyttig/RemoveSource"
+	Nyttig_UpdateSource_FullMethodName  = "/nyttig.v1.Nyttig/UpdateSource"
+	Nyttig_ListSources_FullMethodName   = "/nyttig.v1.Nyttig/ListSources"
+	Nyttig_RefreshSource_FullMethodName = "/nyttig.v1.Nyttig/RefreshSource"
+	Nyttig_AddTag_FullMethodName        = "/nyttig.v1.Nyttig/AddTag"
+	Nyttig_RemoveTag_FullMethodName     = "/nyttig.v1.Nyttig/RemoveTag"
+	Nyttig_ListTags_FullMethodName      = "/nyttig.v1.Nyttig/ListTags"
+	Nyttig_AddTagRule_FullMethodName    = "/nyttig.v1.Nyttig/AddTagRule"
+	Nyttig_RemoveTagRule_FullMethodName = "/nyttig.v1.Nyttig/RemoveTagRule"
+	Nyttig_ListTagRules_FullMethodName  = "/nyttig.v1.Nyttig/ListTagRules"
+	Nyttig_StreamItems_FullMethodName   = "/nyttig.v1.Nyttig/StreamItems"
+	Nyttig_Search_FullMethodName        = "/nyttig.v1.Nyttig/Search"
+	Nyttig_MarkViewed_FullMethodName    = "/nyttig.v1.Nyttig/MarkViewed"
 )
 
 // NyttigClient is the client API for Nyttig service.
@@ -298,7 +298,7 @@ func (UnimplementedNyttigServer) MarkViewed(context.Context, *MarkViewedRequest)
 }
 
 func (UnimplementedNyttigServer) mustEmbedUnimplementedNyttigServer() {}
-func (UnimplementedNyttigServer) testEmbeddedByValue()               {}
+func (UnimplementedNyttigServer) testEmbeddedByValue()                {}
 
 // UnsafeNyttigServer may be embedded to opt out of forward compatibility for this service.
 // Use of this interface is not recommended, as added methods to NyttigServer will

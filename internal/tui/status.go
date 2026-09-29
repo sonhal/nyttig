@@ -21,7 +21,7 @@ var (
 			Foreground(lipgloss.Color("#4EC9B0"))
 
 	statusDisconnected = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#F44747"))
+				Foreground(lipgloss.Color("#F44747"))
 )
 
 // StatusBar holds the state for the status bar component.

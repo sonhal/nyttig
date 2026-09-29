@@ -22,17 +22,17 @@ import (
 
 type testServer struct {
 	pb.UnimplementedNyttigServer
-	mu       sync.Mutex
-	sources  []*pb.Source
-	tags     []*pb.Tag
-	rules    []*pb.TagRule
-	items    []*pb.Item
-	viewed   map[int64]bool
+	mu      sync.Mutex
+	sources []*pb.Source
+	tags    []*pb.Tag
+	rules   []*pb.TagRule
+	items   []*pb.Item
+	viewed  map[int64]bool
 
 	// StreamItems control
-	streamMu   sync.Mutex
-	streams    []pb.Nyttig_StreamItemsServer
-	itemCh     chan *pb.Item
+	streamMu sync.Mutex
+	streams  []pb.Nyttig_StreamItemsServer
+	itemCh   chan *pb.Item
 }
 
 func newTestServer() *testServer {
@@ -623,7 +623,7 @@ func TestClient_StreamItems_PushNewItem(t *testing.T) {
 	// Drain the initial batch.
 	var gotComplete bool
 	timeout := time.After(3 * time.Second)
-	drainLoop:
+drainLoop:
 	for {
 		select {
 		case msg, ok := <-sub.Messages:

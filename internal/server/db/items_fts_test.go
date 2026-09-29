@@ -4,9 +4,9 @@ import "testing"
 
 func TestFtsQuote(t *testing.T) {
 	tests := []struct {
-		name string
+		name  string
 		input string
-		want string
+		want  string
 	}{
 		{"empty", "", ""},
 		{"hello", "hello", `"hello"`},
