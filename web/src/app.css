@@ -1,0 +1,82 @@
+/* nyttig-web: dark only, the TUI palette, everything monospace. */
+
+:root {
+	color-scheme: dark;
+
+	--bg: #1e1e1e; /* page */
+	--bar: #2d2d2d; /* status bar */
+	--bar-filter: #252525; /* filter bar */
+	--sel: #3a3d41; /* selected row */
+	--fg: #e0e0e0; /* text */
+	--fg-strong: #ffffff; /* filter values */
+	--dim: #808080; /* date, labels, brackets */
+	--desc: #6a9955; /* description */
+	--accent: #569cd6; /* domain, links */
+	--unviewed: #4ec9b0; /* ●, connected */
+	--error: #f44747; /* disconnected, fetch errors */
+
+	--font: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, 'Liberation Mono', 'DejaVu Sans Mono',
+		monospace;
+	--font-size: 13px;
+
+	/* Read by VirtualList; see the mobile block below. */
+	--row-h: 20px;
+	--detail-h: 120px;
+	--bar-h: 24px;
+}
+
+@media (max-width: 719.98px) {
+	:root {
+		--row-h: 44px;
+		--detail-h: 200px;
+		--bar-h: 44px;
+	}
+}
+
+*,
+*::before,
+*::after {
+	box-sizing: border-box;
+}
+
+html,
+body {
+	margin: 0;
+	height: 100%;
+	background: var(--bg);
+	color: var(--fg);
+	font-family: var(--font);
+	font-size: var(--font-size);
+	line-height: 20px;
+	-webkit-text-size-adjust: 100%;
+	text-size-adjust: 100%;
+}
+
+#app {
+	display: contents;
+}
+
+button,
+input,
+select {
+	font: inherit;
+	color: inherit;
+}
+
+a {
+	color: var(--accent);
+}
+
+:focus-visible {
+	outline: 1px solid var(--accent);
+	outline-offset: -1px;
+}
+
+.visually-hidden {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	overflow: hidden;
+	clip-path: inset(50%);
+	white-space: nowrap;
+}

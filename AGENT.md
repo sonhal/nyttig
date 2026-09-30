@@ -5,12 +5,16 @@ Guidance for AI coding agents working in the **nyttig** repository.
 ## What this project is
 
 Nyttig is a news aggregator with a developer-oriented terminal UI. It follows the
-Docker model — **two binaries** that talk over **gRPC**:
+Docker model — a daemon and clients that talk over **gRPC**:
 
-| Binary    | Path             | Role                                                                          |
-|-----------|------------------|-------------------------------------------------------------------------------|
-| `nyttigd` | `cmd/nyttigd`    | Daemon/server. Fetches RSS/Atom feeds on a schedule, tags items, serves gRPC. |
-| `nyttig`  | `cmd/nyttig`     | Client. Bubble Tea TUI (no args) or CLI subcommands for headless management.  |
+| Binary       | Path             | Role                                                                          |
+|--------------|------------------|-------------------------------------------------------------------------------|
+| `nyttigd`    | `cmd/nyttigd`    | Daemon/server. Fetches RSS/Atom feeds on a schedule, tags items, serves gRPC. |
+| `nyttig`     | `cmd/nyttig`     | Client. Bubble Tea TUI (no args) or CLI subcommands for headless management.  |
+| `nyttig-api` | `cmd/nyttig-api` | Client. The web app's API (JSON + SSE over the gRPC API), behind a proxy.     |
+
+The web app itself (`web/`) is a SvelteKit app served by its own Node
+server; Caddy routes `/api/*` to nyttig-api and everything else to it.
 
 The client connects to the daemon over a **Unix domain socket** by default
 (`/tmp/nyttig.sock`), or over TCP protected by **mutual TLS** for remote
@@ -25,6 +29,8 @@ via a **bidirectional gRPC stream**.
 - Feed parsing: standard library `encoding/xml` (RSS 2.0 and Atom)
 - Config: **TOML**
 - Logging: `slog` with JSON output to stderr
+- Web client: **SvelteKit 2 + Svelte 5** (runes, TypeScript strict) on
+  `@sveltejs/adapter-node`; **pnpm**, Vitest, Playwright
 
 ## Repository layout
 
@@ -38,6 +44,14 @@ internal/config/            TOML config loading + ~ expansion
 internal/client/            gRPC client wrapper + StreamSub helper used by the TUI
 internal/mtls/              Mutual-TLS credential loading shared by daemon and client
 internal/tui/               Bubble Tea Model, filter bar, table, status bar, view tracking
+internal/api/               nyttig-api's HTTP API: routing (server.go), JSON handlers (api.go),
+                            SSE bridge (stream.go), security middleware (security.go)
+cmd/nyttig-api/main.go      nyttig-api entrypoint: flags, listen-address guard, HTTP server
+web/                        The SvelteKit app (pnpm); "pnpm build" writes a Node server to web/build/
+web/src/lib/                Pure modules (reducer, keymap, filter, sanitize, viewed) with
+                            Vitest tests next to them, plus the Svelte components
+web/e2e/                    Playwright tests; stack.mjs starts a feed server, nyttigd, nyttig-api,
+                            the app server and a Caddy-like proxy (proxy.mjs)
 internal/server/service/    gRPC service impl + Hub (broadcasts pushed items to subscribers);
                             validate.go holds all client-input validation
 internal/server/db/         SQLite layer: items, sources, tags, views; embedded migrations
@@ -51,8 +65,11 @@ scripts/gen-certs.sh        Generates a private CA plus server/client certs for 
 .github/workflows/ci.yml    CI pipeline (see below)
 .github/dependabot.yml      Weekly grouped dependency updates
 sample_config.toml          Example config (loaded by a test, so keep it valid)
-deploy/systemd/             Hardened system unit(s); nyttigd runs as a dedicated `nyttig` user
-docs/web-client-plan.md     Plan for the nyttig-web browser client
+deploy/systemd/             Hardened system units; nyttigd runs as a dedicated `nyttig` user,
+                            nyttig-api as a DynamicUser in the `nyttig` group, nyttig-web
+                            (the app's Node server) as a DynamicUser
+deploy/Caddyfile            Example reverse proxy (TLS, basic auth, /api/* vs the app)
+docs/web-client-plan.md     Plan for the nyttig-api browser client (phases and decisions)
 ```
 
 ## Architecture notes (read before changing server code)
@@ -98,6 +115,24 @@ docs/web-client-plan.md     Plan for the nyttig-web browser client
 - **View tracking** is K9s-style: the TUI marks items viewed as they scroll
   past, debounced into ~3s batches, sent via `MarkViewed`. A row exists in
   `view_state` ⟺ viewed.
+- **nyttig-api** (`internal/api`) depends only on the generated
+  `pb.NyttigClient` interface; `cmd/nyttig-api` builds it from
+  `client.DialConn`. Handler tests use a fake client (`fake_test.go`).
+  JSON is `protojson` with `UseProtoNames`, so int64 IDs are strings and
+  zero values are left out; the TypeScript types in `web/src/lib/types.ts`
+  mirror that. `/api/stream` opens one `StreamItems` per SSE connection and
+  never changes its filter: the browser reconnects instead. The bridge
+  sends its own first `reset` (the daemon only sends one on filter
+  changes), and closes the connection when its bounded queue overflows so
+  the browser resyncs. Items and colors are sanitized on the way out
+  (`sanitize.go`), and again in the browser.
+- **Feed content in the browser is untrusted.** Never use `{@html}`; render
+  text only (`htmlToText` in `web/src/lib/sanitize.ts`), links through
+  `safeLink`, colors through `safeColor`, and don't load feed images. The
+  CSP (`kit.csp` in `web/svelte.config.js`) forbids inline scripts except
+  SvelteKit's bootstrap, which gets a per-request nonce; other page headers
+  are set in `web/src/hooks.server.ts`. The feed renders client-side
+  (`ssr = false`), so the Node server only sends the app shell.
 - **Config** (`internal/config`): `socket`, `db_path` and `log_level` are
   top-level keys (there is no `[server]` table), followed by `[tls]`,
   `[[sources]]`, `[[tags]]` and `[[tag_rules]]`. `config.Load` rejects unknown
@@ -124,7 +159,43 @@ go test ./internal/server/fetcher/   # run one package's tests
 go run ./cmd/nyttigd --socket /tmp/nyttig.sock --config ./sample_config.toml --log-level debug
 go run ./cmd/nyttig                  # launch the TUI (daemon must be running)
 go run ./cmd/nyttig list-sources     # CLI subcommand
+go run ./cmd/nyttig-api --origin http://localhost:5173   # web API, for "pnpm dev" in web/ (daemon must be running)
 ```
+
+### Web app (`web/`)
+
+Node.js 22+ and pnpm (the version is pinned by `packageManager` in
+`web/package.json`; `corepack enable` picks it up). Run these in `web/`;
+CI's Web job runs the same:
+
+```bash
+pnpm install --frozen-lockfile
+pnpm check                           # svelte-kit sync + svelte-check (TypeScript), no warnings
+pnpm test                            # vitest: reducer, keymap, filter, sanitizers, view tracker
+pnpm build                           # vite build; writes build/, run it with "node build"
+pnpm test:e2e                        # Playwright; needs "pnpm build" first
+pnpm dev                             # Vite dev server on :5173, /api proxied to 127.0.0.1:7070
+```
+
+- **Two services:** the Go side never serves the app and the Node side
+  never serves `/api`; routing is the proxy's job (Caddy in production,
+  Vite's dev proxy in `pnpm dev`, `e2e/proxy.mjs` in the tests). The app
+  build has no runtime `dependencies`, so `web/build/` plus
+  `web/package.json` is the whole deployable.
+- **`pnpm dev`:** start nyttig-api with `--origin http://localhost:5173`;
+  the Vite proxy keeps the browser's Host and Origin, which nyttig-api checks.
+- **End-to-end tests** (`web/e2e/`): `stack.mjs` builds nyttigd and
+  nyttig-api (or uses `NYTTIG_BIN_DIR`), starts a local RSS server
+  (`feeds.mjs`), both binaries on a temporary database, the app's Node
+  server, and a proxy on 7812 that routes like the Caddyfile.
+  They run at a desktop and a mobile (Pixel 7) viewport. Where
+  `playwright install` can't download browsers, point
+  `PLAYWRIGHT_CHROMIUM_EXECUTABLE` at an installed Chromium, e.g.
+  `PLAYWRIGHT_CHROMIUM_EXECUTABLE=/opt/pw-browsers/chromium pnpm test:e2e`.
+- **Dependencies** are kept to the list in `web/package.json` (no CSS
+  framework, component library or font CDN). pnpm 10 runs no dependency
+  install scripts unless listed in `onlyBuiltDependencies`
+  (`web/pnpm-workspace.yaml`), which also sets `minimumReleaseAge`.
 
 A C compiler is required: SQLite is built with cgo, and so is the race
 detector. `golangci-lint` must be built with Go 1.26 or newer, or it refuses to
@@ -147,7 +218,8 @@ on `ubuntu-latest`, with the Go version taken from `go.mod`:
 | Lint | gofmt, `go mod tidy -diff`, `go vet`, golangci-lint |
 | Generated code | `buf generate` leaves `internal/proto` unchanged |
 | Test | `go test -race -shuffle=on` with coverage |
-| Build | Builds both binaries; runs only after Lint and Test pass |
+| Web | `pnpm install --frozen-lockfile`, svelte-check, vitest, vite build, Playwright end-to-end; uploads the app build (`nyttig-web`) |
+| Build | Builds the three binaries; runs only after Lint, Test and Web pass |
 | Vulnerability check | `govulncheck ./...` against the code paths the binaries call |
 
 - golangci-lint runs with `only-new-issues: true` because the code has a
@@ -206,7 +278,8 @@ pattern for new update RPCs rather than treating zero values as "unset".
   (on pkg.go.dev/vuln) rather than assuming "latest is safe".
 - **gRPC** is reachable from the network in `nyttigd`, so its advisories
   matter. Keep it on a release govulncheck reports clean.
-- **Dependabot** opens weekly grouped PRs for Go modules and GitHub Actions.
+- **Dependabot** opens weekly grouped PRs for Go modules, GitHub Actions and
+  the web app's npm packages (`/web`).
   It ignores `github.com/mattn/go-sqlite3`, because the `replace` directive means
   a version bump would change nothing that gets built. Update the vendored copy
   in `third_party/` by hand instead, keeping the FTS5 file.
@@ -244,7 +317,11 @@ pattern for new update RPCs rather than treating zero values as "unset".
   test will be flaky.
 - A few comments in `fetcher/fetch_test.go` still mention gofeed; the project
   doesn't use it (parsing is `encoding/xml`).
-- Build artifacts (`bin/`, `dist/`, `main`, `nyttig`, `nyttigd`) and tool caches
+- The feed server in `web/e2e/feeds.mjs` escapes some descriptions twice on
+  purpose: nyttigd strips tags and then unescapes entities, and that is how
+  real markup reaches the browser.
+- Build artifacts (`bin/`, `dist/`, `main`, `nyttig`, `nyttigd`, `nyttig-api`,
+  and `web/build/` via `web/.gitignore`) and tool caches
   (`.deps/`, `.modcache/`, `.pi/`) are covered by `.gitignore`. Its patterns are
   anchored with a leading `/` so they don't match the `cmd/nyttig*` source
   directories; keep them that way. Don't force-add build output.

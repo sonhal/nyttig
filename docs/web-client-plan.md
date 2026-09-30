@@ -1,6 +1,7 @@
-# nyttig-web: plan for a web client
+# Web client plan: nyttig-api and nyttig-web
 
-Status: **agreed plan; phase 0 is done**, phases 1–4 are not started.
+Status: **agreed plan; phases 0 and 1 are done**, phases 2–4 are not started.
+See [Phases](#phases-one-pr-each) for what phase 1 changed from this plan.
 
 A browser client for nyttig with the same design goals as the TUI: compact,
 information dense, keyboard first, log-viewer inspired, minimal. It runs on
@@ -12,8 +13,8 @@ and also works on a phone.
 | Topic            | Decision                                                                 |
 |------------------|--------------------------------------------------------------------------|
 | Framework        | SvelteKit 2 + Svelte 5 (runes), TypeScript strict                         |
-| Rendering        | `adapter-static` SPA (`ssr = false`), embedded in a Go binary             |
-| Server side      | Separate `nyttig-web` Go binary; a gRPC client of `nyttigd`               |
+| Rendering        | `adapter-node` (`node build`), feed rendered client-side (`ssr = false`)  |
+| Server side      | Separate `nyttig-api` Go binary for `/api`; a gRPC client of `nyttigd`    |
 | Browser API      | JSON (`protojson`) + Server-Sent Events                                   |
 | Exposure         | Public internet via Caddy: Let's Encrypt TLS + HTTP basic auth            |
 | Scope            | Feed view at TUI parity **and** management of sources, tags and rules     |
@@ -28,13 +29,17 @@ and also works on a phone.
 phone / desktop browser
    │  https (Let's Encrypt), basic auth
    ▼
-Caddy  ── reverse_proxy ──▶  nyttig-web   (127.0.0.1:7070)
-                              │  static SvelteKit build (go:embed)
-                              │  /api/*       JSON
-                              │  /api/stream  SSE
-                              ▼  gRPC over unix socket (internal/client)
-                             nyttigd       (unix socket /run/nyttig/nyttig.sock)
+Caddy ─┬─ /*     ──▶  nyttig-web   (127.0.0.1:7071, SvelteKit adapter-node)
+       └─ /api/* ──▶  nyttig-api   (127.0.0.1:7070)
+                        │  /api/*       JSON
+                        │  /api/stream  SSE
+                        ▼  gRPC over unix socket (internal/client)
+                       nyttigd       (unix socket /run/nyttig/nyttig.sock)
 ```
+
+The app is served by SvelteKit's standard Node adapter rather than embedded
+in the Go binary (changed during phase 1): standard build and serving
+tooling, at the cost of Node.js on the server and a third service.
 
 Why a separate binary:
 
@@ -44,9 +49,8 @@ Why a separate binary:
   exposed to HTTP.
 - The web side can be restarted or upgraded on its own.
 - It reuses `internal/client`, including its reconnect and backoff.
-- No Node.js on the server: one static binary.
 
-`internal/web` depends on the generated `pb.NyttigClient` interface, not on
+`internal/api` depends on the generated `pb.NyttigClient` interface, not on
 a concrete connection. Handlers are then unit-testable with a fake client,
 and the package could later be mounted inside nyttigd if that is ever wanted.
 
@@ -84,7 +88,7 @@ Phase 0 also fixed three bugs found along the way:
 - **`systemctl reload` killed the daemon.** The old unit sent SIGHUP, which
   nyttigd doesn't handle. The new unit has no reload action.
 
-The nyttig-web unit file is added in phase 1, together with the binary.
+The nyttig-api unit file is added in phase 1, together with the binary.
 
 **Deferred (nice to have, not now):**
 
@@ -96,19 +100,18 @@ The nyttig-web unit file is added in phase 1, together with the binary.
 - Light theme.
 - Multiple users.
 
-## nyttig-web (Go)
+## nyttig-api (Go)
 
 ```
-cmd/nyttig-web/main.go
+cmd/nyttig-api/main.go
     --listen        127.0.0.1:7070 (loopback only unless --allow-public-listen)
     --socket        nyttigd address (same as the nyttig client, mTLS flags too)
     --origin        https://nyttig.example.com   (required; CSRF / Host checks)
-internal/web/
-    server.go       routing, static files + SPA fallback, cache headers
+internal/api/
+    server.go       routing (any non-API path is a JSON 404)
     api.go          JSON handlers → pb.NyttigClient
     stream.go       SSE bridge for StreamItems
-    security.go     Origin / Sec-Fetch-Site / Host checks, security headers, CSP
-    dist/           adapter-static output, embedded (placeholder index.html committed)
+    security.go     Origin / Sec-Fetch-Site / Host checks, security headers
 ```
 
 ### HTTP API
@@ -150,26 +153,27 @@ an invalid pattern loses nothing.
 - Filter change = the browser closes the EventSource and opens a new one.
   There is no browser→server message.
 - Backpressure: the daemon's Hub drops pushes for slow subscribers, so
-  nyttig-web reads the gRPC stream fast and has a bounded per-connection
+  nyttig-api reads the gRPC stream fast and has a bounded per-connection
   queue. On overflow it closes the SSE connection. The browser reconnects,
   gets `reset` plus a fresh snapshot, and resyncs instead of silently
   missing items.
 - nyttigd has `MaxConcurrentStreams(100)`, which allows about one stream per open tab.
 
-### Static serving
+### Serving the app
 
-- `/_app/immutable/*` gets `Cache-Control: public, max-age=31536000, immutable`.
-- HTML gets `no-cache`.
-- Unknown non-`/api` paths serve the SPA fallback page.
+The SvelteKit Node server (adapter-node) serves the app: `/_app/immutable/*`
+with `Cache-Control: public, max-age=31536000, immutable`, and the page
+itself (`no-cache`, set in `hooks.server.ts`) for every route.
 
 ## Frontend (SvelteKit)
 
 ```
 web/
   package.json            "packageManager": "pnpm@10.x"
-  svelte.config.js        adapter-static → ../internal/web/dist, fallback page
+  svelte.config.js        adapter-node → build/, kit.csp
+  src/hooks.server.ts     security headers on pages
   src/routes/
-    +layout.ts            export const ssr = false; export const prerender = false
+    +layout.ts            export const ssr = false
     +layout.svelte        shell: filter/command bar, status bar, global keymap
     +page.svelte          feed
     sources/ tags/ rules/ management views
@@ -185,7 +189,7 @@ web/
 ```
 
 Dependencies, kept to a minimum: `svelte`, `@sveltejs/kit`,
-`@sveltejs/adapter-static`, `vite`, `typescript`, `svelte-check`, `vitest`,
+`@sveltejs/adapter-node`, `vite`, `typescript`, `svelte-check`, `vitest`,
 `@playwright/test`. No CSS framework, no component library and no web
 fonts from third-party CDNs. Use `ui-monospace`, or a self-hosted font file.
 
@@ -203,19 +207,22 @@ fonts from third-party CDNs. Use `ui-monospace`, or a self-hosted font file.
 
 ## UI design
 
-Everything is monospace, single-line rows, with the TUI palette:
+Everything is monospace, single-line rows, with the TUI palette (as
+implemented in phase 1, which follows `internal/tui/table.go`: the date is
+gray, the description green and the domain blue):
 
-| Token        | Value     | Use                      |
-|--------------|-----------|--------------------------|
-| `--bg`       | `#1E1E1E` | page                     |
-| `--bar`      | `#2D2D2D` | filter/status bars       |
-| `--sel`      | `#3A3D41` | selected row             |
-| `--fg`       | `#E0E0E0` | text                     |
-| `--dim`      | `#808080` | description, domain      |
-| `--time`     | `#6A9955` | timestamp                |
-| `--accent`   | `#569CD6` | chips, links             |
-| `--unviewed` | `#4EC9B0` | `●`, connected           |
-| `--error`    | `#F44747` | disconnected, fetch errors |
+| Token          | Value     | Use                        |
+|----------------|-----------|----------------------------|
+| `--bg`         | `#1E1E1E` | page                       |
+| `--bar`        | `#2D2D2D` | status bar                 |
+| `--bar-filter` | `#252525` | filter bar                 |
+| `--sel`        | `#3A3D41` | selected row               |
+| `--fg`         | `#E0E0E0` | text                       |
+| `--dim`        | `#808080` | date, labels, brackets     |
+| `--desc`       | `#6A9955` | description                |
+| `--accent`     | `#569CD6` | domain, links              |
+| `--unviewed`   | `#4EC9B0` | `●`, connected             |
+| `--error`      | `#F44747` | disconnected, fetch errors |
 
 Dark only: `color-scheme: dark`, `<meta name="color-scheme" content="dark">`,
 and `theme-color` set to `--bg`.
@@ -318,31 +325,33 @@ make the server fetch URLs and that renders untrusted feed content.
      defense. Optionally run fail2ban on Caddy's 401s.
    - Same-origin `fetch` and `EventSource` send the cached credentials
      automatically.
-2. **Loopback only.** nyttig-web listens on `127.0.0.1:7070` and refuses
+2. **Loopback only.** nyttig-api listens on `127.0.0.1:7070` and refuses
    non-loopback addresses without `--allow-public-listen`. Local processes
    can bypass basic auth, which is accepted on a single-user VPS. The
    firewall only needs 80/443 (Caddy) and SSH open.
 3. **CSRF.** Basic-auth credentials are sent automatically, like cookies. All
    mutations are `POST`/`PATCH`/`DELETE` with `Content-Type: application/json`,
-   and nyttig-web rejects them unless `Origin` equals `--origin` or
+   and nyttig-api rejects them unless `Origin` equals `--origin` or
    `Sec-Fetch-Site` is `same-origin`. It also checks the `Host` header.
 4. **SSRF.** Covered by D5 (`block_private_addresses = true` in the web deployment) and D7.
 5. **XSS from feeds.**
    - No `{@html}` anywhere. Descriptions are converted to plain text
-     (`DOMParser` + `textContent`, which doesn't run scripts).
+     (an inert `<template>` + `textContent`, which runs no scripts and loads
+     nothing; see phase 1 below for why not `DOMParser`).
    - Links must be `http:`/`https:`; anything else (`javascript:`, `data:`)
-     is not rendered as a link. This is checked in nyttig-web and in the
+     is not rendered as a link. This is checked in nyttig-api and in the
      component.
    - Links get `rel="noopener noreferrer"` and `referrerpolicy="no-referrer"`.
    - Colors are validated before they are bound with `style:`.
    - No feed images are loaded (no tracking pixels).
-6. **Headers** (set by nyttig-web):
-   - CSP: `default-src 'none'; script-src 'self' 'sha256-…'; style-src 'self';
-     style-src-attr 'unsafe-inline'; connect-src 'self'; img-src 'self';
-     font-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'self';
-     frame-ancestors 'none'`. nyttig-web hashes the inline bootstrap script
-     of the embedded `index.html` at startup, so the header always matches
-     the build.
+6. **Headers** (set by the app server for pages, by nyttig-api for `/api`):
+   - CSP for pages, from SvelteKit's `kit.csp`: `default-src 'none';
+     script-src 'self' 'nonce-…'; style-src 'self'; style-src-attr
+     'unsafe-inline'; connect-src 'self'; img-src 'self'; font-src 'self';
+     manifest-src 'self'; base-uri 'none'; form-action 'self';
+     frame-ancestors 'none'`. SvelteKit puts a fresh nonce on its own
+     bootstrap script for each request. API responses get
+     `default-src 'none'`.
    - Also: `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`,
      `Cross-Origin-Opener-Policy: same-origin`,
      `Permissions-Policy: camera=(), microphone=(), geolocation=()`.
@@ -362,11 +371,11 @@ make the server fetch URLs and that renders untrusted feed content.
 ## Deployment
 
 nyttig is not deployed yet, so this is a fresh install with no migration.
-The VPS has a single user, so nyttig-web listens on **TCP `127.0.0.1:7070`**
+The VPS has a single user, so nyttig-api listens on **TCP `127.0.0.1:7070`**
 and Caddy proxies to it. Both daemons run as **system units** (managed by
 PID 1), not user units:
 
-- **Isolation.** nyttigd parses untrusted feeds and nyttig-web faces the
+- **Isolation.** nyttigd parses untrusted feeds and nyttig-api faces the
   internet. A bug in either then yields a service account, not your login
   account (SSH keys, `authorized_keys`, shell rc files).
 - **Starts at boot** without `loginctl enable-linger`.
@@ -375,9 +384,9 @@ PID 1), not user units:
 - **systemd creates and owns the paths**: `/var/lib/nyttig`, `/run/nyttig`,
   `/etc/nyttig`. The socket moves out of `/tmp`, which fixes D8.
 
-Accepted trade-off of loopback TCP: any local process can reach nyttig-web
+Accepted trade-off of loopback TCP: any local process can reach nyttig-api
 without basic auth. On a single-user VPS that means only a compromised
-local service, which is acceptable. nyttig-web binds `127.0.0.1` by default
+local service, which is acceptable. nyttig-api binds `127.0.0.1` by default
 and refuses a non-loopback `--listen` address unless `--allow-public-listen`
 is passed, so a typo cannot expose it past Caddy.
 
@@ -419,7 +428,7 @@ WantedBy=multi-user.target
 ```
 
 ```ini
-# /etc/systemd/system/nyttig-web.service
+# /etc/systemd/system/nyttig-api.service
 [Unit]
 Description=Nyttig web client
 Requires=nyttigd.service
@@ -428,7 +437,7 @@ After=nyttigd.service
 [Service]
 DynamicUser=yes                       # throwaway uid; owns no files, cannot read the DB
 SupplementaryGroups=nyttig            # only to connect to /run/nyttig/nyttig.sock
-ExecStart=/usr/local/bin/nyttig-web --listen 127.0.0.1:7070 \
+ExecStart=/usr/local/bin/nyttig-api --listen 127.0.0.1:7070 \
   --socket unix:///run/nyttig/nyttig.sock --origin https://nyttig.example.com
 Restart=on-failure
 IPAddressDeny=any                     # no outbound network at all...
@@ -471,14 +480,17 @@ nyttig.example.com {
 
 ```bash
 sudo useradd --system --home-dir /var/lib/nyttig --shell /usr/sbin/nologin nyttig
-sudo install -m 0755 nyttigd nyttig-web nyttig /usr/local/bin/
+sudo install -m 0755 nyttigd nyttig-api nyttig /usr/local/bin/
 sudo install -D -o root -g nyttig -m 0640 sample_config.toml /etc/nyttig/config.toml
 #   edit /etc/nyttig/config.toml: absolute paths, your sources/tags/rules
-sudo install -m 0644 deploy/systemd/nyttigd.service deploy/systemd/nyttig-web.service \
-  /etc/systemd/system/
+sudo install -d /opt/nyttig-web
+sudo cp -r web/build web/package.json /opt/nyttig-web/   # needs Node.js 22+
+sudo install -m 0644 deploy/systemd/nyttigd.service deploy/systemd/nyttig-api.service \
+  deploy/systemd/nyttig-web.service /etc/systemd/system/
+#   systemctl edit nyttig-api / nyttig-web: set --origin / ORIGIN
 sudo usermod -aG nyttig "$USER"       # TUI access; log in again afterwards
 sudo systemctl daemon-reload
-sudo systemctl enable --now nyttigd nyttig-web
+sudo systemctl enable --now nyttigd nyttig-api nyttig-web
 ```
 
 `StateDirectory=` creates `/var/lib/nyttig`, and nyttigd creates and
@@ -490,34 +502,63 @@ and ports 80 and 443 reachable.
 ## Tooling, tests and CI
 
 - **Development:** run `pnpm dev` in `web/`, with Vite proxying `/api` to a
-  local `nyttig-web --listen 127.0.0.1:7070`, which connects to a local
+  local `nyttig-api --listen 127.0.0.1:7070`, which connects to a local
   nyttigd.
-- **Go tests:** `internal/web` handlers against a fake `pb.NyttigClient`
+- **Go tests:** `internal/api` handlers against a fake `pb.NyttigClient`
   (`httptest`), SSE framing and backpressure, and the security middleware
   (Origin, Host, headers).
 - **Vitest:** stream reducer, query parser, keymap mode machine, sanitizers.
 - **Playwright end-to-end:** real nyttigd with feeds from a local test HTTP
-  server, plus nyttig-web.
+  server, plus nyttig-api and the app's Node server behind a small proxy
+  that routes like the Caddyfile.
   - Desktop and mobile viewports (Chromium device emulation).
   - Real iOS Safari is checked by hand.
 - **CI:**
   - A new `web` job: pnpm setup, `pnpm install --frozen-lockfile`,
     `svelte-check`, `vitest run`, `vite build`, Playwright.
-  - The committed placeholder `internal/web/dist/index.html` keeps
-    `go build ./...`, Lint and Test working without Node.
-  - The Build job builds the web bundle first and embeds it.
+  - The Web job uploads the app build; the Build job builds the Go
+    binaries, which don't depend on Node.
 
 ## Phases (one PR each)
 
 0. **Groundwork (done):** codegen fix, D1–D8, CLI updates, system unit file
    in `deploy/systemd/` replacing the root `nyttigd.service` user unit, tests,
    README/AGENT.md.
-1. **Feed at TUI parity:** nyttig-web (API, SSE, security middleware,
-   embedding) and the SvelteKit feed: desktop and mobile layouts, keymap,
-   view tracking, status bar.
+1. **Feed at TUI parity (done):** nyttig-api (API, SSE, security middleware)
+   and the SvelteKit feed: desktop and mobile layouts, keymap,
+   view tracking, status bar. It also brought forward from later phases:
+   row expand (the mobile layout needs tap-to-expand), the nyttig-api and
+   nyttig-web system units, the Caddy example, the CI web job and the Playwright
+   end-to-end tests. Differences from the plan above:
+   - The web client is two services: `nyttig-web`, the app (built from
+     `web/`), and `nyttig-api`, the Go binary that serves `/api` (package
+     `internal/api`).
+   - `nyttig-web` runs on SvelteKit's standard `adapter-node` server
+     instead of an adapter-static build embedded in the Go binary with
+     `go:embed`. `nyttig-api` is API-only, Caddy routes by path, and the
+     CSP comes from `kit.csp` (a nonce) instead of a hash computed at
+     startup. This needs Node.js 22+ on the server and a third unit,
+     `deploy/systemd/nyttig-web.service`.
+   - Descriptions are converted to text with an inert `<template>` instead
+     of `DOMParser`. Both are inert, but `DOMParser` still processes
+     `<style>` elements, so CSP logged a violation for every description
+     that contained one. Script and style bodies are removed before
+     taking `textContent`.
+   - The palette follows the TUI's actual colors (see the table above).
+   - Dates are `dd.MM HH:mm` in the browser's time zone; the TUI prints UTC.
+   - The unviewed count in the status bar is the `total` of
+     `GET /api/items?unviewed=1&limit=1` for the current filter. The next
+     fetch is estimated from each enabled source's `last_fetch` plus
+     `refresh_sec`.
+   - The filter is in the URL as separate parameters
+     (`?q=&source=&tag=&sort=&unviewed=1`, IDs for source and tag); the
+     query syntax (`tag:` `src:` …) comes with phase 3.
+   - `Host` must match `--origin` exactly, so a health check on the
+     loopback port needs `-H 'Host: …'`.
 2. **Management:** source, tag and rule views with forms, delete
    confirmations and the live rule preview (D6).
-3. **Log-viewer features:** follow mode, row expand, query syntax + URL
-   state, load older, help overlay, `:` command line, highlighting.
-4. **Deployment and hardening:** system units, Caddy example, CI web job,
-   Playwright end-to-end tests, docs.
+3. **Log-viewer features:** follow mode, query syntax, load older, help
+   overlay, `:` command line, highlighting, `S`/`T` pickers.
+4. **Deployment and hardening:** a deployment guide, and whatever running
+   it in production shows is missing (the units, Caddy example, CI job and
+   end-to-end tests landed in phase 1).

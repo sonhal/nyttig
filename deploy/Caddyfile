@@ -1,0 +1,43 @@
+# Example Caddy site for the web client: Let's Encrypt TLS, HTTP basic auth,
+# /api/* to nyttig-api and everything else to the SvelteKit app (nyttig-web).
+# Replace the host name (it must match nyttig-api's --origin and
+# nyttig-web's ORIGIN) and the user and password hash.
+#
+# Make the hash with "caddy hash-password" and use a long random password
+# (20+ characters, from a password manager). Caddy has no rate limiting, so
+# the password's strength is the main defense; optionally run fail2ban on
+# Caddy's 401s.
+#
+# Let's Encrypt needs a DNS record for the host and ports 80 and 443 open.
+
+nyttig.example.com {
+	basic_auth {
+		sondre $2a$14$REPLACE_WITH_THE_OUTPUT_OF_caddy_hash-password
+	}
+
+	# On every response, including static assets (the "?" keeps a value
+	# the upstream set, such as the pages' own headers).
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		?X-Content-Type-Options nosniff
+		?Referrer-Policy no-referrer
+		?Cross-Origin-Opener-Policy same-origin
+		?X-Frame-Options DENY
+	}
+
+	# Never compress or buffer the Server-Sent Events stream.
+	@notstream not path /api/stream
+	encode @notstream zstd gzip
+
+	# Caddy passes the Host header through unchanged; nyttig-api checks it
+	# against --origin.
+	handle /api/* {
+		reverse_proxy 127.0.0.1:7070 {
+			flush_interval -1
+		}
+	}
+
+	handle {
+		reverse_proxy 127.0.0.1:7071
+	}
+}
