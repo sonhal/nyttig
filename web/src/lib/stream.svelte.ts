@@ -6,14 +6,27 @@
 // connection is closed and reopened with backoff, and the server sends
 // reset + a fresh snapshot, which the reducer applies idempotently.
 
+import { searchItems } from './api';
 import { filterQuery } from './filter';
-import { initialState, reduce, type FeedState, type StreamEvent } from './reducer';
+import {
+	appendOlder,
+	beginOlder,
+	canLoadOlder,
+	failOlder,
+	initialState,
+	olderRequest,
+	reduce,
+	type FeedState,
+	type StreamEvent
+} from './reducer';
 import type { Filter, Item } from './types';
 
 export type ConnStatus = 'connecting' | 'connected' | 'disconnected';
 
 const MIN_BACKOFF_MS = 1000;
 const MAX_BACKOFF_MS = 30000;
+/** After a failed page, wait this long before the next scroll tries again. */
+const OLDER_RETRY_MS = 5000;
 
 export class FeedStream {
 	/** Connection state for the status bar. */
@@ -26,6 +39,9 @@ export class FeedStream {
 	private retryTimer: ReturnType<typeof setTimeout> | null = null;
 	private backoff = MIN_BACKOFF_MS;
 	private listeners = new Set<(prev: FeedState, next: FeedState) => void>();
+	private olderRetryAt = 0;
+	/** The last "load older" failure, or "" (shown in the list's footer). */
+	olderError = $state('');
 
 	/** Applies an event and notifies listeners when the state changed. */
 	apply(ev: StreamEvent): void {
@@ -54,9 +70,45 @@ export class FeedStream {
 	connect(f: Filter): void {
 		this.filter = f;
 		this.backoff = MIN_BACKOFF_MS;
-		// Keep the rows on screen until the new snapshot is complete.
-		this.state = { ...this.state, sort: f.sort };
+		// Keep the rows on screen until the new snapshot is complete, but
+		// stop treating them as loaded: an older page requested for the
+		// previous filter must not land in the new list, and nothing
+		// more is loaded (or marked viewed) until the snapshot is in.
+		const s = this.state;
+		this.state = {
+			...s,
+			sort: f.sort,
+			unviewedOnly: f.unviewed,
+			complete: false,
+			loading: false,
+			epoch: s.epoch + 1
+		};
+		this.olderRetryAt = 0;
+		this.olderError = '';
 		this.open();
+	}
+
+	/**
+	 * Fetches the next page below the list with GET /api/items (the same
+	 * filter, at the offset the reducer tracks) and merges it in. Does
+	 * nothing while a page is out, at the end, or shortly after a failure.
+	 */
+	async loadOlder(): Promise<void> {
+		const f = this.filter;
+		const s = this.state;
+		if (!f || !canLoadOlder(s) || Date.now() < this.olderRetryAt) return;
+		const { offset, limit } = olderRequest(s);
+		const epoch = s.epoch;
+		this.set(beginOlder(s));
+		try {
+			const page = await searchItems(f, limit, offset);
+			this.olderError = '';
+			this.set(appendOlder(this.state, epoch, offset, limit, page.items, page.total));
+		} catch (e) {
+			this.olderRetryAt = Date.now() + OLDER_RETRY_MS;
+			this.olderError = e instanceof Error ? e.message : String(e);
+			this.set(failOlder(this.state, epoch));
+		}
 	}
 
 	close(): void {

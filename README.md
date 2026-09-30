@@ -535,26 +535,59 @@ nyttig-api starts even when the daemon is down; the status bar then shows
 
 ### Using it
 
-The filter (search, source, tag, sort, unviewed) is kept in the URL, so a
-view can be bookmarked and the back button works.
+The filter (search, source, tag, sort, unviewed) is kept in the URL as
+separate parameters (`?q=&source=&tag=&sort=&unviewed=1`, IDs for source and
+tag), so a view can be bookmarked, survives a rename, and the back button
+works. `?` lists every key of the current view; the list is generated from
+the keymap, so it is always current.
 
 | Key                | Action                                            |
 |--------------------|---------------------------------------------------|
 | `j`/`↓`, `k`/`↑`   | Move down / up                                     |
 | `g`/`Home`, `G`/`End` | Top / bottom                                    |
 | `d`, `u`           | Half page down / up (`Ctrl+d`/`Ctrl+u` where the browser allows them) |
-| `/`                | Focus the search; `Enter` applies it, `Esc` clears it |
+| `/`                | Focus the query bar (see below); `Enter` applies it, `Esc` clears the search text |
 | `s`, `t`           | Cycle source / tag                                |
+| `S`, `T`           | Pick a source / tag by name (fuzzy, `Enter` picks, `Esc` closes) |
 | `o`                | Toggle sort (newest / oldest)                     |
+| `F`                | Follow: jump to the newest and stick to it         |
+| `D`                | Relative ("12m ago") or absolute times; remembered in the browser |
 | `r`, `R`           | Refresh all sources / the selected item's source  |
 | `Enter`            | Open the link in a new tab                         |
 | `Space`, `l`       | Expand / collapse the row (details and full description) |
 | `q`, `Esc`         | Collapse the row                                   |
-| `:`                | Command line: `:sources`, `:tags`, `:rules`, `:feed` (a unique prefix is enough; `:q` is the feed) |
+| `:`                | Command line (see below)                           |
+| `?`                | Help: all keys, the query syntax and the commands  |
+
+**Query bar.** `kernel tag:rust src:"Hacker News" is:unviewed sort:oldest`:
+`tag:`, `src:` (a name or abbreviation, any case), `is:unviewed` and
+`sort:newest|oldest` set the filter; every other word is the full-text
+search. Names with spaces are quoted. Names are completed as you type
+(`Tab` accepts, `↑`/`↓` choose; on a phone tap a suggestion), and an
+unknown name is an error under the bar instead of being ignored. The bar
+always shows the current filter in this syntax. Matching words are
+highlighted in titles and descriptions (whole words, any case; FTS5
+tokenization is approximated).
+
+**Follow.** At the top of a newest-first list, new items flow in and the
+view sticks to the newest (`follow` in the status bar). After you scroll
+away the view stays put and the status bar counts `↑ N new`; `F` (or a tap
+on the count) jumps back and sticks again.
+
+**Load older.** Scrolling near the end of the list fetches the next 100
+rows; the list ends with `— end —`. A reconnect replaces the list with a
+fresh snapshot (the newest 200), dropping the older pages.
+
+**Command line** (`:`; `Tab` completes, again to cycle; `↑`/`↓` history;
+a unique prefix is enough): `:feed` `:sources` `:tags` `:rules` (`:q` is
+the feed), `:sort [newest|oldest]`, `:unviewed [on|off]`, `:src <name>|all`,
+`:tag <name>|all`, `:refresh [source]`, `:time [relative|absolute]`,
+`:follow`, `:help`. The filter commands also work from the management
+views, and go to the feed.
 
 On a phone (narrower than 720px) rows take two lines, a tap selects and
-expands a row (with an explicit "open ↗" link), `⚙` opens the filters and
-`⟳` refreshes.
+expands a row (with an explicit "open ↗" link), `⚙` opens the filters
+(including the time format), `⟳` refreshes and `?` opens the help.
 
 #### Sources, tags and rules
 
@@ -571,6 +604,7 @@ row style; forms and delete confirmations open in a panel at the bottom.
 | `Space`               | Sources: enable / disable                                     |
 | `r`                   | Sources: fetch now                                            |
 | `q`                   | Back to the feed, with the filter it had                      |
+| `?`                   | Help for this view                                            |
 
 On a phone the same actions are buttons at the bottom; tap a row to
 select it.

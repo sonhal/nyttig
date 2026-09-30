@@ -4,8 +4,9 @@
 	for the filter sheet and refresh.
 -->
 <script lang="ts">
+	import type { Candidate } from './query';
+	import { oneLine, safeColor } from './sanitize';
 	import type { Filter, Source, Tag } from './types';
-	import { oneLine } from './sanitize';
 
 	interface Props {
 		filter: Filter;
@@ -14,6 +15,16 @@
 		/** The query input's text, which is applied on Enter. */
 		draft: string;
 		input?: HTMLInputElement;
+		/** Name suggestions for the operator under the caret, best first. */
+		suggestions?: Candidate[];
+		/** The highlighted suggestion, or -1. */
+		active?: number;
+		/** Why the query cannot be applied, shown under the bar. */
+		error?: string;
+		/** The caret moved or the text changed (completion works at the caret). */
+		oncaret?: (pos: number) => void;
+		onpick?: (c: Candidate) => void;
+		onhelp?: () => void;
 		onsearchfocus: () => void;
 		onsearchblur: () => void;
 		oncyclesource: () => void;
@@ -30,6 +41,12 @@
 		tags,
 		draft = $bindable(),
 		input = $bindable(),
+		suggestions = [],
+		active = -1,
+		error = '',
+		oncaret,
+		onpick,
+		onhelp,
 		onsearchfocus,
 		onsearchblur,
 		oncyclesource,
@@ -43,6 +60,10 @@
 	const srcName = $derived(
 		filter.source ? oneLine(sources.find((s) => s.id === filter.source)?.name) || '#' + filter.source : 'all'
 	);
+	function caret() {
+		if (input) oncaret?.(input.selectionStart ?? input.value.length);
+	}
+
 	const tagName = $derived(
 		filter.tag ? oneLine(tags.find((t) => t.id === filter.tag)?.name) || '#' + filter.tag : 'all'
 	);
@@ -56,14 +77,23 @@
 			bind:this={input}
 			bind:value={draft}
 			type="search"
-			placeholder="search…"
+			placeholder="search…  tag: src: is:unviewed"
+			aria-invalid={error ? 'true' : undefined}
+			aria-describedby={error ? 'query-error' : undefined}
+			aria-controls="query-suggest"
 			autocomplete="off"
 			autocapitalize="off"
 			spellcheck="false"
 			enterkeyhint="search"
 			maxlength="500"
 			data-testid="search"
-			onfocus={onsearchfocus}
+			oninput={caret}
+			onkeyup={caret}
+			onclick={caret}
+			onfocus={() => {
+				onsearchfocus();
+				caret();
+			}}
 			onblur={onsearchblur}
 		/>
 	</label>
@@ -87,11 +117,35 @@
 			>⚙</button
 		>
 		<button type="button" class="icon" onclick={onrefresh} aria-label="refresh all sources">⟳</button>
+		<button type="button" class="icon" onclick={onhelp} aria-label="help" data-testid="open-help">?</button>
 	</div>
+	{#if suggestions.length || error}
+		<div class="drop" data-testid="query-drop">
+			{#if suggestions.length}
+				<ul id="query-suggest" role="listbox" aria-label="suggestions">
+					{#each suggestions as c, i (c.insert)}
+						<!-- Tab and the arrows drive it; a pointer must not take focus from the input. -->
+						<!-- svelte-ignore a11y_click_events_have_key_events -->
+						<li
+							role="option"
+							aria-selected={i === active}
+							class:active={i === active}
+							onpointerdown={(e) => e.preventDefault()}
+							onclick={() => onpick?.(c)}
+						>
+							<span class="kind">{c.kind}:</span><span class="name" style:color={safeColor(c.color)}>{c.label}</span>
+						</li>
+					{/each}
+				</ul>
+			{/if}
+			{#if error}<div class="qerr" id="query-error" role="alert" data-testid="query-error">{error}</div>{/if}
+		</div>
+	{/if}
 </div>
 
 <style>
 	.bar {
+		position: relative;
 		display: flex;
 		align-items: center;
 		gap: 2ch;
@@ -164,6 +218,43 @@
 	.mobile-actions {
 		display: none;
 	}
+	.drop {
+		position: absolute;
+		z-index: 15;
+		top: 100%;
+		left: 0;
+		right: 0;
+		background: var(--bar);
+		border-bottom: 1px solid var(--sel);
+		white-space: normal;
+	}
+	.drop ul {
+		margin: 0;
+		padding: 0;
+		list-style: none;
+	}
+	.drop li {
+		height: 20px;
+		padding: 0 1ch 0 calc(1ch + 1ch);
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		cursor: default;
+	}
+	.drop li.active {
+		background: var(--sel);
+	}
+	.kind {
+		color: var(--dim);
+	}
+	.name {
+		color: var(--fg);
+	}
+	.qerr {
+		padding: 0 1ch;
+		color: var(--error);
+		overflow-wrap: anywhere;
+	}
 
 	@media (max-width: 719.98px) {
 		.bar {
@@ -197,6 +288,14 @@
 		.mobile-actions {
 			display: flex;
 			gap: 4px;
+		}
+		.drop li {
+			height: 44px;
+			line-height: 44px;
+			font-size: 16px;
+		}
+		.qerr {
+			padding: 6px 8px;
 		}
 		.icon {
 			width: 40px;

@@ -13,8 +13,12 @@
 	import { onMount, tick } from 'svelte';
 	import { VIEWS, type View } from './command';
 	import CommandLine from './CommandLine.svelte';
-	import { CommandLine as CommandLineState, goView, viewHref } from './commandline.svelte';
+	import * as api from './api';
+	import { CommandLine as CommandLineState, execute, goView, offFeedHost, viewHref } from './commandline.svelte';
+	import Help from './Help.svelte';
+	import { manageSections } from './help';
 	import { manageKeyAction, type ManageAction, type ManageMode, type Tool } from './keymap';
+	import { metadata } from './metadata.svelte';
 
 	interface Props {
 		view: Exclude<View, 'feed'>;
@@ -52,10 +56,40 @@
 	}: Props = $props();
 
 	const cl = new CommandLineState();
+	let helpOpen = $state(false);
+	/** A message from a command (":refresh"), shown when the view has none of its own. */
+	let cmdNote = $state('');
+	let cmdNoteTimer: ReturnType<typeof setTimeout> | undefined;
+	const shownNote = $derived(note || cmdNote);
 	let list: HTMLDivElement | undefined = $state();
 	let panelEl: HTMLElement | undefined = $state();
 
-	const mode: ManageMode = $derived(cl.open ? 'command' : (panel ?? 'normal'));
+	const mode: ManageMode = $derived(cl.open ? 'command' : helpOpen ? 'help' : (panel ?? 'normal'));
+	const helpSections = $derived(
+		manageSections(tools.map((t) => t.type))
+	);
+
+	function flashCmd(msg: string) {
+		cmdNote = msg;
+		clearTimeout(cmdNoteTimer);
+		cmdNoteTimer = setTimeout(() => (cmdNote = ''), 4000);
+	}
+
+	async function refreshCmd(id?: string) {
+		try {
+			await api.refresh(id);
+			flashCmd(id ? 'refreshing source' : 'refreshing all sources');
+		} catch (e) {
+			flashCmd('error: refresh failed: ' + (e instanceof Error ? e.message : String(e)));
+		}
+	}
+
+	const host = { ...offFeedHost(flashCmd, (id) => void refreshCmd(id)), help: () => (helpOpen = true) };
+
+	function closeHelp() {
+		helpOpen = false;
+		list?.focus({ preventScroll: true });
+	}
 	const toolTypes = $derived(new Set<ManageAction['type']>(tools.map((t) => t.type)));
 	const selected = $derived(items[cursor]);
 
@@ -109,12 +143,27 @@
 				return select(items.length - 1);
 			case 'openCommand':
 				return cl.start();
-			case 'runCommand':
-				return cl.run();
+			case 'runCommand': {
+				const cmd = cl.run({ sources: metadata.sources, tags: metadata.tags });
+				if (!cmd) return;
+				list?.focus({ preventScroll: true });
+				return execute(cmd, host);
+			}
 			case 'cancelCommand':
 				cl.cancel();
 				list?.focus({ preventScroll: true });
 				return;
+			case 'completeCommand':
+				return cl.complete({ sources: metadata.sources, tags: metadata.tags });
+			case 'historyPrev':
+				return cl.historyPrev();
+			case 'historyNext':
+				return cl.historyNext();
+			case 'openHelp':
+				helpOpen = true;
+				return;
+			case 'closeHelp':
+				return closeHelp();
 			case 'feed':
 				return void goView('feed');
 			case 'cancel':
@@ -136,9 +185,9 @@
 		if (mode === 'normal' && target?.closest('input, select, textarea')) return;
 		const a = manageKeyAction(mode, e);
 		if (!a) return;
-		if (a.type !== 'runCommand' && a.type !== 'cancelCommand' && a.type !== 'cancel' && a.type !== 'confirm') {
-			// Movement and tools only apply with no panel open.
-			if (mode !== 'normal') return;
+		// Movement and tools only apply with no panel open.
+		if (mode !== 'normal' && mode !== 'command' && mode !== 'help' && a.type !== 'cancel' && a.type !== 'confirm') {
+			return;
 		}
 		e.preventDefault();
 		run(a);
@@ -222,8 +271,8 @@
 		</section>
 	{/if}
 
-	{#if note}
-		<div class="note" class:error={note.startsWith('error')} role="status" data-testid="note">{note}</div>
+	{#if shownNote}
+		<div class="note" class:error={shownNote.startsWith('error')} role="status" data-testid="note">{shownNote}</div>
 	{/if}
 
 	<div class="toolbar" data-testid="toolbar">
@@ -235,10 +284,17 @@
 				data-testid="tool-{t.type}"><span class="k">{t.key}</span> {t.label}</button
 			>
 		{/each}
+		<button type="button" class="help" onclick={() => (helpOpen = true)} data-testid="open-help"
+			><span class="k">?</span> help</button
+		>
 	</div>
 </div>
 
 <CommandLine {cl} />
+
+{#if helpOpen}
+	<Help title="Keys: {view}" sections={helpSections} onclose={closeHelp} />
+{/if}
 
 <style>
 	.manage {
@@ -366,6 +422,10 @@
 		color: #5a5a5a;
 		cursor: default;
 	}
+	.toolbar .help {
+		margin-left: auto;
+		color: var(--dim);
+	}
 	.toolbar .k {
 		color: var(--accent);
 	}
@@ -421,6 +481,9 @@
 		}
 		.toolbar .k {
 			display: none;
+		}
+		.toolbar .help {
+			margin-left: 0;
 		}
 	}
 </style>

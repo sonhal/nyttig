@@ -6,7 +6,9 @@
 	All feed text is rendered as text; colors are validated before use.
 -->
 <script lang="ts">
-	import { formatDate, formatTime } from './format';
+	import type { TimeMode } from './command';
+	import { formatDate, formatRelative, formatTime } from './format';
+	import Highlight from './Highlight.svelte';
 	import type { SourceDisplay, TagDisplay } from './meta';
 	import { domainOf, htmlToText, oneLine, safeColor } from './sanitize';
 	import type { Item } from './types';
@@ -20,13 +22,32 @@
 		/** Current tags by ID; they win over the item's copy of its tags. */
 		tags: Map<string, TagDisplay>;
 		onselect: (index: number) => void;
+		/** The free-text words of the query, marked in the title and description. */
+		terms?: readonly string[];
+		timeMode?: TimeMode;
+		/** The current time, for relative dates. */
+		now?: number;
 	}
 
-	let { item, index, selected, expanded, source, tags, onselect }: Props = $props();
+	let {
+		item,
+		index,
+		selected,
+		expanded,
+		source,
+		tags,
+		onselect,
+		terms = [],
+		timeMode = 'absolute',
+		now = 0
+	}: Props = $props();
 
 	const title = $derived(oneLine(item.title) || '(untitled)');
 	const desc = $derived(htmlToText(item.description));
 	const domain = $derived(domainOf(item.link));
+	const relative = $derived(timeMode === 'relative');
+	const dateFull = $derived(relative ? formatRelative(item.published, now) : formatDate(item.published));
+	const dateShort = $derived(relative ? formatRelative(item.published, now, true) : formatTime(item.published));
 </script>
 
 <!-- Clicks are a convenience; the grid is driven from the keyboard. -->
@@ -46,8 +67,8 @@
 >
 	<div class="cells" role="gridcell">
 		<span class="dot" aria-label={item.viewed ? undefined : 'unviewed'}>{item.viewed ? '' : '●'}</span>
-		<span class="date full">{formatDate(item.published)}</span>
-		<span class="date short">{formatTime(item.published)}</span>
+		<span class="date full">{dateFull}</span>
+		<span class="date short">{dateShort}</span>
 		{#if source?.label}
 			<span class="chip src"
 				>[<span style:color={safeColor(source.color)}>{oneLine(source.label)}</span>]</span
@@ -64,8 +85,8 @@
 				{/each}
 			</span>
 		{/if}
-		<span class="title">{title}</span>
-		{#if desc}<span class="desc">{desc}</span>{/if}
+		<span class="title"><Highlight text={title} {terms} /></span>
+		{#if desc}<span class="desc"><Highlight text={desc} {terms} /></span>{/if}
 		<span class="domain">{domain}</span>
 	</div>
 </div>

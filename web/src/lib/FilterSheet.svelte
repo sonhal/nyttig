@@ -1,6 +1,7 @@
 <!-- Mobile filter sheet: native selects for source, tag, sort and unviewed. -->
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import type { TimeMode } from './command';
 	import { oneLine } from './sanitize';
 	import type { Filter, Source, Tag } from './types';
 
@@ -8,11 +9,13 @@
 		filter: Filter;
 		sources: Source[];
 		tags: Tag[];
+		timeMode: TimeMode;
 		onchange: (f: Filter) => void;
+		ontime: (mode: TimeMode) => void;
 		onclose: () => void;
 	}
 
-	let { filter, sources, tags, onchange, onclose }: Props = $props();
+	let { filter, sources, tags, timeMode, onchange, ontime, onclose }: Props = $props();
 
 	let first: HTMLSelectElement | undefined = $state();
 	onMount(() => first?.focus());
@@ -58,6 +61,13 @@
 		<select value={filter.unviewed ? '1' : ''} onchange={(e) => set('unviewed', e.currentTarget.value === '1')}>
 			<option value="">all items</option>
 			<option value="1">unviewed only</option>
+		</select>
+	</label>
+	<label>
+		<span>times</span>
+		<select value={timeMode} onchange={(e) => ontime(e.currentTarget.value === 'relative' ? 'relative' : 'absolute')}>
+			<option value="absolute">absolute (10:32)</option>
+			<option value="relative">relative (12m)</option>
 		</select>
 	</label>
 	<nav class="manage" aria-label="manage">

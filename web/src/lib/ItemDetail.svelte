@@ -3,6 +3,7 @@
 	Kibana, then the description as plain text and an explicit link.
 -->
 <script lang="ts">
+	import Highlight from './Highlight.svelte';
 	import type { SourceDisplay } from './meta';
 	import { htmlToText, oneLine, safeLink } from './sanitize';
 	import type { Item } from './types';
@@ -10,9 +11,10 @@
 	interface Props {
 		item: Item;
 		source: SourceDisplay | undefined;
+		terms?: readonly string[];
 	}
 
-	let { item, source }: Props = $props();
+	let { item, source, terms = [] }: Props = $props();
 
 	const link = $derived(safeLink(item.link));
 	const desc = $derived(htmlToText(item.description));
@@ -46,7 +48,7 @@
 			<span class="link"><span class="k">link=</span>{link}</span>
 		</div>
 	{/if}
-	{#if desc}<p class="desc">{desc}</p>{/if}
+	{#if desc}<p class="desc"><Highlight text={desc} {terms} /></p>{/if}
 </div>
 
 <style>

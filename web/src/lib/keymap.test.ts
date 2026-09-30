@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { keyAction, manageKeyAction } from './keymap';
+import { feedHelp, keyAction, manageHelp, manageKeyAction, type HelpSection } from './keymap';
 
 describe('keyAction in normal mode', () => {
 	it.each([
@@ -23,7 +23,13 @@ describe('keyAction in normal mode', () => {
 		[' ', { type: 'toggleExpand' }],
 		['l', { type: 'toggleExpand' }],
 		['q', { type: 'close' }],
-		['Escape', { type: 'close' }]
+		['Escape', { type: 'close' }],
+		['F', { type: 'follow' }],
+		['?', { type: 'openHelp' }],
+		['S', { type: 'pickSource' }],
+		['T', { type: 'pickTag' }],
+		['D', { type: 'toggleTime' }],
+		[':', { type: 'openCommand' }]
 	])('%j', (key, want) => {
 		expect(keyAction('normal', { key })).toEqual(want);
 	});
@@ -45,11 +51,46 @@ describe('keyAction in normal mode', () => {
 });
 
 describe('keyAction in search mode', () => {
-	it('only intercepts Enter and Escape', () => {
+	it('intercepts Enter, Escape and the suggestion keys, and leaves typing alone', () => {
 		expect(keyAction('search', { key: 'Enter' })).toEqual({ type: 'applySearch' });
 		expect(keyAction('search', { key: 'Escape' })).toEqual({ type: 'clearSearch' });
-		for (const key of ['j', 'k', 'g', '/', 's', 'q', ' ', 'ArrowDown']) {
+		expect(keyAction('search', { key: 'Tab' })).toEqual({ type: 'completeQuery' });
+		expect(keyAction('search', { key: 'ArrowDown' })).toEqual({ type: 'suggestMove', by: 1 });
+		expect(keyAction('search', { key: 'ArrowUp' })).toEqual({ type: 'suggestMove', by: -1 });
+		for (const key of ['j', 'k', 'g', '/', 's', 'q', ' ', 'F', '?', ':', 'S']) {
 			expect(keyAction('search', { key })).toBeNull();
+		}
+	});
+});
+
+describe('keyAction in help mode', () => {
+	it('closes with q, Escape or ?, and nothing else reaches the feed', () => {
+		for (const key of ['q', 'Escape', '?']) {
+			expect(keyAction('help', { key })).toEqual({ type: 'closeHelp' });
+			expect(manageKeyAction('help', { key })).toEqual({ type: 'closeHelp' });
+		}
+		for (const key of ['j', 'k', 'F', 'S', 'Enter', ' ', ':', 'r', 'x']) {
+			expect(keyAction('help', { key })).toBeNull();
+			expect(manageKeyAction('help', { key })).toBeNull();
+		}
+		expect(keyAction('help', { key: 'q', ctrlKey: true })).toBeNull();
+	});
+
+	it('opens from the management views too', () => {
+		expect(manageKeyAction('normal', { key: '?' })).toEqual({ type: 'openHelp' });
+	});
+});
+
+describe('keyAction in picker mode', () => {
+	it('picks with Enter, closes with Escape and moves with the arrows and Tab', () => {
+		expect(keyAction('picker', { key: 'Enter' })).toEqual({ type: 'pickerSelect' });
+		expect(keyAction('picker', { key: 'Escape' })).toEqual({ type: 'pickerCancel' });
+		expect(keyAction('picker', { key: 'ArrowDown' })).toEqual({ type: 'pickerMove', by: 1 });
+		expect(keyAction('picker', { key: 'Tab' })).toEqual({ type: 'pickerMove', by: 1 });
+		expect(keyAction('picker', { key: 'ArrowUp' })).toEqual({ type: 'pickerMove', by: -1 });
+		// Everything else is typing into the filter.
+		for (const key of ['j', 'k', 'q', 's', ' ', 'S', 'F', '?', ':']) {
+			expect(keyAction('picker', { key })).toBeNull();
 		}
 	});
 });
@@ -67,6 +108,9 @@ describe('the command line', () => {
 		expect(keyAction('normal', { key: ':' })).toEqual({ type: 'openCommand' });
 		expect(keyAction('command', { key: 'Enter' })).toEqual({ type: 'runCommand' });
 		expect(keyAction('command', { key: 'Escape' })).toEqual({ type: 'cancelCommand' });
+		expect(keyAction('command', { key: 'Tab' })).toEqual({ type: 'completeCommand' });
+		expect(keyAction('command', { key: 'ArrowUp' })).toEqual({ type: 'historyPrev' });
+		expect(keyAction('command', { key: 'ArrowDown' })).toEqual({ type: 'historyNext' });
 		for (const key of ['j', 'q', ' ', 's', ':']) {
 			expect(keyAction('command', { key })).toBeNull();
 		}
@@ -131,5 +175,51 @@ describe('manageKeyAction in confirm mode', () => {
 			expect(manageKeyAction('confirm', { key })).toBeNull();
 		}
 		expect(manageKeyAction('confirm', { key: 'y', ctrlKey: true })).toBeNull();
+	});
+});
+
+describe('help', () => {
+	const find = (sections: HelpSection[], desc: RegExp) =>
+		sections.flatMap((s) => s.rows).find((r) => desc.test(r.desc));
+
+	it('lists the feed keys, generated from the tables', () => {
+		const help = feedHelp();
+		expect(help.map((s) => s.title)).toEqual([
+			'Move',
+			'Filter',
+			'Feed',
+			'Views',
+			'Query bar',
+			'Picker',
+			'Command line',
+			'Help'
+		]);
+		expect(find(help, /^down$/)?.keys).toEqual(['j', '↓']);
+		expect(find(help, /^half page down$/)?.keys).toEqual(['d', 'PgDn', 'Ctrl+d']);
+		expect(find(help, /follow/)?.keys).toEqual(['F']);
+		expect(find(help, /expand/)?.keys).toEqual(['Space', 'l']);
+		expect(find(help, /^clear the search/)?.keys).toEqual(['Esc']);
+		expect(find(help, /^close the help/)?.keys).toEqual(['q', 'Esc', '?']);
+	});
+
+	it('drift check: every key the feed handles in normal mode is in the help', () => {
+		const listed = new Set(feedHelp().flatMap((s) => s.rows.flatMap((r) => r.keys)));
+		const label = (k: string) => ({ ArrowDown: '↓', ArrowUp: '↑', Escape: 'Esc', ' ': 'Space', PageDown: 'PgDn', PageUp: 'PgUp' })[k] ?? k;
+		const keys = ['j', 'k', 'g', 'G', 'd', 'u', '/', 's', 't', 'S', 'T', 'o', 'r', 'R', 'F', 'D', 'Enter', ' ', 'l', ':', '?', 'q', 'Escape', 'Home', 'End', 'PageDown', 'PageUp', 'ArrowDown', 'ArrowUp'];
+		for (const key of keys) {
+			expect(keyAction('normal', { key }), key).not.toBeNull();
+			expect(listed.has(label(key)), key).toBe(true);
+		}
+	});
+
+	it('lists a management view by its tools', () => {
+		const all = manageHelp(['add', 'edit', 'delete', 'toggle', 'refresh']);
+		expect(find(all, /enable or disable/)?.keys).toEqual(['Space']);
+		expect(find(all, /delete the selected/)?.keys).toEqual(['x', 'Del']);
+		const tags = manageHelp(['add', 'edit', 'delete']);
+		expect(find(tags, /enable or disable/)).toBeUndefined();
+		expect(find(tags, /refresh/)).toBeUndefined();
+		expect(find(tags, /^add$/)?.keys).toEqual(['a']);
+		expect(tags.map((s) => s.title)).toContain('Delete confirmation');
 	});
 });

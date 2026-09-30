@@ -1,7 +1,7 @@
 # Web client plan: nyttig-api and nyttig-web
 
-Status: **agreed plan; phases 0, 1 and 2 are done**, phases 3–4 are not started.
-See [Phases](#phases-one-pr-each) for what phases 1 and 2 changed from this plan.
+Status: **agreed plan; phases 0 to 3 are done**, phase 4 is not started.
+See [Phases](#phases-one-pr-each) for what phases 1 to 3 changed from this plan.
 
 A browser client for nyttig with the same design goals as the TUI: compact,
 information dense, keyboard first, log-viewer inspired, minimal. It runs on
@@ -593,8 +593,68 @@ and ports 80 and 443 reachable.
    - Known gap: `AddTagRule` with a tag ID that doesn't exist fails on
      the foreign key as `Internal`, which nyttig-api maps to 502. The UI
      only offers existing tags.
-3. **Log-viewer features:** follow mode, query syntax, load older, help
-   overlay, the rest of the `:` command line, highlighting, `S`/`T` pickers.
+3. **Log-viewer features (done):** follow mode, query syntax, load older,
+   help overlay, the rest of the `:` command line, highlighting, the time
+   toggle and `S`/`T` pickers. Decisions and differences:
+   - **URL form: kept the separate parameters** (`?q=&source=&tag=&sort=&unviewed=1`,
+     IDs) as the canonical form instead of moving to one `q`. IDs survive
+     renames, the API and stream use the same parameters, and every phase 1
+     bookmark keeps working unchanged. The `/` bar shows the filter as query
+     text (`format`) and parses typed text back into the parameters (`parse`);
+     a `q` in a URL is always free text, never parsed for operators. Names
+     are resolved by the client; an ID is written `tag:#3` when a name is
+     unknown or ambiguous.
+   - Query: free text first, then `src:`, `tag:`, `is:unviewed`, `sort:`;
+     names match exactly, then ignoring case, then (sources) by
+     abbreviation; names with spaces are quoted (`\"` and `\\` escape inside
+     quotes); a quoted token is always free text or a literal name. Unknown
+     names, empty values, a second different tag/source and bad values are
+     errors with the token's range; an invalid query is not applied.
+     Completion offers names for the operator value under the caret;
+     partial names are not reported as errors while suggestions exist.
+     `Esc` in the bar clears the search text only, not the operators.
+   - **Follow** is "at the top of a newest-first list": it needs no mode
+     flag, only the scroll position (reported by the list). The status bar
+     shows `follow`, or `↑ N new` (a button: `F` on the keyboard, a tap on a
+     phone). `N` counts every live push since leaving the top, including
+     ones that sort into the middle. `F` in oldest-first order switches to
+     newest-first.
+   - **Load older** pages with `GET /api/items` (100 rows) when the view is
+     within 10 rows of the end. The reducer tracks `ranked`, the database
+     rows the list covers from the top, which is the next offset: live
+     pushes that sort inside the loaded range count, ones that sort after it
+     do not (too few is safe, too many skips rows; the request's own offset
+     is used when the page arrives). With an unviewed-only filter, rows
+     marked viewed leave `ranked`, and requests overlap by 50 rows because
+     the daemon learns of a view before the page does. A snapshot shorter
+     than the stream's 200 rows means there is nothing older. **A reset
+     (filter change, reconnect) drops the older pages** and starts again
+     from the snapshot, keeping the cursor on its item if the snapshot has
+     it; requests in flight are discarded by epoch. Other clients marking
+     items viewed can still skew an unviewed-only list's offset.
+   - **Help** (`?`, `q`/`Esc` close, a button on phones and in the status
+     bar) is generated from the keymap's binding tables plus the command
+     and query tables. The keymap tables replaced the old key objects, and
+     gained modes `help` and `picker`.
+   - **Commands** (`parseCommand` is pure and resolves names to IDs):
+     `:sort`, `:unviewed`, `:src`, `:tag`, `:refresh [source]`, `:time`,
+     `:follow`, `:help` next to the view commands. Short forms from phase 2
+     are fixed aliases (`:s` sources, `:r` rules, `:f` feed, `:t` tags, `:q`
+     feed); `:src` with no argument is still sources. Tab completes command
+     names and arguments (common prefix, then cycling), `↑`/`↓` walk an
+     in-memory history. Filter commands typed in a management view go to the
+     feed with the filter applied. There is still no command line on a phone.
+   - **Highlighting** marks whole words of the free text (any case, ignoring
+     diacritics) in titles, descriptions and the expanded row, as `<mark>`
+     elements between text nodes. It approximates FTS5's unicode61
+     tokenization: no prefix matching (FTS5 has none either) and no phrase
+     adjacency check.
+   - **Time toggle** on `D` and `:time`, and in the phone's filter sheet;
+     stored in `localStorage` (errors ignored). Relative is `12m ago`
+     (`12m` on a phone).
+   - **Pickers** `S`/`T` are a fuzzy (subsequence) filter over "all" and the
+     names; on a phone the filter sheet does the same job.
+   - No daemon or proto changes.
 4. **Deployment and hardening:** a deployment guide, and whatever running
    it in production shows is missing (the units, Caddy example, CI job and
    end-to-end tests landed in phase 1).

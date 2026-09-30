@@ -27,13 +27,14 @@
 				autocapitalize="off"
 				spellcheck="false"
 				enterkeyhint="go"
-				maxlength="64"
+				maxlength="100"
 				data-testid="command"
-				oninput={() => (cl.error = '')}
+				oninput={() => cl.typed()}
 				onblur={() => cl.cancel()}
 			/>
 		</label>
-		{#if cl.error}<span class="error" role="alert">{cl.error}</span>{/if}
+		{#if cl.error}<span class="error" role="alert">{cl.error}</span>
+		{:else if cl.hints.length}<span class="hints" data-testid="command-hints">{cl.hints.join('  ')}</span>{/if}
 	</div>
 {/if}
 
@@ -66,6 +67,11 @@
 		padding: 0;
 		color: var(--fg-strong);
 		caret-color: var(--unviewed);
+	}
+	.hints {
+		color: var(--dim);
+		overflow: hidden;
+		text-overflow: ellipsis;
 	}
 	.error {
 		color: var(--error);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatDate, formatTime, shortDuration } from './format';
+import { formatDate, formatRelative, formatTime, shortDuration } from './format';
 import { fetchTimes } from './meta';
 
 describe('formatDate', () => {
@@ -44,5 +44,25 @@ describe('fetchTimes', () => {
 		expect(fetchTimes([], now)).toEqual({ last: null, next: null });
 		// Never fetched: due now.
 		expect(fetchTimes([{ id: '1', enabled: true, refresh_sec: 60 }], now).next).toBe(now);
+	});
+});
+
+describe('formatRelative', () => {
+	const now = Date.parse('2026-09-30T12:00:00Z');
+	const ago = (ms: number) => new Date(now - ms).toISOString();
+
+	it('says how long ago', () => {
+		expect(formatRelative(ago(45_000), now)).toBe('45s ago');
+		expect(formatRelative(ago(12 * 60_000), now)).toBe('12m ago');
+		expect(formatRelative(ago(3 * 3600_000), now)).toBe('3h ago');
+		expect(formatRelative(ago(2 * 86400_000), now)).toBe('2d ago');
+		expect(formatRelative(ago(2 * 86400_000), now, true)).toBe('2d');
+	});
+
+	it('handles the future, and missing or broken times', () => {
+		expect(formatRelative(ago(-30_000), now)).toBe('0s ago');
+		expect(formatRelative(ago(-5 * 60_000), now)).toBe('in 5m');
+		expect(formatRelative(undefined, now)).toBe('');
+		expect(formatRelative('nonsense', now)).toBe('');
 	});
 });

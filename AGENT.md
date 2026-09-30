@@ -49,10 +49,11 @@ internal/api/               nyttig-api's HTTP API: routing (server.go), JSON han
                             security middleware (security.go)
 cmd/nyttig-api/main.go      nyttig-api entrypoint: flags, listen-address guard, HTTP server
 web/                        The SvelteKit app (pnpm); "pnpm build" writes a Node server to web/build/
-web/src/lib/                Pure modules (reducer, keymap, filter, sanitize, viewed, forms,
-                            command, latest, meta) with Vitest tests next to them, plus the
-                            Svelte components; metadata.svelte.ts holds the sources and tags
-                            every view shares
+web/src/lib/                Pure modules (reducer, keymap, filter, query, command, highlight,
+                            fuzzy, history, help, sanitize, viewed, forms, latest, meta,
+                            format) with Vitest tests next to them, plus the Svelte
+                            components; metadata.svelte.ts holds the sources and tags every
+                            view shares, prefs.svelte.ts the time format (localStorage)
 web/src/routes/             / is the feed; sources/, tags/ and rules/ are the management views
                             (ManageView.svelte is their shared frame)
 web/e2e/                    Playwright tests; stack.mjs starts a feed server, nyttigd, nyttig-api,
@@ -145,6 +146,23 @@ docs/web-client-plan.md     Plan for the nyttig-api browser client (phases and d
   changes), and closes the connection when its bounded queue overflows so
   the browser resyncs. Items and colors are sanitized on the way out
   (`sanitize.go`), and again in the browser.
+- **Web log-viewer features** (phase 3). `keymap.ts` holds every mode's keys
+  as binding tables; the key handler and the help overlay (`help.ts`) both
+  read them, so add a key there and it shows in `?`. `query.ts` parses and
+  formats the `/` bar's syntax (`tag:` `src:` `is:unviewed` `sort:`) against
+  the current sources and tags; the URL stays separate parameters with IDs
+  (`filter.ts`), and a `q` in the URL is always plain text. `command.ts` is the
+  pure `:` command parser (names resolved to IDs, completion); `commandline.svelte.ts`
+  runs commands for both the feed and the management views. `reducer.ts` also
+  does follow mode (`follow`, `pending`) and load older: `ranked` is the number
+  of database rows the list covers from the top and is the next page's
+  `offset`. Keep the invariant in its header comment (count too few rows,
+  never too many, or a page skips rows). A reset drops older pages and
+  `epoch` discards requests from before it. `highlight.ts` splits text into
+  segments that are rendered as text nodes and `<mark>`; never build HTML.
+  `policy.test.ts` fails on `{@html}`. The e2e feed server has bulk feeds
+  (`/bulk/<name>.xml?n=230`, push with `/add?feed=bulk/<name>`) for the tests
+  that need long lists; they add their own source and delete it.
 - **Feed content in the browser is untrusted.** Never use `{@html}`; render
   text only (`htmlToText` in `web/src/lib/sanitize.ts`), links through
   `safeLink`, colors through `safeColor`, and don't load feed images. The
