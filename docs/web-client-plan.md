@@ -1,7 +1,7 @@
 # Web client plan: nyttig-api and nyttig-web
 
-Status: **agreed plan; phases 0 and 1 are done**, phases 2–4 are not started.
-See [Phases](#phases-one-pr-each) for what phase 1 changed from this plan.
+Status: **agreed plan; phases 0, 1 and 2 are done**, phases 3–4 are not started.
+See [Phases](#phases-one-pr-each) for what phases 1 and 2 changed from this plan.
 
 A browser client for nyttig with the same design goals as the TUI: compact,
 information dense, keyboard first, log-viewer inspired, minimal. It runs on
@@ -176,7 +176,7 @@ web/
     +layout.ts            export const ssr = false
     +layout.svelte        shell: filter/command bar, status bar, global keymap
     +page.svelte          feed
-    sources/ tags/ rules/ management views
+    sources/ tags/ rules/ management views (phase 2)
   src/lib/
     api.ts                typed fetch wrappers (hand-written types mirroring protojson)
     stream.svelte.ts      EventSource lifecycle, connection status, reducer
@@ -555,10 +555,46 @@ and ports 80 and 443 reachable.
      query syntax (`tag:` `src:` …) comes with phase 3.
    - `Host` must match `--origin` exactly, so a health check on the
      loopback port needs `-H 'Host: …'`.
-2. **Management:** source, tag and rule views with forms, delete
-   confirmations and the live rule preview (D6).
+2. **Management (done):** source, tag and rule views with forms, delete
+   confirmations and the live rule preview (D6); the rest of the HTTP API
+   above. Differences from the plan:
+   - The views are routes (`/sources`, `/tags`, `/rules`) sharing one
+     frame, `ManageView.svelte`: view tabs, the list, a bottom panel for
+     the form or confirmation, and a toolbar that is also the key legend
+     (and the touch UI on a phone). The lists are short, so they are not
+     virtual. A click or tap only selects a row; `e` or the edit button
+     opens the form.
+   - The `:` command line came forward from phase 3, for switching views
+     only (`:sources`, `:tags`, `:rules`, `:feed`, unique prefixes, `:q`).
+     `:feed` returns to the feed's last filter. On a phone the filter
+     sheet links to the views.
+   - nyttig-api reads management bodies strictly: one JSON object of at
+     most 16 KiB (413 above), exact field names, and no unknown, duplicate
+     or `null` fields. PATCH keeps presence, so an absent field is unset
+     in the proto3 `optional` request. Value checks stay in the daemon
+     (D7); the API checks shapes and IDs. Creates answer 201, deletes
+     204. `POST /api/rules/test` is a POST because patterns can be long,
+     so it goes through the CSRF check like a mutation.
+   - A missing `enabled` in `POST /api/sources` means true in nyttig-api
+     too, not only in the client, so the JSON API has no disabled-by-
+     default trap.
+   - Sources and tags live in one shared store
+     (`metadata.svelte.ts`) that the management views reload after every
+     change; feed rows take tag names and colors from it by ID rather
+     than from the item's copy, so a recolor shows without a new stream
+     snapshot.
+   - Delete confirmations show counts: a source's items (the `total` of
+     `GET /api/items?source=`) and its source-specific rules (which the
+     database cascade also removes), and a tag's rules and items.
+   - Refresh intervals are typed as `30m`, `1h` or `1h30m` (seconds when
+     bare) and validated against the daemon's 1 minute to 7 days.
+   - The rule preview is debounced (250 ms), aborts stale requests, and
+     notes that a new rule only tags items fetched afterwards.
+   - Known gap: `AddTagRule` with a tag ID that doesn't exist fails on
+     the foreign key as `Internal`, which nyttig-api maps to 502. The UI
+     only offers existing tags.
 3. **Log-viewer features:** follow mode, query syntax, load older, help
-   overlay, `:` command line, highlighting, `S`/`T` pickers.
+   overlay, the rest of the `:` command line, highlighting, `S`/`T` pickers.
 4. **Deployment and hardening:** a deployment guide, and whatever running
    it in production shows is missing (the units, Caddy example, CI job and
    end-to-end tests landed in phase 1).

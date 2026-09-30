@@ -65,6 +65,24 @@ ${items}
 </channel></rss>`;
 }
 
+function extraFeed(name) {
+	const items = [1, 2]
+		.map(
+			(n) => `<item>
+<title>${esc(name)} story ${n}</title>
+<link>https://${esc(name)}.example/${n}</link>
+<guid>${esc(name)}-${n}</guid>
+<pubDate>${hoursAgo(24 + n)}</pubDate>
+<description>Item ${n} of the ${esc(name)} feed.</description>
+</item>`
+		)
+		.join('\n');
+	return `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"><channel><title>${esc(name)}</title><link>https://${esc(name)}.example</link><description>extra</description>
+${items}
+</channel></rss>`;
+}
+
 export function startFeedServer() {
 	let pixelHits = 0;
 	let added = 0;
@@ -74,6 +92,15 @@ export function startFeedServer() {
 		if (m && feeds[m[1]]) {
 			res.writeHead(200, { 'Content-Type': 'application/rss+xml' });
 			res.end(rss(m[1]));
+			return;
+		}
+		// Feeds for sources the management tests add: /extra/<name>.xml has
+		// two items titled after the name. Any other path is a 404, which
+		// shows up as the source's fetch error.
+		const extra = url.pathname.match(/^\/extra\/([\w-]+)\.xml$/);
+		if (extra) {
+			res.writeHead(200, { 'Content-Type': 'application/rss+xml' });
+			res.end(extraFeed(extra[1]));
 			return;
 		}
 		if (url.pathname === '/pixel.png') {

@@ -481,8 +481,8 @@ to pick up config changes.
 
 The web client is the same feed view as the TUI in a browser: the filter
 bar, the table with the same columns and colors, live pushes, and view
-tracking. It works with the keyboard on a desktop and with touch on a
-phone. It has two parts behind one reverse proxy:
+tracking. It also manages sources, tags and tag rules. It works with the
+keyboard on a desktop and with touch on a phone. It has two parts behind one reverse proxy:
 
 - **The app, `nyttig-web`** (`web/`): a SvelteKit app, built with `vite build` and served
   by its own Node server (`@sveltejs/adapter-node`, run as `node build`).
@@ -550,10 +550,43 @@ view can be bookmarked and the back button works.
 | `Enter`            | Open the link in a new tab                         |
 | `Space`, `l`       | Expand / collapse the row (details and full description) |
 | `q`, `Esc`         | Collapse the row                                   |
+| `:`                | Command line: `:sources`, `:tags`, `:rules`, `:feed` (a unique prefix is enough; `:q` is the feed) |
 
 On a phone (narrower than 720px) rows take two lines, a tap selects and
 expands a row (with an explicit "open ↗" link), `⚙` opens the filters and
 `⟳` refreshes.
+
+#### Sources, tags and rules
+
+`:sources`, `:tags` and `:rules` (or the tabs at the top, and "manage" in
+the phone's `⚙` sheet) open the management views. They use the feed's
+row style; forms and delete confirmations open in a panel at the bottom.
+
+| Key                   | Action                                                        |
+|-----------------------|---------------------------------------------------------------|
+| `j`/`k`, `g`/`G`, `d`/`u` | Move, as in the feed                                      |
+| `a`                   | Add                                                           |
+| `e`, `Enter`          | Edit the selected row (`Enter` in a form saves, `Esc` cancels) |
+| `x`, `Delete`         | Delete; the confirmation says what goes with it (`y` confirms, `n` cancels) |
+| `Space`               | Sources: enable / disable                                     |
+| `r`                   | Sources: fetch now                                            |
+| `q`                   | Back to the feed, with the filter it had                      |
+
+On a phone the same actions are buttons at the bottom; tap a row to
+select it.
+
+- **Sources** show when they were last fetched, when they are next due
+  (last fetch plus the interval) and the last fetch error in red. The
+  interval is typed like `30m`, `1h` or `1h30m` (1 minute to 7 days).
+  Deleting a source deletes its items and its source-specific rules.
+- **Tags** are renamed and recolored in place, which keeps their rules
+  and item assignments; the feed shows the new name and color. Deleting a
+  tag deletes its rules and removes it from every item.
+- **Rules** show a live preview while you type the pattern: the daemon
+  runs it (Go RE2 syntax, e.g. `(?i)` for case-insensitive) against the
+  most recent 500 items and lists the matches. A rule only tags items
+  fetched after it is added. Editing a rule adds the new rule and then
+  removes the old one; deleting a rule leaves existing tags on items.
 
 Rows are marked viewed as they scroll into view, like in the TUI, and sent
 to the daemon about every 3 seconds; what is pending when you close the tab
@@ -568,9 +601,15 @@ reverse proxy that does TLS and authentication:
   `--allow-public-listen`. Local processes can reach it without the
   proxy's password, which is acceptable on a single-user server.
 - Requests must carry the `Host` of `--origin` (against DNS rebinding).
-  Mutations (`POST`) must be `Content-Type: application/json` and come from
-  `--origin` (`Origin` header) or be `Sec-Fetch-Site: same-origin`, since
-  basic-auth credentials are sent automatically, like cookies.
+  Mutations (`POST`, `PATCH`, `DELETE`) must be
+  `Content-Type: application/json` and come from `--origin` (`Origin`
+  header) or be `Sec-Fetch-Site: same-origin`, since basic-auth
+  credentials are sent automatically, like cookies.
+- Management request bodies are at most 16 KiB and must be one JSON
+  object with known field names (no unknown, duplicate or `null` fields).
+  The daemon validates every value (URLs must be `http(s)`, colors
+  `#RRGGBB`, names and patterns have length caps), so the CLI and TUI get
+  the same checks.
 - The app's pages have a strict `Content-Security-Policy` from SvelteKit's
   `kit.csp` (no inline scripts except SvelteKit's bootstrap, allowed by a
   per-request nonce), plus `nosniff`, `Referrer-Policy: no-referrer` and

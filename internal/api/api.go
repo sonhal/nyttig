@@ -48,12 +48,16 @@ func writeJSONBytes(w http.ResponseWriter, code int, b []byte) {
 }
 
 func writeProto(w http.ResponseWriter, m proto.Message) {
+	writeProtoStatus(w, http.StatusOK, m)
+}
+
+func writeProtoStatus(w http.ResponseWriter, code int, m proto.Message) {
 	b, err := marshaler.Marshal(m)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "encode response")
 		return
 	}
-	writeJSONBytes(w, http.StatusOK, b)
+	writeJSONBytes(w, code, b)
 }
 
 func writeJSON(w http.ResponseWriter, code int, v any) {

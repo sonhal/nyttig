@@ -45,11 +45,16 @@ internal/client/            gRPC client wrapper + StreamSub helper used by the T
 internal/mtls/              Mutual-TLS credential loading shared by daemon and client
 internal/tui/               Bubble Tea Model, filter bar, table, status bar, view tracking
 internal/api/               nyttig-api's HTTP API: routing (server.go), JSON handlers (api.go),
-                            SSE bridge (stream.go), security middleware (security.go)
+                            source/tag/rule management (manage.go), SSE bridge (stream.go),
+                            security middleware (security.go)
 cmd/nyttig-api/main.go      nyttig-api entrypoint: flags, listen-address guard, HTTP server
 web/                        The SvelteKit app (pnpm); "pnpm build" writes a Node server to web/build/
-web/src/lib/                Pure modules (reducer, keymap, filter, sanitize, viewed) with
-                            Vitest tests next to them, plus the Svelte components
+web/src/lib/                Pure modules (reducer, keymap, filter, sanitize, viewed, forms,
+                            command, latest, meta) with Vitest tests next to them, plus the
+                            Svelte components; metadata.svelte.ts holds the sources and tags
+                            every view shares
+web/src/routes/             / is the feed; sources/, tags/ and rules/ are the management views
+                            (ManageView.svelte is their shared frame)
 web/e2e/                    Playwright tests; stack.mjs starts a feed server, nyttigd, nyttig-api,
                             the app server and a Caddy-like proxy (proxy.mjs)
 internal/server/service/    gRPC service impl + Hub (broadcasts pushed items to subscribers);
@@ -128,7 +133,14 @@ docs/web-client-plan.md     Plan for the nyttig-api browser client (phases and d
   JSON is `protojson` with `UseProtoNames`, so int64 IDs are strings and
   zero values are left out; the TypeScript types in `web/src/lib/types.ts`
   mirror that. `/api/stream` opens one `StreamItems` per SSE connection and
-  never changes its filter: the browser reconnects instead. The bridge
+  never changes its filter: the browser reconnects instead.
+  Management bodies (`manage.go`) are read member by member into a
+  `jsonBody`, which keeps field presence for PATCH (absent = unchanged,
+  mapped to the proto3 `optional` fields) and rejects unknown, duplicate
+  and `null` fields. Value validation is left to the daemon
+  (`service/validate.go`); the API only checks shapes and IDs. A missing
+  `enabled` on `POST /api/sources` means true, since proto3 defaults
+  `AddSourceRequest.enabled` to false. The bridge
   sends its own first `reset` (the daemon only sends one on filter
   changes), and closes the connection when its bounded queue overflows so
   the browser resyncs. Items and colors are sanitized on the way out
@@ -140,6 +152,11 @@ docs/web-client-plan.md     Plan for the nyttig-api browser client (phases and d
   SvelteKit's bootstrap, which gets a per-request nonce; other page headers
   are set in `web/src/hooks.server.ts`. The feed renders client-side
   (`ssr = false`), so the Node server only sends the app shell.
+- **Rule patterns are never evaluated in the browser.** Go RE2 syntax
+  (`(?i)`, `(?P<name>…)`) differs from JavaScript's; the rule editor's
+  preview calls `POST /api/rules/test` (TestTagRule) instead. There is no
+  UpdateTagRule: the rules view edits by adding the new rule, then
+  removing the old one.
 - **Config** (`internal/config`): `socket`, `db_path` and `log_level` are
   top-level keys (there is no `[server]` table), followed by `[tls]`,
   `[[sources]]`, `[[tags]]` and `[[tag_rules]]`. `config.Load` rejects unknown
@@ -178,7 +195,7 @@ CI's Web job runs the same:
 ```bash
 pnpm install --frozen-lockfile
 pnpm check                           # svelte-kit sync + svelte-check (TypeScript), no warnings
-pnpm test                            # vitest: reducer, keymap, filter, sanitizers, view tracker
+pnpm test                            # vitest: reducer, keymap, filter, sanitizers, view tracker, forms
 pnpm build                           # vite build; writes build/, run it with "node build"
 pnpm test:e2e                        # Playwright; needs "pnpm build" first
 pnpm dev                             # Vite dev server on :5173, /api proxied to 127.0.0.1:7070
@@ -324,6 +341,11 @@ pattern for new update RPCs rather than treating zero values as "unset".
   test will be flaky.
 - A few comments in `fetcher/fetch_test.go` still mention gofeed; the project
   doesn't use it (parsing is `encoding/xml`).
+- The end-to-end tests share one daemon across both viewports, so the
+  management tests (`e2e/manage.spec.ts`) create their own sources, tags
+  and rules (named after the Playwright project) and delete them again,
+  and restore anything shared they change. New sources can point at
+  `/extra/<name>.xml` on the feed server, which serves two items per name.
 - The feed server in `web/e2e/feeds.mjs` escapes some descriptions twice on
   purpose: nyttigd strips tags and then unescapes entities, and that is how
   real markup reaches the browser.
