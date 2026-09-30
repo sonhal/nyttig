@@ -3,6 +3,9 @@ name: CI
 on:
   push:
     branches: [main]
+    # A version tag runs the whole pipeline and then publishes a GitHub
+    # Release with the deployable bundle (the release job at the end).
+    tags: ['v*']
   pull_request:
   workflow_dispatch:
 
@@ -180,19 +183,27 @@ jobs:
     name: Build
     runs-on: ubuntu-latest
     needs: [lint, test, web]
+    # nyttigd uses cgo, so it only runs where glibc is the same version as the
+    # one it was built against or newer. Build on the servers' Debian release
+    # (deploy/README.md) instead of the runner's Ubuntu.
+    container: golang:1.26-trixie
     env:
       CGO_ENABLED: "1"
     steps:
       - uses: actions/checkout@v7
 
-      - uses: actions/setup-go@v7
-        with:
-          go-version-file: go.mod
+      # The workspace is owned by the runner's user, not the container's root;
+      # without this git refuses it and go build can't stamp VCS info.
+      - name: Trust the workspace
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
+      # The image's Go may be older than go.mod's toolchain line; the go
+      # command then downloads that toolchain itself (GOTOOLCHAIN=auto).
       - name: go build
         run: |
           mkdir -p dist
           go build -trimpath -ldflags="-s -w" -o dist/ ./cmd/nyttig ./cmd/nyttigd ./cmd/nyttig-api
+          go version -m dist/nyttigd | head -n 1
 
       - uses: actions/upload-artifact@v7
         with:
@@ -215,3 +226,67 @@ jobs:
           go-version-input: ""
           go-version-file: go.mod
           go-package: ./...
+
+  # Runs only for a v* tag, after everything else has passed. Publishes one
+  # bundle with everything the server needs, laid out for deploy/README.md:
+  #
+  #   nyttig-<tag>-linux-amd64/
+  #     bin/      nyttigd, nyttig, nyttig-api
+  #     web/      build/ and package.json (the nyttig-web Node server)
+  #     deploy/   systemd units, Caddyfile, README.md
+  #     sample_config.toml
+  release:
+    name: Release
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    needs: [lint, generated, test, web, build, vulncheck]
+    permissions:
+      contents: write     # create the release
+      id-token: write     # sign the build provenance attestation
+      attestations: write
+    env:
+      BUNDLE: nyttig-${{ github.ref_name }}-linux-amd64
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v7
+        with:
+          name: nyttig-linux-amd64
+          path: ${{ env.BUNDLE }}/bin
+
+      - uses: actions/download-artifact@v7
+        with:
+          name: nyttig-web
+          path: ${{ env.BUNDLE }}/web
+
+      # Artifacts don't keep file modes, so the binaries come back without the
+      # execute bit. The tarball is reproducible: sorted, root-owned entries
+      # stamped with the tagged commit's time.
+      - name: Assemble bundle
+        run: |
+          chmod 0755 "$BUNDLE"/bin/*
+          cp -r deploy sample_config.toml "$BUNDLE"/
+          tar --sort=name --owner=0 --group=0 --numeric-owner \
+            --mtime="@$(git log -1 --format=%ct)" \
+            -czf "$BUNDLE.tar.gz" "$BUNDLE"
+          sha256sum "$BUNDLE.tar.gz" > SHA256SUMS
+          cat SHA256SUMS
+          tar -tvzf "$BUNDLE.tar.gz"
+
+      # Proves the tarball was built by this workflow from this commit:
+      #   gh attestation verify <tarball> --repo sonhal/nyttig
+      - uses: actions/attest-build-provenance@v3
+        with:
+          subject-path: ${{ env.BUNDLE }}.tar.gz
+
+      # A tag with a hyphen (v0.2.0-rc.1) is marked as a pre-release.
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          prerelease=()
+          if [[ "$TAG" == *-* ]]; then prerelease=(--prerelease); fi
+          gh release create "$TAG" "$BUNDLE.tar.gz" SHA256SUMS \
+            --verify-tag --title "$TAG" --generate-notes "${prerelease[@]}"

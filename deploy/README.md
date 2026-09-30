@@ -25,24 +25,62 @@ for the TUI.
 
 **Sizing:** 1 vCPU, 1 GB RAM and 20 GB disk are enough for personal use.
 nyttigd, nyttig-api and Caddy each use tens of MB and the Node server a bit
-more. Build on your workstation, not on the server: compiling SQLite with cgo
+more. Build in CI (or on your workstation), not on the server: compiling SQLite with cgo
 can run a 1 GB machine out of memory. Nothing prunes old items yet, so the
 database grows by roughly 0.2–2 GB per year depending on how many feeds you
 follow.
 
-## 1. Build (on your workstation)
+## 1. Get a release (on your workstation)
 
-`nyttigd` uses cgo, so it only runs on systems with the same or a newer glibc
-than it was built with. Build the Go binaries in the same Debian release as
-the server:
+CI builds the release: pushing a `v*` tag runs the whole pipeline and, when it
+passes, publishes a GitHub Release with one bundle and its checksum:
 
 ```bash
+git tag v0.1.0 && git push origin v0.1.0     # a tag with a hyphen is a pre-release
+```
+
+```
+nyttig-v0.1.0-linux-amd64/
+  bin/      nyttigd, nyttig, nyttig-api
+  web/      build/ and package.json (the nyttig-web Node server)
+  deploy/   these systemd units, the Caddyfile and this README
+  sample_config.toml
+```
+
+Download and check it:
+
+```bash
+VERSION=v0.1.0
+gh release download "$VERSION" --repo sonhal/nyttig
+sha256sum -c SHA256SUMS
+gh attestation verify "nyttig-$VERSION-linux-amd64.tar.gz" --repo sonhal/nyttig
+```
+
+`sha256sum -c` catches a corrupt download. The attestation proves the tarball
+was built by this repository's CI workflow from the tagged commit, not
+uploaded by hand.
+
+`nyttigd` uses cgo, so it only runs on systems with the same or a newer glibc
+than it was built with. CI builds the Go binaries in a `golang:1.26-trixie`
+container for that reason. If the server runs something older than Debian 13,
+build it yourself in a matching image instead.
+
+### Building it yourself
+
+To deploy a commit that has no release, build the same layout. Build the Go
+binaries in the same Debian release as the server:
+
+```bash
+BUNDLE=nyttig-dev-linux-amd64
 docker run --rm -v "$PWD":/src -w /src golang:1.26-trixie \
-  sh -c 'git config --global --add safe.directory /src &&
-         go build -trimpath -ldflags="-s -w" -o dist/ ./cmd/nyttigd ./cmd/nyttig ./cmd/nyttig-api'
+  sh -c "git config --global --add safe.directory /src &&
+         go build -trimpath -ldflags='-s -w' -o $BUNDLE/bin/ ./cmd/nyttigd ./cmd/nyttig ./cmd/nyttig-api"
 
 pnpm --dir web install --frozen-lockfile
 pnpm --dir web build        # web/build/ is plain JavaScript; any OS can build it
+mkdir -p "$BUNDLE/web" && cp -r web/build web/package.json "$BUNDLE/web/"
+cp -r deploy sample_config.toml "$BUNDLE/"
+tar -czf "$BUNDLE.tar.gz" "$BUNDLE"
 ```
 
 ## 2. Certificates (on your workstation)
@@ -68,13 +106,14 @@ from [NodeSource](https://github.com/nodesource/distributions) and Caddy from
 [Caddy's apt repository](https://caddyserver.com/docs/install#debian-ubuntu-raspbian),
 then check `node --version` and `caddy version`.
 
-Copy the build and the deploy files over:
+Copy the bundle and the server's certificate files over, and unpack:
 
 ```bash
-scp -r dist/ web/build web/package.json deploy/ \
-  certs/{server.pem,server.key,ca.pem} vps:nyttig-install/
+scp "nyttig-$VERSION-linux-amd64.tar.gz" certs/{server.pem,server.key,ca.pem} vps:
 ssh vps
-cd nyttig-install
+tar -xzf nyttig-v0.1.0-linux-amd64.tar.gz
+mv server.pem server.key ca.pem nyttig-v0.1.0-linux-amd64/
+cd nyttig-v0.1.0-linux-amd64
 ```
 
 Then on the server:
@@ -84,9 +123,9 @@ sudo apt install sqlite3 ufw        # sqlite3 is only used for backups
 sudo useradd --system --home-dir /var/lib/nyttig --shell /usr/sbin/nologin nyttig
 
 # Binaries and the web app
-sudo install -m 0755 dist/nyttigd dist/nyttig dist/nyttig-api /usr/local/bin/
+sudo install -m 0755 bin/nyttigd bin/nyttig bin/nyttig-api /usr/local/bin/
 sudo install -d /opt/nyttig-web
-sudo cp -r build package.json /opt/nyttig-web/
+sudo cp -r web/build web/package.json /opt/nyttig-web/
 
 # TLS files, root-only; the mtls.conf drop-in hands them to nyttigd
 sudo install -d -m 0700 /etc/nyttig/tls
@@ -163,13 +202,18 @@ The CLI subcommands (`add-source`, `add-tag-rule`, …) take the same flags.
 repair. Always take a backup first:
 
 ```bash
-scp dist/nyttigd dist/nyttig-api vps:
-ssh vps 'sudo systemctl start nyttigd-backup &&
-         sudo install -m 0755 nyttigd nyttig-api /usr/local/bin/ &&
-         sudo systemctl restart nyttigd nyttig-api'
+scp "nyttig-$VERSION-linux-amd64.tar.gz" vps:
+ssh vps
+tar -xzf nyttig-v0.2.0-linux-amd64.tar.gz && cd nyttig-v0.2.0-linux-amd64
+sudo systemctl start nyttigd-backup
+sudo install -m 0755 bin/nyttigd bin/nyttig bin/nyttig-api /usr/local/bin/
+sudo rm -rf /opt/nyttig-web/build
+sudo cp -r web/build web/package.json /opt/nyttig-web/
+sudo systemctl restart nyttigd nyttig-api nyttig-web
 ```
 
-For the web app, replace `/opt/nyttig-web/build` and restart `nyttig-web`.
+Check the release notes for changes to the units or the Caddyfile, and diff
+the bundle's `deploy/` against the installed files.
 `nyttigd` does not handle `SIGHUP`, so use `systemctl restart` (not `reload`)
 to apply config changes.
 
