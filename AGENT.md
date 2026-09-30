@@ -262,7 +262,7 @@ container), with the Go version taken from `go.mod`:
 | Generated code | `buf generate` leaves `internal/proto` unchanged |
 | Test | `go test -race -shuffle=on` with coverage |
 | Web | `pnpm install --frozen-lockfile`, svelte-check, vitest, vite build, Playwright end-to-end; uploads the app build (`nyttig-web`) |
-| Build | Builds the three binaries in Debian trixie (glibc of the servers, see `deploy/README.md`); runs only after Lint, Test and Web pass; uploads `nyttig-linux-amd64` |
+| Build | Builds the three binaries in Debian trixie (glibc of the servers, see `deploy/README.md`); runs only after Lint, Test and Web pass; stamps a `v*` tag into `internal/version.Version` with `-ldflags -X` (other builds report the git pseudo-version); uploads `nyttig-linux-amd64` |
 | Vulnerability check | `govulncheck ./...` against the code paths the binaries call |
 | Release | `v*` tags only, after every other job passes: bundles the binaries, the app build, `deploy/` and `sample_config.toml` into `nyttig-<tag>-linux-amd64.tar.gz`, adds `SHA256SUMS` and a build provenance attestation, and publishes a GitHub Release (a tag with a hyphen is a pre-release) |
 

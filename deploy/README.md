@@ -210,6 +210,7 @@ sudo install -m 0755 bin/nyttigd bin/nyttig bin/nyttig-api /usr/local/bin/
 sudo rm -rf /opt/nyttig-web/build
 sudo cp -r web/build web/package.json /opt/nyttig-web/
 sudo systemctl restart nyttigd nyttig-api nyttig-web
+nyttigd -version                    # the release tag; also in the startup logs
 ```
 
 Check the release notes for changes to the units or the Caddyfile, and diff

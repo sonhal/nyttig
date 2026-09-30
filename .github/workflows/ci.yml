@@ -199,11 +199,18 @@ jobs:
 
       # The image's Go may be older than go.mod's toolchain line; the go
       # command then downloads that toolchain itself (GOTOOLCHAIN=auto).
+      # A v* tag is stamped in as the version (nyttigd -version, and the
+      # startup logs); other builds report the git pseudo-version go build
+      # records (internal/version).
       - name: go build
+        env:
+          VERSION: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || '' }}
         run: |
           mkdir -p dist
-          go build -trimpath -ldflags="-s -w" -o dist/ ./cmd/nyttig ./cmd/nyttigd ./cmd/nyttig-api
-          go version -m dist/nyttigd | head -n 1
+          go build -trimpath \
+            -ldflags="-s -w -X github.com/sonhal/nyttig/internal/version.Version=$VERSION" \
+            -o dist/ ./cmd/nyttig ./cmd/nyttigd ./cmd/nyttig-api
+          dist/nyttigd -version
 
       - uses: actions/upload-artifact@v7
         with:

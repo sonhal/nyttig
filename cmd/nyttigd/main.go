@@ -32,6 +32,7 @@ import (
 	"github.com/sonhal/nyttig/internal/server/scheduler"
 	"github.com/sonhal/nyttig/internal/server/service"
 	"github.com/sonhal/nyttig/internal/server/tagger"
+	"github.com/sonhal/nyttig/internal/version"
 )
 
 func main() {
@@ -45,8 +46,14 @@ func main() {
 		tlsClientCA = flag.String("tls-client-ca", "", "CA bundle (PEM) used to verify client certificates")
 		tlsListen   = flag.String("tls-listen", "", "Extra TCP address (e.g. :9090) to serve with mTLS while -socket stays a plaintext Unix socket")
 		blockPriv   = flag.Bool("block-private-addresses", false, "Refuse to fetch feeds from loopback, private or link-local addresses (SSRF protection)")
+		showVersion = flag.Bool("version", false, "Print the version and exit")
 	)
 	flag.Parse()
+
+	if *showVersion {
+		fmt.Println(version.String())
+		return
+	}
 
 	// Track which flags were explicitly passed, so config values only act as
 	// defaults: an explicit command-line flag always wins over the config file.
@@ -277,7 +284,7 @@ func main() {
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 
-	logger.Info("nyttigd started", "version", "0.1.0")
+	logger.Info("nyttigd started", "version", version.String())
 
 	// Wait for shutdown signal or server error.
 	select {
