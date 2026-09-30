@@ -80,7 +80,7 @@
 		<button type="button" onclick={ontoggleunviewed} title="unviewed only"
 			><span class="k">unviewed:</span><span class="v">{filter.unviewed ? 'on' : 'off'}</span></button
 		>
-		<span class="count">[{sources.length} src]</span>
+		<a class="count" href="/sources" title="manage sources (:sources)">[{sources.length} src]</a>
 	</div>
 	<div class="mobile-actions">
 		<button type="button" class="icon" onclick={onopensheet} aria-label="filters" data-testid="open-filters"
@@ -159,6 +159,7 @@
 	.count {
 		margin-left: auto;
 		color: var(--dim);
+		text-decoration: none;
 	}
 	.mobile-actions {
 		display: none;

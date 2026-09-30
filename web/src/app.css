@@ -80,3 +80,130 @@ a {
 	clip-path: inset(50%);
 	white-space: nowrap;
 }
+
+/* ── Management forms (the panel at the bottom of sources, tags, rules) ── */
+
+.mform {
+	display: grid;
+	gap: 4px;
+	padding: 4px 1ch 6px;
+}
+.mform .title {
+	color: var(--dim);
+}
+.mform .fields {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: flex-start;
+	gap: 4px 2ch;
+}
+.mform .field {
+	display: grid;
+	gap: 0;
+	min-width: 0;
+}
+.mform .field.grow {
+	flex: 1 1 40ch;
+}
+.mform .field > label,
+.mform .frow {
+	display: flex;
+	align-items: center;
+	gap: 1ch;
+}
+.mform .k {
+	color: var(--dim);
+	white-space: nowrap;
+}
+.mform input[type='text'],
+.mform input[type='url'],
+.mform select {
+	height: 20px;
+	min-width: 0;
+	padding: 0 0.5ch;
+	background: var(--bg);
+	border: 1px solid var(--sel);
+	border-radius: 2px;
+	color: var(--fg-strong);
+}
+.mform .grow input {
+	flex: 1;
+}
+.mform input[aria-invalid='true'] {
+	border-color: var(--error);
+}
+.mform input[type='checkbox'] {
+	margin: 0;
+	accent-color: var(--unviewed);
+}
+.mform .ferr {
+	color: var(--error);
+	font-size: 12px;
+	line-height: 16px;
+}
+.mform .actions {
+	display: flex;
+	align-items: center;
+	gap: 2ch;
+}
+.mform .actions button {
+	height: 20px;
+	padding: 0 1ch;
+	background: var(--bg);
+	border: 1px solid var(--sel);
+	border-radius: 2px;
+	cursor: pointer;
+}
+.mform .actions button.primary {
+	color: var(--unviewed);
+}
+.mform .actions button.danger {
+	color: var(--error);
+	border-color: var(--error);
+}
+.mform .actions .hint {
+	color: var(--dim);
+}
+.mform .server-error {
+	color: var(--error);
+	overflow-wrap: anywhere;
+}
+
+@media (max-width: 719.98px) {
+	.mform {
+		gap: 8px;
+		padding: 8px 8px 12px;
+	}
+	.mform .fields {
+		display: grid;
+		gap: 8px;
+	}
+	.mform .field > label,
+	.mform .frow {
+		display: grid;
+		grid-template-columns: 11ch 1fr;
+	}
+	/* 16px keeps iOS from zooming in on focus; 40px is a comfortable target. */
+	.mform input[type='text'],
+	.mform input[type='url'],
+	.mform select,
+	.mform .actions button {
+		height: 40px;
+		font-size: 16px;
+	}
+	.mform input[type='checkbox'] {
+		width: 24px;
+		height: 24px;
+	}
+	.mform .ferr {
+		padding-left: 12ch;
+	}
+	.mform .actions {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: 8px;
+	}
+	.mform .actions .hint {
+		display: none;
+	}
+}

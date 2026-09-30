@@ -15,21 +15,26 @@
 	import StatusBar from '$lib/StatusBar.svelte';
 	import VirtualList from '$lib/VirtualList.svelte';
 	import { cycleID, filterFromParams, filterQuery, nextSort, sameFilter } from '$lib/filter';
+	import CommandLine from '$lib/CommandLine.svelte';
+	import { CommandLine as CommandLineState } from '$lib/commandline.svelte';
 	import { keyAction, type Action, type Mode } from '$lib/keymap';
-	import { fetchTimes, sourceDisplays, tagColors } from '$lib/meta';
+	import { fetchTimes, sourceDisplays, tagDisplays } from '$lib/meta';
+	import { metadata } from '$lib/metadata.svelte';
 	import { markViewed, moveCursor } from '$lib/reducer';
 	import { safeLink } from '$lib/sanitize';
 	import { FeedStream } from '$lib/stream.svelte';
-	import type { Filter, Item, Source, Tag } from '$lib/types';
+	import type { Filter, Item } from '$lib/types';
 	import { ViewTracker } from '$lib/viewed';
 
 	const METADATA_INTERVAL_MS = 30_000;
 	const UNVIEWED_INTERVAL_MS = 15_000;
 
 	const stream = new FeedStream();
+	const cl = new CommandLineState();
 
-	let sources: Source[] = $state.raw([]);
-	let tags: Tag[] = $state.raw([]);
+	// Shared with the management views, which reload them after changes.
+	const sources = $derived(metadata.sources);
+	const tags = $derived(metadata.tags);
 	let unviewedTotal: number | null = $state(null);
 	let now = $state(Date.now());
 	let note = $state('');
@@ -51,10 +56,12 @@
 	const cursor = $derived(feed.cursor);
 	const expandedIndex = $derived(expandedId === null ? -1 : items.findIndex((it) => it.id === expandedId));
 	const srcMeta = $derived(sourceDisplays(sources));
-	const tagColorMap = $derived(tagColors(tags));
+	const tagMeta = $derived(tagDisplays(tags));
 	const times = $derived(fetchTimes(sources, now));
 	const localUnviewed = $derived(items.reduce((n, it) => n + (it.viewed ? 0 : 1), 0));
-	const mode: Mode = $derived(sheetOpen ? 'sheet' : searchFocused ? 'search' : 'normal');
+	const mode: Mode = $derived(
+		cl.open ? 'command' : sheetOpen ? 'sheet' : searchFocused ? 'search' : 'normal'
+	);
 
 	// ── Filter ⇄ URL ──────────────────────────────────────────
 
@@ -65,6 +72,8 @@
 			draft = f.q;
 			if (connected && sameFilter(connected, f)) return;
 			connected = f;
+			// ":feed" and the view tabs come back to this filter.
+			metadata.feedSearch = filterQuery(f);
 			stream.connect(f);
 			void loadUnviewed();
 		});
@@ -77,14 +86,9 @@
 
 	// ── Metadata and counts ───────────────────────────────────
 
-	async function loadMetadata() {
-		try {
-			const [s, t] = await Promise.all([api.listSources(), api.listTags()]);
-			sources = s;
-			tags = t;
-		} catch {
-			// The status bar shows the stream's connection state.
-		}
+	function loadMetadata() {
+		// Errors are left to the status bar's connection state.
+		return metadata.reload();
 	}
 
 	async function loadUnviewed() {
@@ -219,6 +223,14 @@
 				if (sheetOpen) sheetOpen = false;
 				else expandedId = null;
 				return;
+			case 'openCommand':
+				return cl.start();
+			case 'runCommand':
+				return cl.run();
+			case 'cancelCommand':
+				cl.cancel();
+				list?.focus();
+				return;
 		}
 	}
 
@@ -229,7 +241,12 @@
 	function onkeydown(e: KeyboardEvent) {
 		const target = e.target as HTMLElement | null;
 		// Other controls (sheet selects, buttons) keep their own keys.
-		if (mode === 'normal' && target && target !== searchInput && target.closest('input, select, textarea, button')) {
+		if (
+			mode === 'normal' &&
+			target &&
+			target !== searchInput &&
+			target.closest('input, select, textarea, button, a')
+		) {
 			return;
 		}
 		const a = keyAction(mode, e);
@@ -321,7 +338,7 @@
 				selected={i === cursor}
 				expanded={i === expandedIndex}
 				source={item.source_id ? srcMeta.get(item.source_id) : undefined}
-				tagColors={tagColorMap}
+				tags={tagMeta}
 				onselect={onRowSelect}
 			/>
 		{/snippet}
@@ -348,6 +365,8 @@
 		shown={items.length}
 	/>
 </div>
+
+<CommandLine {cl} />
 
 {#if sheetOpen}
 	<FilterSheet {filter} {sources} {tags} onchange={setFilter} onclose={() => (sheetOpen = false)} />

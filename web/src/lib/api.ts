@@ -3,7 +3,7 @@
 // nyttig-api's CSRF check requires.
 
 import { filterToParams } from './filter';
-import type { Filter, Item, Source, Tag } from './types';
+import type { Filter, Item, RuleTest, Source, Tag, TagRule } from './types';
 
 export class ApiError extends Error {
 	constructor(
@@ -14,8 +14,8 @@ export class ApiError extends Error {
 	}
 }
 
-async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
-	const init: RequestInit = { method, headers: { Accept: 'application/json' }, cache: 'no-store' };
+async function request<T>(method: string, path: string, body?: unknown, signal?: AbortSignal): Promise<T> {
+	const init: RequestInit = { method, headers: { Accept: 'application/json' }, cache: 'no-store', signal };
 	if (method !== 'GET') {
 		init.headers = { ...init.headers, 'Content-Type': 'application/json' };
 		init.body = JSON.stringify(body ?? {});
@@ -41,6 +41,88 @@ export async function listSources(): Promise<Source[]> {
 
 export async function listTags(): Promise<Tag[]> {
 	return (await request<{ tags?: Tag[] }>('GET', '/api/tags')).tags ?? [];
+}
+
+// ── Management ────────────────────────────────────────────────
+// Bodies are built by forms.ts. PATCH bodies carry only the fields that
+// change: nyttig-api leaves absent fields unchanged.
+
+export interface SourceBody {
+	name?: string;
+	url?: string;
+	type?: string;
+	refresh_sec?: number;
+	enabled?: boolean;
+	color?: string;
+	abbreviation?: string;
+}
+
+export interface TagBody {
+	name?: string;
+	color?: string;
+}
+
+export interface RuleBody {
+	tag_id: string;
+	/** "" or absent: a global rule. */
+	source_id?: string;
+	field: string;
+	pattern: string;
+	priority?: number;
+}
+
+const idPath = (base: string, id: string) => base + '/' + encodeURIComponent(id);
+
+export function addSource(body: SourceBody): Promise<Source> {
+	return request<Source>('POST', '/api/sources', body);
+}
+
+export function updateSource(id: string, patch: SourceBody): Promise<Source> {
+	return request<Source>('PATCH', idPath('/api/sources', id), patch);
+}
+
+export function removeSource(id: string): Promise<void> {
+	return request<void>('DELETE', idPath('/api/sources', id));
+}
+
+export function addTag(body: TagBody): Promise<Tag> {
+	return request<Tag>('POST', '/api/tags', body);
+}
+
+export function updateTag(id: string, patch: TagBody): Promise<Tag> {
+	return request<Tag>('PATCH', idPath('/api/tags', id), patch);
+}
+
+export function removeTag(id: string): Promise<void> {
+	return request<void>('DELETE', idPath('/api/tags', id));
+}
+
+export async function listRules(): Promise<TagRule[]> {
+	return (await request<{ rules?: TagRule[] }>('GET', '/api/rules')).rules ?? [];
+}
+
+export function addRule(body: RuleBody): Promise<TagRule> {
+	return request<TagRule>('POST', '/api/rules', body);
+}
+
+export function removeRule(id: string): Promise<void> {
+	return request<void>('DELETE', idPath('/api/rules', id));
+}
+
+/**
+ * Dry-runs a pattern on the daemon, which matches with Go RE2 exactly like
+ * the tagger. Patterns are never evaluated in the browser: JavaScript
+ * regular expressions differ (e.g. "(?i)" is a syntax error there).
+ */
+export async function testRule(
+	q: { pattern: string; field: string; source_id?: string; limit?: number },
+	signal?: AbortSignal
+): Promise<RuleTest> {
+	const body: Record<string, unknown> = { pattern: q.pattern, field: q.field };
+	if (q.source_id) body.source_id = q.source_id;
+	if (q.limit) body.limit = q.limit;
+	const r = await request<{ items?: Item[]; scanned?: number }>('POST', '/api/rules/test', body, signal);
+	return { items: r.items ?? [], scanned: r.scanned ?? 0 };
 }
 
 /** Fetches all sources now, or one when sourceId is given. */

@@ -16,14 +16,34 @@ export function sourceDisplays(sources: Source[]): Map<string, SourceDisplay> {
 	return m;
 }
 
-/** Tag colors by name, for chips whose item copy has no color. */
-export function tagColors(tags: Tag[]): Map<string, string> {
-	const m = new Map<string, string>();
+/** How a tag is shown in a chip: its current name and color. */
+export interface TagDisplay {
+	name: string;
+	color: string | undefined;
+}
+
+/**
+ * Tags by ID. An item carries a copy of its tags from when the feed was
+ * loaded; rows prefer these, so a renamed or recolored tag shows its new
+ * look without reloading the feed.
+ */
+export function tagDisplays(tags: Tag[]): Map<string, TagDisplay> {
+	const m = new Map<string, TagDisplay>();
 	for (const t of tags) {
-		const c = safeColor(t.color);
-		if (t.name && c) m.set(t.name, c);
+		if (t.id) m.set(t.id, { name: t.name ?? '', color: safeColor(t.color) });
 	}
 	return m;
+}
+
+/**
+ * When an enabled source is next fetched, in ms since epoch: its last fetch
+ * plus its refresh interval, the schedule the daemon keeps. A source that
+ * was never fetched is due now. Null for a disabled source.
+ */
+export function nextFetch(s: Source, now: number): number | null {
+	if (!s.enabled) return null;
+	const lf = s.last_fetch ? Date.parse(s.last_fetch) : NaN;
+	return Number.isNaN(lf) ? now : lf + (s.refresh_sec ?? 0) * 1000;
 }
 
 export interface FetchTimes {
@@ -44,9 +64,8 @@ export function fetchTimes(sources: Source[], now: number): FetchTimes {
 	for (const s of sources) {
 		const lf = s.last_fetch ? Date.parse(s.last_fetch) : NaN;
 		if (!Number.isNaN(lf)) last = last === null ? lf : Math.max(last, lf);
-		if (!s.enabled) continue;
-		const n = Number.isNaN(lf) ? now : lf + (s.refresh_sec ?? 0) * 1000;
-		next = next === null ? n : Math.min(next, n);
+		const n = nextFetch(s, now);
+		if (n !== null) next = next === null ? n : Math.min(next, n);
 	}
 	return { last, next };
 }

@@ -60,6 +60,12 @@
 			<option value="1">unviewed only</option>
 		</select>
 	</label>
+	<nav class="manage" aria-label="manage">
+		<span>manage</span>
+		<a href="/sources" data-testid="manage-sources">sources</a>
+		<a href="/tags" data-testid="manage-tags">tags</a>
+		<a href="/rules" data-testid="manage-rules">rules</a>
+	</nav>
 	<button type="button" class="done" onclick={onclose}>done</button>
 </div>
 
@@ -102,5 +108,19 @@
 	}
 	.done {
 		color: var(--accent);
+	}
+	.manage {
+		display: grid;
+		grid-template-columns: 10ch repeat(3, 1fr);
+		align-items: center;
+		gap: 8px;
+	}
+	.manage a {
+		display: grid;
+		place-items: center;
+		height: 44px;
+		border: 1px solid var(--sel);
+		border-radius: 6px;
+		text-decoration: none;
 	}
 </style>

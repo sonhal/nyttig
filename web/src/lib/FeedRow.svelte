@@ -7,7 +7,7 @@
 -->
 <script lang="ts">
 	import { formatDate, formatTime } from './format';
-	import type { SourceDisplay } from './meta';
+	import type { SourceDisplay, TagDisplay } from './meta';
 	import { domainOf, htmlToText, oneLine, safeColor } from './sanitize';
 	import type { Item } from './types';
 
@@ -17,11 +17,12 @@
 		selected: boolean;
 		expanded: boolean;
 		source: SourceDisplay | undefined;
-		tagColors: Map<string, string>;
+		/** Current tags by ID; they win over the item's copy of its tags. */
+		tags: Map<string, TagDisplay>;
 		onselect: (index: number) => void;
 	}
 
-	let { item, index, selected, expanded, source, tagColors, onselect }: Props = $props();
+	let { item, index, selected, expanded, source, tags, onselect }: Props = $props();
 
 	const title = $derived(oneLine(item.title) || '(untitled)');
 	const desc = $derived(htmlToText(item.description));
@@ -55,9 +56,9 @@
 		{#if item.tags?.length}
 			<span class="tags">
 				{#each item.tags as tag, i (tag.id ?? i)}
+					{@const cur = tag.id ? tags.get(tag.id) : undefined}
 					<span class="chip"
-						>[<span style:color={safeColor(tag.color) ?? tagColors.get(tag.name ?? '')}
-							>{oneLine(tag.name)}</span
+						>[<span style:color={cur ? cur.color : safeColor(tag.color)}>{oneLine(cur?.name || tag.name)}</span
 						>]</span
 					>
 				{/each}

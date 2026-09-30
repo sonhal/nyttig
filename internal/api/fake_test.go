@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"log/slog"
 	"sync"
@@ -31,6 +32,12 @@ type fakeClient struct {
 	lastSrch  *pb.SearchRequest
 	refreshed []int64
 	viewed    [][]int64
+
+	// Management RPCs record their last request (or removed IDs) here.
+	rules    []*pb.TagRule
+	ruleTest *pb.TestTagRuleResponse
+	lastReq  proto.Message
+	removed  []string
 
 	// stream is returned by StreamItems; streamErr fails the call instead.
 	stream    *fakeStream
@@ -82,6 +89,100 @@ func (f *fakeClient) MarkViewed(_ context.Context, req *pb.MarkViewedRequest, _ 
 	defer f.mu.Unlock()
 	f.viewed = append(f.viewed, req.ItemIds)
 	return &emptypb.Empty{}, nil
+}
+
+func (f *fakeClient) record(req proto.Message) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.lastReq = req
+}
+
+func (f *fakeClient) recordRemove(kind string, id int64) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.removed = append(f.removed, fmt.Sprintf("%s/%d", kind, id))
+}
+
+func (f *fakeClient) AddSource(_ context.Context, req *pb.AddSourceRequest, _ ...grpc.CallOption) (*pb.Source, error) {
+	f.record(req)
+	if f.err != nil {
+		return nil, f.err
+	}
+	return &pb.Source{Id: 10, Name: req.Name, Url: req.Url, Enabled: req.Enabled, Color: req.Color}, nil
+}
+
+func (f *fakeClient) UpdateSource(_ context.Context, req *pb.UpdateSourceRequest, _ ...grpc.CallOption) (*pb.Source, error) {
+	f.record(req)
+	if f.err != nil {
+		return nil, f.err
+	}
+	return &pb.Source{Id: req.Id, Name: req.GetName(), Color: req.GetColor()}, nil
+}
+
+func (f *fakeClient) RemoveSource(_ context.Context, req *pb.RemoveSourceRequest, _ ...grpc.CallOption) (*emptypb.Empty, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	f.recordRemove("source", req.Id)
+	return &emptypb.Empty{}, nil
+}
+
+func (f *fakeClient) AddTag(_ context.Context, req *pb.AddTagRequest, _ ...grpc.CallOption) (*pb.Tag, error) {
+	f.record(req)
+	if f.err != nil {
+		return nil, f.err
+	}
+	return &pb.Tag{Id: 5, Name: req.Name, Color: req.Color}, nil
+}
+
+func (f *fakeClient) UpdateTag(_ context.Context, req *pb.UpdateTagRequest, _ ...grpc.CallOption) (*pb.Tag, error) {
+	f.record(req)
+	if f.err != nil {
+		return nil, f.err
+	}
+	return &pb.Tag{Id: req.Id, Name: req.GetName(), Color: req.GetColor()}, nil
+}
+
+func (f *fakeClient) RemoveTag(_ context.Context, req *pb.RemoveTagRequest, _ ...grpc.CallOption) (*emptypb.Empty, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	f.recordRemove("tag", req.Id)
+	return &emptypb.Empty{}, nil
+}
+
+func (f *fakeClient) ListTagRules(context.Context, *emptypb.Empty, ...grpc.CallOption) (*pb.ListTagRulesResponse, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	return &pb.ListTagRulesResponse{Rules: f.rules}, nil
+}
+
+func (f *fakeClient) AddTagRule(_ context.Context, req *pb.AddTagRuleRequest, _ ...grpc.CallOption) (*pb.TagRule, error) {
+	f.record(req)
+	if f.err != nil {
+		return nil, f.err
+	}
+	return &pb.TagRule{Id: 3, TagId: req.TagId, SourceId: req.SourceId, Field: req.Field, Pattern: req.Pattern}, nil
+}
+
+func (f *fakeClient) RemoveTagRule(_ context.Context, req *pb.RemoveTagRuleRequest, _ ...grpc.CallOption) (*emptypb.Empty, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	f.recordRemove("rule", req.Id)
+	return &emptypb.Empty{}, nil
+}
+
+func (f *fakeClient) TestTagRule(_ context.Context, req *pb.TestTagRuleRequest, _ ...grpc.CallOption) (*pb.TestTagRuleResponse, error) {
+	f.record(req)
+	if f.err != nil {
+		return nil, f.err
+	}
+	if f.ruleTest == nil {
+		return &pb.TestTagRuleResponse{}, nil
+	}
+	return proto.Clone(f.ruleTest).(*pb.TestTagRuleResponse), nil
 }
 
 func (f *fakeClient) StreamItems(ctx context.Context, _ ...grpc.CallOption) (grpc.BidiStreamingClient[pb.ClientMessage, pb.ServerMessage], error) {

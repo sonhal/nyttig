@@ -51,3 +51,24 @@ export interface Filter {
 	sort: Sort;
 	unviewed: boolean;
 }
+
+export type RuleField = 'title' | 'description' | 'both';
+
+export interface TagRule {
+	id?: string;
+	/** Absent (0) for a global rule. */
+	source_id?: string;
+	tag_id?: string;
+	tag_name?: string;
+	field?: string;
+	pattern?: string;
+	priority?: number;
+}
+
+/** POST /api/rules/test: a dry run of a pattern against recent items. */
+export interface RuleTest {
+	/** Matching items, newest first. */
+	items: Item[];
+	/** How many recent items the daemon checked. */
+	scanned: number;
+}
