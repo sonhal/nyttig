@@ -1,0 +1,79 @@
+// Package api is nyttig-api, the web client's HTTP API: JSON and Server-Sent Events over
+// the daemon's gRPC API, behind security middleware. The SvelteKit app in
+// web/ is a separate Node service; the reverse proxy sends /api/* here and
+// everything else to it.
+//
+// The package only depends on the generated pb.NyttigClient interface, so
+// handlers are tested against a fake and could be mounted elsewhere.
+package api
+
+import (
+	"errors"
+	"fmt"
+	"log/slog"
+	"net/http"
+	"time"
+
+	pb "github.com/sonhal/nyttig/internal/proto/nyttig/v1"
+)
+
+// Config configures the handler returned by New.
+type Config struct {
+	// Client talks to nyttigd. Required.
+	Client pb.NyttigClient
+	// Origin is the public origin the app is served from, such as
+	// "https://nyttig.example.com". Required: it drives the CSRF and Host
+	// checks.
+	Origin string
+	// Logger defaults to slog.Default().
+	Logger *slog.Logger
+	// PingInterval between SSE keep-alive comments. Default 20s.
+	PingInterval time.Duration
+	// StreamQueue is the per-connection SSE queue length. Default 1024.
+	StreamQueue int
+}
+
+// ── Construction ──────────────────────────────────────────────
+
+// New returns the nyttig-api handler: the API, SSE and security middleware.
+func New(cfg Config) (http.Handler, error) {
+	if cfg.Client == nil {
+		return nil, errors.New("web: Client is required")
+	}
+	origin, host, err := ParseOrigin(cfg.Origin)
+	if err != nil {
+		return nil, fmt.Errorf("web: %w", err)
+	}
+	if cfg.Logger == nil {
+		cfg.Logger = slog.Default()
+	}
+	if cfg.PingInterval <= 0 {
+		cfg.PingInterval = defaultPingInterval
+	}
+	if cfg.StreamQueue <= 0 {
+		cfg.StreamQueue = defaultQueueSize
+	}
+	a := &handlers{client: cfg.Client}
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /api/health", a.health)
+	mux.HandleFunc("GET /api/sources", a.listSources)
+	mux.HandleFunc("GET /api/tags", a.listTags)
+	mux.HandleFunc("POST /api/refresh", a.refresh)
+	mux.HandleFunc("GET /api/items", a.items)
+	mux.HandleFunc("POST /api/viewed", a.viewed)
+	mux.Handle("GET /api/stream", &streamHandler{
+		client:       cfg.Client,
+		pingInterval: cfg.PingInterval,
+		queueSize:    cfg.StreamQueue,
+		log:          cfg.Logger,
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		writeError(w, http.StatusNotFound, "no such endpoint")
+	})
+
+	var h http.Handler = mux
+	h = csrfCheck(origin, h)
+	h = hostCheck(host, h)
+	h = securityHeaders(h)
+	return h, nil
+}

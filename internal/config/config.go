@@ -16,13 +16,17 @@ import (
 
 // Config mirrors the structure of the TOML config file.
 type Config struct {
-	Socket   string    `toml:"socket"`
-	DBPath   string    `toml:"db_path"`
-	LogLevel string    `toml:"log_level"`
-	TLS      TLS       `toml:"tls"`
-	Sources  []Source  `toml:"sources"`
-	Tags     []Tag     `toml:"tags"`
-	TagRules []TagRule `toml:"tag_rules"`
+	Socket   string `toml:"socket"`
+	DBPath   string `toml:"db_path"`
+	LogLevel string `toml:"log_level"`
+	// BlockPrivateAddresses stops feed fetches from connecting to loopback,
+	// private and link-local addresses. Turn it on when the daemon is
+	// managed through an internet-facing client such as nyttig-api.
+	BlockPrivateAddresses bool      `toml:"block_private_addresses"`
+	TLS                   TLS       `toml:"tls"`
+	Sources               []Source  `toml:"sources"`
+	Tags                  []Tag     `toml:"tags"`
+	TagRules              []TagRule `toml:"tag_rules"`
 }
 
 // TLS configures mutual-TLS for the daemon's gRPC listener. When set, the
@@ -30,10 +34,15 @@ type Config struct {
 // signed by a CA in ClientCA. Paths may use a leading "~" for the home
 // directory. Leave the whole table out to listen in plaintext (the default,
 // appropriate for a local Unix socket).
+//
+// Without Listen, TLS applies to the socket listener. With Listen (a TCP
+// address such as ":9090"), the daemon serves mTLS there and keeps serving
+// the socket, which must then be a Unix socket path, in plaintext.
 type TLS struct {
 	Cert     string `toml:"cert"`
 	Key      string `toml:"key"`
 	ClientCA string `toml:"client_ca"`
+	Listen   string `toml:"listen"`
 }
 
 // Source is a feed source declared in the config file.

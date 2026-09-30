@@ -1,0 +1,6 @@
+/node_modules/
+/.svelte-kit/
+/test-results/
+/playwright-report/
+/e2e/.tmp/
+/build/

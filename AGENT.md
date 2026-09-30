@@ -5,12 +5,16 @@ Guidance for AI coding agents working in the **nyttig** repository.
 ## What this project is
 
 Nyttig is a news aggregator with a developer-oriented terminal UI. It follows the
-Docker model — **two binaries** that talk over **gRPC**:
+Docker model — a daemon and clients that talk over **gRPC**:
 
-| Binary    | Path             | Role                                                                          |
-|-----------|------------------|-------------------------------------------------------------------------------|
-| `nyttigd` | `cmd/nyttigd`    | Daemon/server. Fetches RSS/Atom feeds on a schedule, tags items, serves gRPC. |
-| `nyttig`  | `cmd/nyttig`     | Client. Bubble Tea TUI (no args) or CLI subcommands for headless management.  |
+| Binary       | Path             | Role                                                                          |
+|--------------|------------------|-------------------------------------------------------------------------------|
+| `nyttigd`    | `cmd/nyttigd`    | Daemon/server. Fetches RSS/Atom feeds on a schedule, tags items, serves gRPC. |
+| `nyttig`     | `cmd/nyttig`     | Client. Bubble Tea TUI (no args) or CLI subcommands for headless management.  |
+| `nyttig-api` | `cmd/nyttig-api` | Client. The web app's API (JSON + SSE over the gRPC API), behind a proxy.     |
+
+The web app itself (`web/`) is a SvelteKit app served by its own Node
+server; Caddy routes `/api/*` to nyttig-api and everything else to it.
 
 The client connects to the daemon over a **Unix domain socket** by default
 (`/tmp/nyttig.sock`), or over TCP protected by **mutual TLS** for remote
@@ -25,6 +29,8 @@ via a **bidirectional gRPC stream**.
 - Feed parsing: standard library `encoding/xml` (RSS 2.0 and Atom)
 - Config: **TOML**
 - Logging: `slog` with JSON output to stderr
+- Web client: **SvelteKit 2 + Svelte 5** (runes, TypeScript strict) on
+  `@sveltejs/adapter-node`; **pnpm**, Vitest, Playwright
 
 ## Repository layout
 
@@ -32,15 +38,25 @@ via a **bidirectional gRPC stream**.
 cmd/nyttig/main.go          Client entrypoint: TUI launch + CLI subcommands
 cmd/nyttigd/main.go         Daemon entrypoint: wires db → fetcher → tagger → scheduler → gRPC
 proto/nyttig/v1/nyttig.proto   Source-of-truth API definition
-proto/buf.yaml, buf.gen.yaml    buf config for codegen (currently broken, see below)
+buf.yaml, buf.gen.yaml      buf config for codegen; run `buf generate` from the repo root
 internal/proto/nyttig/v1/   GENERATED Go from the proto (do not hand-edit)
 internal/config/            TOML config loading + ~ expansion
 internal/client/            gRPC client wrapper + StreamSub helper used by the TUI
 internal/mtls/              Mutual-TLS credential loading shared by daemon and client
 internal/tui/               Bubble Tea Model, filter bar, table, status bar, view tracking
-internal/server/service/    gRPC service impl + Hub (broadcasts pushed items to subscribers)
+internal/api/               nyttig-api's HTTP API: routing (server.go), JSON handlers (api.go),
+                            SSE bridge (stream.go), security middleware (security.go)
+cmd/nyttig-api/main.go      nyttig-api entrypoint: flags, listen-address guard, HTTP server
+web/                        The SvelteKit app (pnpm); "pnpm build" writes a Node server to web/build/
+web/src/lib/                Pure modules (reducer, keymap, filter, sanitize, viewed) with
+                            Vitest tests next to them, plus the Svelte components
+web/e2e/                    Playwright tests; stack.mjs starts a feed server, nyttigd, nyttig-api,
+                            the app server and a Caddy-like proxy (proxy.mjs)
+internal/server/service/    gRPC service impl + Hub (broadcasts pushed items to subscribers);
+                            validate.go holds all client-input validation
 internal/server/db/         SQLite layer: items, sources, tags, views; embedded migrations
-internal/server/fetcher/    Feed fetch/parse + GUID-based dedup
+internal/server/fetcher/    Feed fetch/parse + GUID-based dedup; client.go builds the HTTP
+                            client, including the private-address (SSRF) block
 internal/server/tagger/     Regex-based auto-tagging engine
 internal/server/scheduler/  Per-source fetch timers; refresh/enable/disable lifecycle
 migrations/                 Copy of the migrations; the DB applies the embedded set in internal/server/db/migrations
@@ -48,9 +64,13 @@ third_party/                Vendored, patched mattn/go-sqlite3 (see note below)
 scripts/gen-certs.sh        Generates a private CA plus server/client certs for mTLS
 .github/workflows/ci.yml    CI pipeline (see below)
 .github/dependabot.yml      Weekly grouped dependency updates
-sample_config.toml          Example config
-nyttigd.service             Example systemd user unit
-deploy/                     VPS deployment: system unit (mTLS), backup timer, config, guide
+sample_config.toml          Example config (loaded by a test, so keep it valid)
+deploy/systemd/             Hardened system units; nyttigd runs as a dedicated `nyttig` user,
+                            nyttig-api as a DynamicUser in the `nyttig` group, nyttig-web
+                            (the app's Node server) as a DynamicUser
+deploy/README.md            VPS guide: sizing, build for Debian, mTLS for the TUI, backups, upgrades
+deploy/Caddyfile            Example reverse proxy (TLS, basic auth, /api/* vs the app)
+docs/web-client-plan.md     Plan for the nyttig-api browser client (phases and decisions)
 ```
 
 ## Architecture notes (read before changing server code)
@@ -65,14 +85,33 @@ deploy/                     VPS deployment: system unit (mTLS), backup timer, co
 - **The Hub** (`service.go`) holds active `StreamItems` subscribers. The fetch
   pipeline calls `hub.Push(item)`; `Push` is **non-blocking** and drops items
   for slow subscribers (64-buffered channel). `StreamItems` re-filters pushed
-  items per-subscriber against the current `StreamFilter`.
+  items per-subscriber against the current `StreamFilter`, including the
+  search query (checked against `items_fts` with `db.ItemMatchesSearch`).
 - **Adapters between layers** (e.g. `db.Source` ⇄ `scheduler.Source`,
   `db.TagRule` ⇄ `tagger.TagRule`) live in `cmd/nyttigd/main.go`. Each inner
   package defines its own store interfaces (`scheduler.SourceStore`,
   `tagger.RuleStore`) so they don't import the db package directly.
-- **Fetching** uses one shared `http.Client` with a 30s timeout and caps
-  response bodies at 10 MiB (`fetcher/fetch.go`). Keep both bounds when
-  changing the fetcher; feeds are untrusted input.
+- **Fetching** uses one shared `http.Client` from `fetcher.NewHTTPClient`
+  with a 30s timeout, and caps response bodies at 10 MiB (`fetcher/fetch.go`).
+  Keep both bounds when changing the fetcher; feeds are untrusted input.
+  With `block_private_addresses` the client refuses non-public destinations
+  in the dialer's `Control` hook, i.e. on the resolved IP at connect time.
+  Keep the check there: validating the URL or hostname beforehand is
+  bypassable with DNS rebinding and redirects.
+- **Validation** of everything a client sends lives in
+  `service/validate.go` and runs in the service, so every client gets it.
+  Config seeding in `cmd/nyttigd/main.go` writes to the db directly and is
+  not validated (the config file is trusted).
+- **Source edits reach the scheduler** through `OnSourceUpdated`, which the
+  service calls only when `enabled`, `url` or `refresh_sec` changed. The daemon
+  then calls `scheduler.RestartSource`: a running runner keeps the `Source` it
+  was started with, so `EnableSource` alone would keep the old URL/interval.
+- **Listeners** (`planListeners` in `cmd/nyttigd/main.go`): one gRPC
+  server per listener, all serving the same service. By default there is
+  one, `socket`, with mTLS if `[tls]` is set. With `[tls] listen` the
+  daemon also serves mTLS on that TCP address and keeps `socket` as a
+  plaintext Unix socket (for nyttig-api); a TCP `socket` is then refused so
+  no plaintext port opens by accident.
 - **Dedup** is by `UNIQUE(source_id, guid)`. GUID is the feed `<guid>` if
   present, else SHA-256 of `<link>`.
 - **Search** input is wrapped by `ftsQuote` (`db/items.go`) so it is matched as
@@ -83,6 +122,24 @@ deploy/                     VPS deployment: system unit (mTLS), backup timer, co
 - **View tracking** is K9s-style: the TUI marks items viewed as they scroll
   past, debounced into ~3s batches, sent via `MarkViewed`. A row exists in
   `view_state` ⟺ viewed.
+- **nyttig-api** (`internal/api`) depends only on the generated
+  `pb.NyttigClient` interface; `cmd/nyttig-api` builds it from
+  `client.DialConn`. Handler tests use a fake client (`fake_test.go`).
+  JSON is `protojson` with `UseProtoNames`, so int64 IDs are strings and
+  zero values are left out; the TypeScript types in `web/src/lib/types.ts`
+  mirror that. `/api/stream` opens one `StreamItems` per SSE connection and
+  never changes its filter: the browser reconnects instead. The bridge
+  sends its own first `reset` (the daemon only sends one on filter
+  changes), and closes the connection when its bounded queue overflows so
+  the browser resyncs. Items and colors are sanitized on the way out
+  (`sanitize.go`), and again in the browser.
+- **Feed content in the browser is untrusted.** Never use `{@html}`; render
+  text only (`htmlToText` in `web/src/lib/sanitize.ts`), links through
+  `safeLink`, colors through `safeColor`, and don't load feed images. The
+  CSP (`kit.csp` in `web/svelte.config.js`) forbids inline scripts except
+  SvelteKit's bootstrap, which gets a per-request nonce; other page headers
+  are set in `web/src/hooks.server.ts`. The feed renders client-side
+  (`ssr = false`), so the Node server only sends the app shell.
 - **Config** (`internal/config`): `socket`, `db_path` and `log_level` are
   top-level keys (there is no `[server]` table), followed by `[tls]`,
   `[[sources]]`, `[[tags]]` and `[[tag_rules]]`. `config.Load` rejects unknown
@@ -109,7 +166,43 @@ go test ./internal/server/fetcher/   # run one package's tests
 go run ./cmd/nyttigd --socket /tmp/nyttig.sock --config ./sample_config.toml --log-level debug
 go run ./cmd/nyttig                  # launch the TUI (daemon must be running)
 go run ./cmd/nyttig list-sources     # CLI subcommand
+go run ./cmd/nyttig-api --origin http://localhost:5173   # web API, for "pnpm dev" in web/ (daemon must be running)
 ```
+
+### Web app (`web/`)
+
+Node.js 22+ and pnpm (the version is pinned by `packageManager` in
+`web/package.json`; `corepack enable` picks it up). Run these in `web/`;
+CI's Web job runs the same:
+
+```bash
+pnpm install --frozen-lockfile
+pnpm check                           # svelte-kit sync + svelte-check (TypeScript), no warnings
+pnpm test                            # vitest: reducer, keymap, filter, sanitizers, view tracker
+pnpm build                           # vite build; writes build/, run it with "node build"
+pnpm test:e2e                        # Playwright; needs "pnpm build" first
+pnpm dev                             # Vite dev server on :5173, /api proxied to 127.0.0.1:7070
+```
+
+- **Two services:** the Go side never serves the app and the Node side
+  never serves `/api`; routing is the proxy's job (Caddy in production,
+  Vite's dev proxy in `pnpm dev`, `e2e/proxy.mjs` in the tests). The app
+  build has no runtime `dependencies`, so `web/build/` plus
+  `web/package.json` is the whole deployable.
+- **`pnpm dev`:** start nyttig-api with `--origin http://localhost:5173`;
+  the Vite proxy keeps the browser's Host and Origin, which nyttig-api checks.
+- **End-to-end tests** (`web/e2e/`): `stack.mjs` builds nyttigd and
+  nyttig-api (or uses `NYTTIG_BIN_DIR`), starts a local RSS server
+  (`feeds.mjs`), both binaries on a temporary database, the app's Node
+  server, and a proxy on 7812 that routes like the Caddyfile.
+  They run at a desktop and a mobile (Pixel 7) viewport. Where
+  `playwright install` can't download browsers, point
+  `PLAYWRIGHT_CHROMIUM_EXECUTABLE` at an installed Chromium, e.g.
+  `PLAYWRIGHT_CHROMIUM_EXECUTABLE=/opt/pw-browsers/chromium pnpm test:e2e`.
+- **Dependencies** are kept to the list in `web/package.json` (no CSS
+  framework, component library or font CDN). pnpm 10 runs no dependency
+  install scripts unless listed in `onlyBuiltDependencies`
+  (`web/pnpm-workspace.yaml`), which also sets `minimumReleaseAge`.
 
 A C compiler is required: SQLite is built with cgo, and so is the race
 detector. `golangci-lint` must be built with Go 1.26 or newer, or it refuses to
@@ -130,8 +223,10 @@ on `ubuntu-latest`, with the Go version taken from `go.mod`:
 | Job | What it checks |
 |---|---|
 | Lint | gofmt, `go mod tidy -diff`, `go vet`, golangci-lint |
+| Generated code | `buf generate` leaves `internal/proto` unchanged |
 | Test | `go test -race -shuffle=on` with coverage |
-| Build | Builds both binaries; runs only after Lint and Test pass |
+| Web | `pnpm install --frozen-lockfile`, svelte-check, vitest, vite build, Playwright end-to-end; uploads the app build (`nyttig-web`) |
+| Build | Builds the three binaries; runs only after Lint, Test and Web pass |
 | Vulnerability check | `govulncheck ./...` against the code paths the binaries call |
 
 - golangci-lint runs with `only-new-issues: true` because the code has a
@@ -150,15 +245,32 @@ The proto is the API source of truth. Output lands in
 `internal/server/service/` and the client wrapper in `internal/client/` to
 match.
 
-**`buf generate` does not currently work.** `proto/buf.yaml` declares
-`modules: - path: proto`, which is resolved relative to `proto/` itself, so buf
-looks in `proto/proto/` and fails with `Module "path: "proto"" had no .proto
-files`. Changing it to `path: .` lets `cd proto && buf generate` find the file.
-Generation then uses the remote plugins pinned in `buf.gen.yaml`, which needs
-network access to the Buf Schema Registry. After fixing the path, `buf lint`
-reports about 25 naming-rule violations in the existing API; fixing those
-means breaking changes to the API, so don't do it as a drive-by. Generated
-code must be gofmt-clean, and buf's output already is.
+Generate from the repository root with local, pinned plugins (no Buf
+Schema Registry access needed):
+
+```bash
+go install github.com/bufbuild/buf/cmd/buf@v1.73.0
+go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.10
+go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.5.1
+buf generate
+```
+
+CI's **Generated code** job runs the same commands and fails if
+`internal/proto` changes. That guards against a real past bug: fields were
+added to the Go structs by hand, but protobuf-go serializes from the
+descriptor embedded in the generated file, so `Source.color`/`abbreviation`
+were silently dropped on the wire. `service_test.go`'s
+`TestSourceColorSurvivesWire` checks this too. When bumping a plugin version,
+change it in `buf.gen.yaml`'s comment, the CI job and here.
+
+Managed mode is off on purpose: the proto's own `go_package` sets the Go
+package (`v1`). `buf lint` reports about 25 naming-rule violations in the
+existing API; fixing those means breaking API changes, so don't do it as a
+drive-by.
+
+Fields that clients patch use proto3 `optional` (field presence), e.g.
+`UpdateSourceRequest` and `UpdateTagRequest`: unset = unchanged. Use the same
+pattern for new update RPCs rather than treating zero values as "unset".
 
 ## Dependencies
 
@@ -173,7 +285,8 @@ code must be gofmt-clean, and buf's output already is.
   (on pkg.go.dev/vuln) rather than assuming "latest is safe".
 - **gRPC** is reachable from the network in `nyttigd`, so its advisories
   matter. Keep it on a release govulncheck reports clean.
-- **Dependabot** opens weekly grouped PRs for Go modules and GitHub Actions.
+- **Dependabot** opens weekly grouped PRs for Go modules, GitHub Actions and
+  the web app's npm packages (`/web`).
   It ignores `github.com/mattn/go-sqlite3`, because the `replace` directive means
   a version bump would change nothing that gets built. Update the vendored copy
   in `third_party/` by hand instead, keeping the FTS5 file.
@@ -199,8 +312,8 @@ code must be gofmt-clean, and buf's output already is.
 
 - The repo README warns the project is LLM-generated; treat existing code as the
   spec and verify behavior with tests rather than assuming intent.
-- `UpdateSource` cannot distinguish "enabled not set" from "enabled=false" in
-  proto3 — see the comment in `service.go` before touching enable/disable.
+- Changing a tag's name or color must go through `UpdateTag`. `RemoveTag`
+  cascade-deletes the tag's rules and item assignments.
 - Two migration directories exist (`migrations/` and
   `internal/server/db/migrations/`); the DB applies the embedded set under
   `internal/server/db/migrations/`. Keep them in sync if you add migrations.
@@ -211,7 +324,11 @@ code must be gofmt-clean, and buf's output already is.
   test will be flaky.
 - A few comments in `fetcher/fetch_test.go` still mention gofeed; the project
   doesn't use it (parsing is `encoding/xml`).
-- Build artifacts (`bin/`, `dist/`, `main`, `nyttig`, `nyttigd`) and tool caches
+- The feed server in `web/e2e/feeds.mjs` escapes some descriptions twice on
+  purpose: nyttigd strips tags and then unescapes entities, and that is how
+  real markup reaches the browser.
+- Build artifacts (`bin/`, `dist/`, `main`, `nyttig`, `nyttigd`, `nyttig-api`,
+  and `web/build/` via `web/.gitignore`) and tool caches
   (`.deps/`, `.modcache/`, `.pi/`) are covered by `.gitignore`. Its patterns are
   anchored with a leading `/` so they don't match the `cmd/nyttig*` source
   directories; keep them that way. Don't force-add build output.

@@ -1,0 +1,9 @@
+# pnpm settings for the web client (there is only this one package).
+
+# Dependencies may not run install scripts unless listed here. None of the
+# current ones need to.
+onlyBuiltDependencies: []
+
+# Don't install versions published less than a day ago: most malicious
+# releases are caught and pulled within hours.
+minimumReleaseAge: 1440

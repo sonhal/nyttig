@@ -13,12 +13,15 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
+	"net/http"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/reflection"
 
 	"github.com/sonhal/nyttig/internal/config"
@@ -40,6 +43,8 @@ func main() {
 		tlsCert     = flag.String("tls-cert", "", "Server TLS certificate (PEM); enables mTLS together with -tls-key and -tls-client-ca")
 		tlsKey      = flag.String("tls-key", "", "Server TLS private key (PEM)")
 		tlsClientCA = flag.String("tls-client-ca", "", "CA bundle (PEM) used to verify client certificates")
+		tlsListen   = flag.String("tls-listen", "", "Extra TCP address (e.g. :9090) to serve with mTLS while -socket stays a plaintext Unix socket")
+		blockPriv   = flag.Bool("block-private-addresses", false, "Refuse to fetch feeds from loopback, private or link-local addresses (SSRF protection)")
 	)
 	flag.Parse()
 
@@ -75,6 +80,12 @@ func main() {
 		}
 		if cfg.TLS.ClientCA != "" && !setFlags["tls-client-ca"] {
 			*tlsClientCA = cfg.TLS.ClientCA
+		}
+		if cfg.TLS.Listen != "" && !setFlags["tls-listen"] {
+			*tlsListen = cfg.TLS.Listen
+		}
+		if cfg.BlockPrivateAddresses && !setFlags["block-private-addresses"] {
+			*blockPriv = true
 		}
 	}
 
@@ -145,9 +156,15 @@ func main() {
 
 	sched := scheduler.New(srcStore, nil, nil, logger) // fetchFn and clock set below
 
+	// One shared HTTP client for all feed fetches.
+	httpClient := fetcher.NewHTTPClient(fetcher.ClientOptions{BlockPrivateAddresses: *blockPriv})
+	if *blockPriv {
+		logger.Info("feed fetches restricted to public addresses")
+	}
+
 	// fetchFn is the callback the scheduler invokes for each source fetch.
 	fetchFn := func(ctx context.Context, s scheduler.Source) error {
-		return doFetch(ctx, database, s, tgr, hub, logger)
+		return doFetch(ctx, database, httpClient, s, tgr, hub, logger)
 	}
 
 	// Inject fetchFn into the scheduler.
@@ -180,10 +197,14 @@ func main() {
 		sched.RemoveSource(id)
 	})
 	svc.OnSourceUpdated(func(ctx context.Context, src db.Source) {
-		if src.Enabled {
-			sched.EnableSource(ctx, src.ID)
-		} else {
+		if !src.Enabled {
 			sched.DisableSource(src.ID)
+			return
+		}
+		// Restart rather than enable: a running runner keeps the URL and
+		// interval it was started with, so edits need a fresh runner.
+		if err := sched.RestartSource(ctx, src.ID); err != nil {
+			logger.Warn("restart source failed", "source_id", src.ID, "error", err)
 		}
 	})
 
@@ -194,11 +215,7 @@ func main() {
 	}
 	logger.Info("scheduler started")
 
-	// ── gRPC server ──────────────────────────────────────────────────────
-	grpcOpts := []grpc.ServerOption{
-		grpc.MaxConcurrentStreams(100),
-	}
-
+	// ── gRPC servers ─────────────────────────────────────────────────────
 	// Configure mutual TLS if any TLS option was provided (flag or config).
 	// All three are required together; mtls.ServerCredentials enforces this.
 	tlsOpts := mtls.ServerOptions{
@@ -206,51 +223,59 @@ func main() {
 		KeyFile:      config.ExpandHome(*tlsKey),
 		ClientCAFile: config.ExpandHome(*tlsClientCA),
 	}
+	var creds credentials.TransportCredentials
 	if tlsOpts.Enabled() {
-		creds, err := mtls.ServerCredentials(tlsOpts)
+		creds, err = mtls.ServerCredentials(tlsOpts)
 		if err != nil {
 			logger.Error("cannot configure mTLS", "error", err)
 			os.Exit(1)
 		}
-		grpcOpts = append(grpcOpts, grpc.Creds(creds))
-		logger.Info("mutual TLS enabled", "cert", tlsOpts.CertFile, "client_ca", tlsOpts.ClientCAFile)
-	} else {
-		logger.Warn("TLS not configured; serving in plaintext (use only on a local socket or trusted network)")
 	}
 
-	grpcServer := grpc.NewServer(grpcOpts...)
-	pb.RegisterNyttigServer(grpcServer, svc)
-	reflection.Register(grpcServer)
-
-	// ── Listener ─────────────────────────────────────────────────────────
-	var lis net.Listener
-	addr := *socket
-	if addr[0] == ':' || isHostPort(addr) {
-		// TCP listener.
-		lis, err = net.Listen("tcp", addr)
-	} else {
-		// Unix domain socket.
-		os.Remove(addr) // Clean up stale socket.
-		lis, err = net.Listen("unix", addr)
-	}
+	listeners, err := planListeners(*socket, *tlsListen, creds != nil)
 	if err != nil {
-		logger.Error("cannot listen", "addr", addr, "error", err)
+		logger.Error("invalid listener configuration", "error", err)
 		os.Exit(1)
 	}
-	defer lis.Close()
-	logger.Info("gRPC server listening", "addr", addr)
+
+	// Each listener gets its own gRPC server, because transport credentials
+	// are per server; all of them serve the same service (and Hub).
+	var servers []*grpc.Server
+	serverErr := make(chan error, len(listeners))
+	for _, l := range listeners {
+		opts := []grpc.ServerOption{grpc.MaxConcurrentStreams(100)}
+		if l.tls {
+			opts = append(opts, grpc.Creds(creds))
+		}
+		srv := grpc.NewServer(opts...)
+		pb.RegisterNyttigServer(srv, svc)
+		reflection.Register(srv)
+
+		lis, err := listen(l.addr)
+		if err != nil {
+			logger.Error("cannot listen", "addr", l.addr, "error", err)
+			os.Exit(1)
+		}
+		// srv.Serve owns lis from here and closes it when the server stops.
+
+		if l.tls {
+			logger.Info("mutual TLS enabled", "addr", l.addr, "cert", tlsOpts.CertFile, "client_ca", tlsOpts.ClientCAFile)
+		} else if creds == nil {
+			logger.Warn("TLS not configured; serving in plaintext (use only on a local socket or trusted network)")
+		}
+		logger.Info("gRPC server listening", "addr", l.addr)
+
+		servers = append(servers, srv)
+		go func() {
+			if err := srv.Serve(lis); err != nil {
+				serverErr <- err
+			}
+		}()
+	}
 
 	// ── Signal handling / graceful shutdown ──────────────────────────────
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
-
-	// Start server in a goroutine.
-	serverErr := make(chan error, 1)
-	go func() {
-		if err := grpcServer.Serve(lis); err != nil {
-			serverErr <- err
-		}
-	}()
 
 	logger.Info("nyttigd started", "version", "0.1.0")
 
@@ -272,7 +297,15 @@ func main() {
 
 	done := make(chan struct{})
 	go func() {
-		grpcServer.GracefulStop()
+		var wg sync.WaitGroup
+		for _, srv := range servers {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				srv.GracefulStop()
+			}()
+		}
+		wg.Wait()
 		close(done)
 	}()
 
@@ -281,8 +314,59 @@ func main() {
 		logger.Info("server stopped gracefully")
 	case <-ctx.Done():
 		logger.Warn("graceful stop timed out, forcing")
-		grpcServer.Stop()
+		for _, srv := range servers {
+			srv.Stop()
+		}
 	}
+}
+
+// listenerSpec is one address the daemon serves gRPC on.
+type listenerSpec struct {
+	addr string
+	tls  bool
+}
+
+// planListeners decides which addresses to serve and which of them use
+// mTLS. Without tlsListen there is one listener, socket, with TLS when it
+// is configured. With tlsListen, socket stays a plaintext Unix socket for
+// local clients and tlsListen is served with mTLS; socket must then not be
+// a TCP address, so a plaintext port can't be opened by accident.
+func planListeners(socket, tlsListen string, tlsConfigured bool) ([]listenerSpec, error) {
+	if socket == "" {
+		return nil, fmt.Errorf("socket must not be empty")
+	}
+	if tlsListen == "" {
+		return []listenerSpec{{addr: socket, tls: tlsConfigured}}, nil
+	}
+	if !tlsConfigured {
+		return nil, fmt.Errorf("tls listen %q needs tls cert, key and client_ca", tlsListen)
+	}
+	if !isTCP(tlsListen) {
+		return nil, fmt.Errorf("tls listen %q must be a TCP address such as :9090", tlsListen)
+	}
+	if isTCP(socket) {
+		return nil, fmt.Errorf("with tls listen set, socket %q must be a Unix socket path: it is served without TLS", socket)
+	}
+	return []listenerSpec{
+		{addr: socket, tls: false},
+		{addr: tlsListen, tls: true},
+	}, nil
+}
+
+// listen opens a TCP listener for "host:port" addresses and a Unix socket
+// otherwise, removing a stale socket file first.
+func listen(addr string) (net.Listener, error) {
+	if isTCP(addr) {
+		return net.Listen("tcp", addr)
+	}
+	_ = os.Remove(addr) // Clean up a stale socket; usually there is none.
+	return net.Listen("unix", addr)
+}
+
+// isTCP reports whether addr is a TCP address (":port" or "host:port")
+// rather than a Unix socket path.
+func isTCP(addr string) bool {
+	return addr != "" && (addr[0] == ':' || isHostPort(addr))
 }
 
 // ── Config seeding ───────────────────────────────────────────────────────────
@@ -488,6 +572,7 @@ func (s *dbTaggerStore) AssignTag(itemID, tagID int64) error {
 func doFetch(
 	ctx context.Context,
 	database *sql.DB,
+	httpClient *http.Client,
 	s scheduler.Source,
 	tgr *tagger.Tagger,
 	hub *service.Hub,
@@ -497,7 +582,7 @@ func doFetch(
 	dbSrc := schedulerSourceToDBSource(s)
 
 	// 1. Fetch and parse the feed.
-	result, err := fetcher.Fetch(database, dbSrc)
+	result, err := fetcher.FetchWithClient(database, dbSrc, httpClient)
 	if err != nil {
 		return fmt.Errorf("fetch: %w", err)
 	}

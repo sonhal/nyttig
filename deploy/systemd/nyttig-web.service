@@ -1,0 +1,68 @@
+# System unit for nyttig-web, the web app: the SvelteKit Node server built
+# from web/ ("pnpm build" writes it to web/build/). It only serves the app;
+# the app talks to nyttig-api's /api, which Caddy routes to nyttig-api
+# (see deploy/Caddyfile). It needs Node.js 22 or newer.
+#
+#   pnpm --dir web install --frozen-lockfile && pnpm --dir web build
+#   sudo install -d /opt/nyttig-web
+#   sudo cp -r web/build web/package.json /opt/nyttig-web/
+#   sudo install -m 0644 deploy/systemd/nyttig-web.service /etc/systemd/system/
+#   sudo systemctl edit nyttig-web          # set ORIGIN, see below
+#   sudo systemctl daemon-reload && sudo systemctl enable --now nyttig-web
+#
+# The build has no runtime dependencies (everything is bundled), so no
+# node_modules is needed; package.json marks the code as ES modules.
+#
+# ORIGIN must be the URL the browser uses, the same as nyttig-api's
+# --origin. Override it with "systemctl edit nyttig-web":
+#
+#   [Service]
+#   Environment=ORIGIN=https://nyttig.example.com
+
+[Unit]
+Description=Nyttig web app (SvelteKit)
+Documentation=https://github.com/sonhal/nyttig
+After=network.target
+
+[Service]
+Type=simple
+DynamicUser=yes
+ExecStart=/usr/bin/node /opt/nyttig-web/build
+Environment=NODE_ENV=production
+Environment=HOST=127.0.0.1
+Environment=PORT=7071
+Environment=ORIGIN=https://nyttig.example.com
+Restart=on-failure
+RestartSec=5
+
+# No outbound network, only accepting the reverse proxy on loopback.
+IPAddressDeny=any
+IPAddressAllow=localhost
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+
+# Hardening, as for nyttigd and nyttig-api, except MemoryDenyWriteExecute:
+# V8's JIT needs writable and executable memory.
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+ProtectProc=invisible
+ProcSubset=pid
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

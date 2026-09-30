@@ -1,0 +1,68 @@
+# System unit for nyttigd. Runs as the dedicated "nyttig" system user:
+#
+#   sudo useradd --system --home-dir /var/lib/nyttig --shell /usr/sbin/nologin nyttig
+#   sudo install -m 0755 nyttigd nyttig /usr/local/bin/
+#   sudo install -D -o root -g nyttig -m 0640 sample_config.toml /etc/nyttig/config.toml
+#   sudo install -m 0644 deploy/systemd/nyttigd.service /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now nyttigd
+#
+# Members of the "nyttig" group can use the socket:
+#   sudo usermod -aG nyttig "$USER"      # then log in again
+#   nyttig --socket /run/nyttig/nyttig.sock
+#
+# Use absolute paths in /etc/nyttig/config.toml: "~" expands to the service
+# user's home, /var/lib/nyttig. The flags below override the file's socket
+# and db_path.
+
+[Unit]
+Description=Nyttig news aggregator daemon
+Documentation=https://github.com/sonhal/nyttig
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=nyttig
+Group=nyttig
+ExecStart=/usr/local/bin/nyttigd --config /etc/nyttig/config.toml \
+  --socket /run/nyttig/nyttig.sock --db-path /var/lib/nyttig/nyttig.db
+Restart=on-failure
+RestartSec=5
+
+# Directories systemd creates and owns for the service.
+# 0700: only the socket is for the "nyttig" group, and it lives in
+# /run/nyttig. The database stays private to nyttigd, so group members
+# such as nyttig-api can't read it directly.
+StateDirectory=nyttig
+StateDirectoryMode=0700
+RuntimeDirectory=nyttig
+RuntimeDirectoryMode=0750
+ConfigurationDirectory=nyttig
+# Group members may connect to the socket (srwxrwx---); others may not.
+UMask=0007
+
+# Hardening. nyttigd parses untrusted feeds from the internet, so it gets
+# no privileges and only the filesystem paths above.
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+
+[Install]
+WantedBy=multi-user.target

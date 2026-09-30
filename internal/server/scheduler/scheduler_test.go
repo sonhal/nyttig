@@ -419,6 +419,60 @@ func TestScheduler_EnableDisableSource(t *testing.T) {
 	}
 }
 
+// TestScheduler_RestartSourcePicksUpChanges verifies that RestartSource makes
+// a running source fetch with its updated URL, without a daemon restart.
+func TestScheduler_RestartSourcePicksUpChanges(t *testing.T) {
+	store := newFakeStore()
+	store.addSource(Source{ID: 1, Name: "Test", URL: "https://old/rss", RefreshSec: 10, Enabled: true})
+
+	urls := make(chan string, 10)
+	fetchFn := func(ctx context.Context, src Source) error {
+		urls <- src.URL
+		return nil
+	}
+
+	s := New(store, fetchFn, &fakeClock{}, nil)
+	if err := s.Start(context.Background()); err != nil {
+		t.Fatalf("Start failed: %v", err)
+	}
+	defer s.Stop()
+
+	if got := <-urls; got != "https://old/rss" {
+		t.Fatalf("first fetch url = %q, want old url", got)
+	}
+
+	store.addSource(Source{ID: 1, Name: "Test", URL: "https://new/rss", RefreshSec: 20, Enabled: true})
+	if err := s.RestartSource(context.Background(), 1); err != nil {
+		t.Fatalf("RestartSource failed: %v", err)
+	}
+
+	select {
+	case got := <-urls:
+		if got != "https://new/rss" {
+			t.Fatalf("fetch after restart url = %q, want new url", got)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("no fetch after RestartSource")
+	}
+	if running := s.RunningSources(); len(running) != 1 || running[0] != 1 {
+		t.Fatalf("RunningSources = %v, want [1]", running)
+	}
+}
+
+// TestScheduler_RestartSourceNotFound verifies that restarting an unknown
+// source fails and leaves running sources alone.
+func TestScheduler_RestartSourceNotFound(t *testing.T) {
+	s := New(newFakeStore(), func(context.Context, Source) error { return nil }, &fakeClock{}, nil)
+	if err := s.Start(context.Background()); err != nil {
+		t.Fatalf("Start failed: %v", err)
+	}
+	defer s.Stop()
+
+	if err := s.RestartSource(context.Background(), 99); err == nil {
+		t.Fatal("expected error for unknown source")
+	}
+}
+
 // TestScheduler_EnableSourceAlreadyRunning verifies that enabling an already
 // running source is a no-op.
 func TestScheduler_EnableSourceAlreadyRunning(t *testing.T) {

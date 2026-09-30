@@ -129,13 +129,27 @@ func (c *Client) Dial(ctx context.Context) error {
 
 // dialLocked establishes the gRPC connection. Must hold c.mu.
 func (c *Client) dialLocked(ctx context.Context) error {
-	target := c.target()
+	conn, err := DialConn(ctx, c.opts)
+	if err != nil {
+		return err
+	}
+	c.conn = conn
+	c.grpc = pb.NewNyttigClient(conn)
+	return nil
+}
+
+// DialConn opens a gRPC connection to the daemon described by opts, with the
+// same transport security, keepalive and proxy handling the Client uses. The
+// connection is lazy and reconnects on its own; callers that want a plain
+// pb.NyttigClient (such as nyttig-api) wrap it with pb.NewNyttigClient.
+func DialConn(ctx context.Context, opts Options) (*grpc.ClientConn, error) {
+	target := (&Client{addr: opts.Addr}).target()
 
 	var creds credentials.TransportCredentials
-	if c.opts.tlsOptions().Enabled() {
-		tc, err := mtls.ClientCredentials(c.opts.tlsOptions())
+	if opts.tlsOptions().Enabled() {
+		tc, err := mtls.ClientCredentials(opts.tlsOptions())
 		if err != nil {
-			return err
+			return nil, err
 		}
 		creds = tc
 	} else {
@@ -157,12 +171,9 @@ func (c *Client) dialLocked(ctx context.Context) error {
 
 	conn, err := grpc.DialContext(ctx, target, dialOpts...)
 	if err != nil {
-		return fmt.Errorf("dial %s: %w", target, err)
+		return nil, fmt.Errorf("dial %s: %w", target, err)
 	}
-
-	c.conn = conn
-	c.grpc = pb.NewNyttigClient(conn)
-	return nil
+	return conn, nil
 }
 
 // Close shuts down the gRPC connection and all active streams.
@@ -319,6 +330,17 @@ func (c *Client) AddTag(ctx context.Context, req *pb.AddTagRequest) (*pb.Tag, er
 	return client.AddTag(ctx, req)
 }
 
+// UpdateTag renames and/or recolors a tag, keeping its rules and assignments.
+func (c *Client) UpdateTag(ctx context.Context, req *pb.UpdateTagRequest) (*pb.Tag, error) {
+	if err := c.ensureConn(ctx); err != nil {
+		return nil, err
+	}
+	c.mu.RLock()
+	client := c.grpc
+	c.mu.RUnlock()
+	return client.UpdateTag(ctx, req)
+}
+
 // RemoveTag removes a tag and all its associations (cascading).
 func (c *Client) RemoveTag(ctx context.Context, id int64) error {
 	if err := c.ensureConn(ctx); err != nil {
@@ -374,6 +396,17 @@ func (c *Client) ListTagRules(ctx context.Context) (*pb.ListTagRulesResponse, er
 	client := c.grpc
 	c.mu.RUnlock()
 	return client.ListTagRules(ctx, &emptypb.Empty{})
+}
+
+// TestTagRule dry-runs a tag rule against recent items without saving it.
+func (c *Client) TestTagRule(ctx context.Context, req *pb.TestTagRuleRequest) (*pb.TestTagRuleResponse, error) {
+	if err := c.ensureConn(ctx); err != nil {
+		return nil, err
+	}
+	c.mu.RLock()
+	client := c.grpc
+	c.mu.RUnlock()
+	return client.TestTagRule(ctx, req)
 }
 
 // Search performs an FTS5 full-text search.

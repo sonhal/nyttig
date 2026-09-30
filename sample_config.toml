@@ -2,14 +2,24 @@ socket = "/tmp/nyttig.sock"
 db_path = "~/.local/share/nyttig/nyttig.db"
 log_level = "info"
 
+# Refuse to fetch feeds from loopback, private, link-local and other
+# non-public addresses. Turn this on when sources can be added through an
+# internet-facing client such as nyttig-api, so a feed URL cannot be used to
+# reach services inside your network (SSRF). HTTP proxy environment
+# variables are ignored while it is on.
+# block_private_addresses = true
+
 # Mutual TLS. Uncomment to expose nyttigd over a TCP port securely: the daemon
 # presents `cert`/`key` and only accepts clients holding a certificate signed
-# by `client_ca`. For a remote server you would typically set
-# socket = ":9090" above. Leave this table out for a plaintext local socket.
+# by `client_ca`. Set `listen` to serve mTLS on a TCP port while local
+# clients (such as nyttig-api) keep using the Unix socket above; without it,
+# TLS applies to `socket`, which you would then set to e.g. ":9090".
+# Leave this table out for a plaintext local socket.
 # [tls]
 # cert = "~/.config/nyttig/certs/server.pem"
 # key = "~/.config/nyttig/certs/server.key"
 # client_ca = "~/.config/nyttig/certs/ca.pem"
+# listen = ":9090"
 
 [[sources]]
 name = "Hacker News"

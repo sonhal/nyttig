@@ -1,0 +1,70 @@
+# System unit for nyttig-api, the web client's API (/api/*: JSON and
+# Server-Sent Events over nyttigd's gRPC API). The app itself is served by
+# nyttig-web.service. nyttig-api runs as a throwaway dynamic user that owns
+# no files and cannot read the database; membership of the "nyttig" group
+# only lets it connect to nyttigd's socket.
+#
+# nyttig-api has no authentication of its own: put Caddy (or another
+# reverse proxy with TLS and basic auth) in front, see deploy/Caddyfile.
+#
+#   sudo install -m 0755 nyttig-api /usr/local/bin/
+#   sudo install -m 0644 deploy/systemd/nyttig-api.service /etc/systemd/system/
+#   sudo systemctl edit nyttig-api        # set your --origin, see below
+#   sudo systemctl daemon-reload && sudo systemctl enable --now nyttig-api
+#
+# --origin must be the URL the browser uses. To change it without editing
+# this file, add an override with "systemctl edit nyttig-api":
+#
+#   [Service]
+#   ExecStart=
+#   ExecStart=/usr/local/bin/nyttig-api --listen 127.0.0.1:7070 \
+#     --socket /run/nyttig/nyttig.sock --origin https://nyttig.example.com
+
+[Unit]
+Description=Nyttig web client
+Documentation=https://github.com/sonhal/nyttig
+Requires=nyttigd.service
+After=nyttigd.service
+
+[Service]
+Type=simple
+DynamicUser=yes
+SupplementaryGroups=nyttig
+ExecStart=/usr/local/bin/nyttig-api --listen 127.0.0.1:7070 \
+  --socket /run/nyttig/nyttig.sock --origin https://nyttig.example.com
+Restart=on-failure
+RestartSec=5
+
+# No outbound network at all, only accepting the reverse proxy on loopback.
+# nyttig-api talks to nyttigd over the Unix socket.
+IPAddressDeny=any
+IPAddressAllow=localhost
+RestrictAddressFamilies=AF_UNIX AF_INET
+
+# Hardening, as for nyttigd. nyttig-api faces the internet (through the
+# proxy), so it gets no privileges and no writable paths.
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+ProtectProc=invisible
+ProcSubset=pid
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target
