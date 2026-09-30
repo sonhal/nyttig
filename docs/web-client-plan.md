@@ -28,7 +28,7 @@ and also works on a phone.
 phone / desktop browser
    │  https (Let's Encrypt), basic auth
    ▼
-Caddy  ── reverse_proxy ──▶  nyttig-web   (unix socket /run/nyttig-web/web.sock)
+Caddy  ── reverse_proxy ──▶  nyttig-web   (127.0.0.1:7070)
                               │  static SvelteKit build (go:embed)
                               │  /api/*       JSON
                               │  /api/stream  SSE
@@ -88,7 +88,7 @@ is unreachable. Don't touch the existing `buf lint` naming findings.
 
 ```
 cmd/nyttig-web/main.go
-    --listen        unix:/run/nyttig-web/web.sock | 127.0.0.1:7070
+    --listen        127.0.0.1:7070 (loopback only unless --allow-public-listen)
     --socket        nyttigd address (same as the nyttig client, mTLS flags too)
     --origin        https://nyttig.example.com   (required; CSRF / Host checks)
 internal/web/
@@ -306,8 +306,10 @@ make the server fetch URLs and that renders untrusted feed content.
      defense. Optionally run fail2ban on Caddy's 401s.
    - Same-origin `fetch` and `EventSource` send the cached credentials
      automatically.
-2. **No bypass.** nyttig-web listens only on a unix socket that the `caddy`
-   group can reach, so nothing can talk to it without going through Caddy.
+2. **Loopback only.** nyttig-web listens on `127.0.0.1:7070` and refuses
+   non-loopback addresses without `--allow-public-listen`. Local processes
+   can bypass basic auth, which is accepted on a single-user VPS. The
+   firewall only needs 80/443 (Caddy) and SSH open.
 3. **CSRF.** Basic-auth credentials are sent automatically, like cookies. All
    mutations are `POST`/`PATCH`/`DELETE` with `Content-Type: application/json`,
    and nyttig-web rejects them unless `Origin` equals `--origin` or
@@ -347,40 +349,96 @@ make the server fetch URLs and that renders untrusted feed content.
 
 ## Deployment
 
-Move from a user unit to **system units running as a dedicated `nyttig`
-user**. Caddy is a system service and needs a socket it can reach.
+The VPS has a single user, so nyttig-web listens on **TCP `127.0.0.1:7070`**
+and Caddy proxies to it. Both daemons run as **system units** (managed by
+PID 1), not user units:
+
+- **Isolation.** nyttigd parses untrusted feeds and nyttig-web faces the
+  internet. A bug in either then yields a service account, not your login
+  account (SSH keys, `authorized_keys`, shell rc files).
+- **Starts at boot** without `loginctl enable-linger`.
+- **Sandboxing is reliable.** User units only get `PrivateTmp=`,
+  `ProtectSystem=` etc. when unprivileged user namespaces are available.
+- **systemd creates and owns the paths**: `/var/lib/nyttig`, `/run/nyttig`,
+  `/etc/nyttig`. The socket moves out of `/tmp`, which fixes D8.
+
+Accepted trade-off of loopback TCP: any local process can reach nyttig-web
+without basic auth. On a single-user VPS that means only a compromised
+local service, which is acceptable. nyttig-web binds `127.0.0.1` by default
+and refuses a non-loopback `--listen` address unless `--allow-public-listen`
+is passed, so a typo cannot expose it past Caddy.
 
 ```ini
-# /etc/systemd/system/nyttigd.service (excerpt)
+# /etc/systemd/system/nyttigd.service
+[Unit]
+Description=Nyttig news aggregator daemon
+After=network-online.target
+Wants=network-online.target
+
 [Service]
 User=nyttig
 Group=nyttig
-StateDirectory=nyttig                 # /var/lib/nyttig/nyttig.db
-RuntimeDirectory=nyttig               # /run/nyttig/nyttig.sock
-RuntimeDirectoryMode=0750
-UMask=0007
 ExecStart=/usr/local/bin/nyttigd --config /etc/nyttig/config.toml \
   --socket /run/nyttig/nyttig.sock --db-path /var/lib/nyttig/nyttig.db
-# + existing hardening (NoNewPrivileges, ProtectSystem=strict, ...)
-
-# /etc/systemd/system/nyttig-web.service (excerpt)
-[Unit]
-Requires=nyttigd.service
-After=nyttigd.service
-[Service]
-User=nyttig
-Group=caddy                           # socket group caddy can connect to
-SupplementaryGroups=nyttig            # to reach /run/nyttig/nyttig.sock
-RuntimeDirectory=nyttig-web
+StateDirectory=nyttig                 # /var/lib/nyttig, owned by nyttig
+RuntimeDirectory=nyttig               # /run/nyttig, removed on stop
 RuntimeDirectoryMode=0750
-UMask=0007
-ExecStart=/usr/local/bin/nyttig-web --listen unix:/run/nyttig-web/web.sock \
-  --socket unix:///run/nyttig/nyttig.sock --origin https://nyttig.example.com
-IPAddressDeny=any                     # nyttig-web never needs the network
+ConfigurationDirectory=nyttig         # /etc/nyttig
+UMask=0007                            # socket srwxrwx---, group nyttig
+Restart=on-failure
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallFilter=@system-service
+CapabilityBoundingSet=
+
+[Install]
+WantedBy=multi-user.target
 ```
 
-Add your login user to the `nyttig` group so the TUI can use
-`--socket /run/nyttig/nyttig.sock`.
+```ini
+# /etc/systemd/system/nyttig-web.service
+[Unit]
+Description=Nyttig web client
+Requires=nyttigd.service
+After=nyttigd.service
+
+[Service]
+DynamicUser=yes                       # throwaway uid; owns no files, cannot read the DB
+SupplementaryGroups=nyttig            # only to connect to /run/nyttig/nyttig.sock
+ExecStart=/usr/local/bin/nyttig-web --listen 127.0.0.1:7070 \
+  --socket unix:///run/nyttig/nyttig.sock --origin https://nyttig.example.com
+Restart=on-failure
+IPAddressDeny=any                     # no outbound network at all...
+IPAddressAllow=localhost              # ...except accepting Caddy on loopback
+RestrictAddressFamilies=AF_UNIX AF_INET
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+MemoryDenyWriteExecute=yes
+SystemCallFilter=@system-service
+CapabilityBoundingSet=
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Add your login user to the `nyttig` group (`sudo usermod -aG nyttig $USER`)
+so the TUI can use `--socket /run/nyttig/nyttig.sock`.
+
+Use absolute paths in `/etc/nyttig/config.toml`. `~` expands to the running
+user's home, which is `/var/lib/nyttig` for the service account.
 
 ```caddyfile
 nyttig.example.com {
@@ -390,11 +448,33 @@ nyttig.example.com {
 	header Strict-Transport-Security "max-age=31536000; includeSubDomains"
 	@notstream not path /api/stream
 	encode @notstream zstd gzip       # never compress/buffer SSE
-	reverse_proxy unix//run/nyttig-web/web.sock {
+	reverse_proxy 127.0.0.1:7070 {
 		flush_interval -1
 	}
 }
 ```
+
+### Migrating from the user unit
+
+The database uses WAL mode, so take a consistent copy with SQLite rather
+than copying the file. Copy, don't move, so the original is the rollback.
+
+```bash
+systemctl --user disable --now nyttigd
+sudo useradd --system --home-dir /var/lib/nyttig --shell /usr/sbin/nologin nyttig
+sqlite3 ~/.local/share/nyttig/nyttig.db ".backup '/tmp/nyttig-migrate.db'"
+sudo install -d -o nyttig -g nyttig -m 0750 /var/lib/nyttig
+sudo install -o nyttig -g nyttig -m 0600 /tmp/nyttig-migrate.db /var/lib/nyttig/nyttig.db
+rm /tmp/nyttig-migrate.db
+sudo install -D -o root -g nyttig -m 0640 ~/.config/nyttig/config.toml /etc/nyttig/config.toml
+sudo install -m 0755 ~/bin/nyttigd ~/bin/nyttig-web /usr/local/bin/
+sudo usermod -aG nyttig "$USER"       # log in again afterwards
+sudo systemctl daemon-reload
+sudo systemctl enable --now nyttigd nyttig-web
+```
+
+Rollback: `sudo systemctl disable --now nyttig-web nyttigd`, then
+`systemctl --user enable --now nyttigd`.
 
 Let's Encrypt via Caddy's automatic HTTPS needs a DNS record for the host
 and ports 80 and 443 reachable.
@@ -421,7 +501,8 @@ and ports 80 and 443 reachable.
 
 ## Phases (one PR each)
 
-0. **Groundwork:** codegen fix, D1–D8, CLI updates, tests, README/AGENT.md.
+0. **Groundwork:** codegen fix, D1–D8, CLI updates, system unit files
+   replacing `nyttigd.service`, tests, README/AGENT.md.
 1. **Feed at TUI parity:** nyttig-web (API, SSE, security middleware,
    embedding) and the SvelteKit feed: desktop and mobile layouts, keymap,
    view tracking, status bar.
