@@ -113,10 +113,73 @@ jobs:
           path: coverage.out
           retention-days: 14
 
+  web:
+    name: Web
+    runs-on: ubuntu-latest
+    env:
+      CGO_ENABLED: "1"
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v7
+
+      # Installs the pnpm version pinned by web/package.json's packageManager.
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: web/package.json
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+
+      # The end-to-end tests build and run nyttigd and nyttig-api.
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - name: pnpm install
+        run: pnpm install --frozen-lockfile
+
+      - name: svelte-check
+        run: pnpm check
+
+      - name: vitest
+        run: pnpm test
+
+      - name: vite build
+        run: pnpm build
+
+      - name: Install Chromium for Playwright
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Playwright
+        run: pnpm test:e2e
+
+      # The SvelteKit Node server (deploy/systemd/nyttig-web.service).
+      - uses: actions/upload-artifact@v7
+        with:
+          name: nyttig-web
+          path: |
+            web/build/
+            web/package.json
+          retention-days: 14
+
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: playwright-report
+          path: |
+            web/playwright-report/
+            web/test-results/
+          retention-days: 14
+
   build:
     name: Build
     runs-on: ubuntu-latest
-    needs: [lint, test]
+    needs: [lint, test, web]
     env:
       CGO_ENABLED: "1"
     steps:
@@ -129,7 +192,7 @@ jobs:
       - name: go build
         run: |
           mkdir -p dist
-          go build -trimpath -ldflags="-s -w" -o dist/ ./cmd/nyttig ./cmd/nyttigd
+          go build -trimpath -ldflags="-s -w" -o dist/ ./cmd/nyttig ./cmd/nyttigd ./cmd/nyttig-api
 
       - uses: actions/upload-artifact@v7
         with:

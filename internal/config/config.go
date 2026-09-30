@@ -21,7 +21,7 @@ type Config struct {
 	LogLevel string `toml:"log_level"`
 	// BlockPrivateAddresses stops feed fetches from connecting to loopback,
 	// private and link-local addresses. Turn it on when the daemon is
-	// managed through an internet-facing client such as nyttig-web.
+	// managed through an internet-facing client such as nyttig-api.
 	BlockPrivateAddresses bool      `toml:"block_private_addresses"`
 	TLS                   TLS       `toml:"tls"`
 	Sources               []Source  `toml:"sources"`

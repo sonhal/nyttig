@@ -19,3 +19,13 @@ updates:
     groups:
       github-actions:
         patterns: ["*"]
+
+  # The web client (web/, pnpm). Dependencies only run at build time, but
+  # they end up in the embedded bundle, so keep them current.
+  - package-ecosystem: npm
+    directory: /web
+    schedule:
+      interval: weekly
+    groups:
+      web-dependencies:
+        patterns: ["*"]

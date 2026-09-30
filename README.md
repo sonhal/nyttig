@@ -12,11 +12,14 @@ Nyttig follows the Docker model — two separate binaries communicating over gRP
 ```
 nyttigd          daemon (server) — fetches feeds, runs in the background
 nyttig           client (TUI/CLI) — connects to the daemon over a Unix socket
+nyttig-api       web client API — JSON + SSE for the browser app, a gRPC client like the TUI
+nyttig-web       web client app — the SvelteKit app in web/, served by Node
 ```
 
 - **Daemon**: Periodically fetches RSS/Atom feeds, applies tagging rules, stores items in SQLite (with FTS5 full-text search).
 - **Client**: Bubble Tea TUI with a filter bar, scrollable news table with tag chips, and K9s-style view tracking. Also supports CLI subcommands for headless management (`add-source`, `list-sources`, etc.).
 - **Protocol**: gRPC with bidirectional streaming — the daemon pushes new items to the TUI in real time as they are fetched.
+- **Web client**: a SvelteKit app (`web/`) with the same feed view in a browser (desktop and phone), backed by the `nyttig-api` service, see [Web Client](#web-client).
 
 ## Install
 
@@ -27,6 +30,8 @@ go install ./cmd/nyttigd ./cmd/nyttig
 ```
 
 Requires Go 1.26+ and a C compiler (cgo), since SQLite is compiled in.
+The web client's app also needs Node.js 22+ (and pnpm to build it); see
+[Web Client](#web-client).
 
 `go install github.com/sonhal/nyttig/cmd/...@latest` does not work: the module
 uses a `replace` directive for its vendored SQLite driver, which Go refuses for
@@ -453,6 +458,143 @@ override the file. Logs go to the journal: `sudo journalctl -u nyttigd`.
 The daemon has no reload action. Restart it (`sudo systemctl restart nyttigd`)
 to pick up config changes.
 
+## Web Client
+
+The web client is the same feed view as the TUI in a browser: the filter
+bar, the table with the same columns and colors, live pushes, and view
+tracking. It works with the keyboard on a desktop and with touch on a
+phone. It has two parts behind one reverse proxy:
+
+- **The app, `nyttig-web`** (`web/`): a SvelteKit app, built with `vite build` and served
+  by its own Node server (`@sveltejs/adapter-node`, run as `node build`).
+- **`nyttig-api`**: a Go binary that serves the app's `/api/*` (JSON and
+  Server-Sent Events). Like the TUI it is a gRPC client of `nyttigd`, so
+  the process that holds the database and parses feeds is never exposed
+  to HTTP.
+
+```
+browser ── https, basic auth ──▶ Caddy ─┬─ /api/* ──▶ nyttig-api (127.0.0.1:7070) ── unix socket ──▶ nyttigd
+                                        └─ /*     ──▶ node build (127.0.0.1:7071)
+```
+
+### Build
+
+```bash
+go build ./cmd/nyttig-api
+pnpm --dir web install --frozen-lockfile
+pnpm --dir web build            # writes web/build/, a standalone Node server
+```
+
+### Run locally
+
+For development, the Vite dev server serves the app and proxies `/api` to
+nyttig-api:
+
+```bash
+nyttig-api --socket /tmp/nyttig.sock --origin http://localhost:5173
+pnpm --dir web dev              # then open http://localhost:5173
+```
+
+In production both run behind Caddy, which routes by path; see
+[Deploying behind Caddy](#deploying-behind-caddy). The app server takes
+the standard adapter-node environment: `HOST`, `PORT` and `ORIGIN` (the
+URL the browser uses).
+
+nyttig-api's flags:
+
+| Flag                    | Default            | Description                                               |
+|-------------------------|--------------------|-----------------------------------------------------------|
+| `--origin`              | (required)         | The URL the browser uses, e.g. `https://nyttig.example.com`. Requests with another `Host`, and mutations from another origin, are refused |
+| `--listen`              | `127.0.0.1:7070`   | HTTP listen address. Must be loopback                      |
+| `--allow-public-listen` | `false`            | Allow a non-loopback `--listen`. nyttig-api has no authentication of its own |
+| `--socket`              | `/tmp/nyttig.sock` | Daemon Unix socket path or TCP address                     |
+| `--tls-cert`, `--tls-key`, `--tls-ca`, `--tls-server-name` | | mTLS to a remote daemon, as for `nyttig` |
+| `--log-level`           | `info`             | `debug`, `info`, `warn` or `error`                        |
+
+nyttig-api starts even when the daemon is down; the status bar then shows
+"disconnected" and the page reconnects on its own.
+
+### Using it
+
+The filter (search, source, tag, sort, unviewed) is kept in the URL, so a
+view can be bookmarked and the back button works.
+
+| Key                | Action                                            |
+|--------------------|---------------------------------------------------|
+| `j`/`↓`, `k`/`↑`   | Move down / up                                     |
+| `g`/`Home`, `G`/`End` | Top / bottom                                    |
+| `d`, `u`           | Half page down / up (`Ctrl+d`/`Ctrl+u` where the browser allows them) |
+| `/`                | Focus the search; `Enter` applies it, `Esc` clears it |
+| `s`, `t`           | Cycle source / tag                                |
+| `o`                | Toggle sort (newest / oldest)                     |
+| `r`, `R`           | Refresh all sources / the selected item's source  |
+| `Enter`            | Open the link in a new tab                         |
+| `Space`, `l`       | Expand / collapse the row (details and full description) |
+| `q`, `Esc`         | Collapse the row                                   |
+
+On a phone (narrower than 720px) rows take two lines, a tap selects and
+expands a row (with an explicit "open ↗" link), `⚙` opens the filters and
+`⟳` refreshes.
+
+Rows are marked viewed as they scroll into view, like in the TUI, and sent
+to the daemon about every 3 seconds; what is pending when you close the tab
+is sent with a beacon.
+
+### Security
+
+nyttig-api is meant to be reachable from the internet only through a
+reverse proxy that does TLS and authentication:
+
+- It listens on loopback and refuses anything else without
+  `--allow-public-listen`. Local processes can reach it without the
+  proxy's password, which is acceptable on a single-user server.
+- Requests must carry the `Host` of `--origin` (against DNS rebinding).
+  Mutations (`POST`) must be `Content-Type: application/json` and come from
+  `--origin` (`Origin` header) or be `Sec-Fetch-Site: same-origin`, since
+  basic-auth credentials are sent automatically, like cookies.
+- The app's pages have a strict `Content-Security-Policy` from SvelteKit's
+  `kit.csp` (no inline scripts except SvelteKit's bootstrap, allowed by a
+  per-request nonce), plus `nosniff`, `Referrer-Policy: no-referrer` and
+  `Cross-Origin-Opener-Policy` from `web/src/hooks.server.ts`. API
+  responses get the same headers and a `default-src 'none'` policy.
+- Feed content is untrusted: it is only rendered as text, links must be
+  `http(s)` (checked in nyttig-api and in the page) and open with
+  `noopener,noreferrer`, colors must be `#RRGGBB`, and no feed images are
+  loaded.
+- Turn on `block_private_addresses` in the daemon's config (see
+  [Fetching and SSRF](#fetching-and-ssrf)).
+
+### Deploying behind Caddy
+
+[`deploy/Caddyfile`](deploy/Caddyfile) is an example site with Let's
+Encrypt and basic auth that sends `/api/*` to nyttig-api (with response
+buffering off for the event stream) and everything else to the app.
+
+Both run as throwaway dynamic users with no outbound network:
+[`deploy/systemd/nyttig-api.service`](deploy/systemd/nyttig-api.service)
+can reach only the daemon's socket (through the `nyttig` group), and
+[`deploy/systemd/nyttig-web.service`](deploy/systemd/nyttig-web.service)
+runs the app with the server's Node.js (22 or newer). Set up `nyttigd`
+first (see [above](#running-as-a-systemd-service)), then:
+
+```bash
+sudo install -m 0755 nyttig-api /usr/local/bin/
+sudo install -d /opt/nyttig-web
+sudo cp -r web/build web/package.json /opt/nyttig-web/
+sudo install -m 0644 deploy/systemd/nyttig-api.service deploy/systemd/nyttig-web.service \
+  /etc/systemd/system/
+sudo systemctl edit nyttig-api     # override ExecStart with your --origin
+sudo systemctl edit nyttig-web      # Environment=ORIGIN=<the same URL>
+sudo systemctl daemon-reload
+sudo systemctl enable --now nyttig-api nyttig-web
+```
+
+The app's build bundles all its dependencies, so it needs no
+`node_modules` on the server.
+
+Then install the Caddyfile (usually `/etc/caddy/Caddyfile`) with your host
+name, user and `caddy hash-password` hash, and reload Caddy.
+
 ## Database
 
 Nyttig uses SQLite with FTS5 for full-text search. The default database path is `~/.local/share/nyttig/nyttig.db`. The database is created and migrated automatically on first daemon start.
@@ -475,6 +617,7 @@ Nyttig uses SQLite with FTS5 for full-text search. The default database path is 
 |---------------|-------------------------------------|
 | Language      | Go 1.26+                            |
 | TUI           | Bubble Tea + custom Lipgloss table  |
+| Web client    | SvelteKit 2 + Svelte 5 on Node (adapter-node); Go API with JSON + Server-Sent Events |
 | Server API    | gRPC with bidirectional streaming   |
 | Wire format   | Protocol Buffers (proto3)           |
 | Database      | SQLite with FTS5                    |
