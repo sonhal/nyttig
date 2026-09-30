@@ -79,10 +79,14 @@ func main() {
 		addTagCmd()
 	case "list-tags":
 		listTagsCmd()
+	case "update-tag":
+		updateTagCmd()
 	case "remove-tag":
 		removeTagCmd()
 	case "add-tag-rule":
 		addTagRuleCmd()
+	case "test-tag-rule":
+		testTagRuleCmd()
 	case "list-tag-rules":
 		listTagRulesCmd()
 	case "remove-tag-rule":
@@ -105,11 +109,13 @@ func printHelp() {
 	fmt.Fprintf(os.Stderr, "  add-source     Add a new feed source\n")
 	fmt.Fprintf(os.Stderr, "  list-sources   List all configured sources\n")
 	fmt.Fprintf(os.Stderr, "  remove-source  Remove a source by ID\n")
-	fmt.Fprintf(os.Stderr, "  update-source  Update an existing source (name/url/type/refresh/enable/disable)\n")
+	fmt.Fprintf(os.Stderr, "  update-source  Update an existing source (only the given flags change)\n")
 	fmt.Fprintf(os.Stderr, "  add-tag        Create a new tag\n")
 	fmt.Fprintf(os.Stderr, "  list-tags      List all tags\n")
+	fmt.Fprintf(os.Stderr, "  update-tag     Rename or recolor a tag (keeps rules and assignments)\n")
 	fmt.Fprintf(os.Stderr, "  remove-tag     Remove a tag (and its rules and assignments) by ID\n")
 	fmt.Fprintf(os.Stderr, "  add-tag-rule   Add a regex rule that auto-tags matching items\n")
+	fmt.Fprintf(os.Stderr, "  test-tag-rule  Show which recent items a pattern would tag (dry run)\n")
 	fmt.Fprintf(os.Stderr, "  list-tag-rules List all tag rules\n")
 	fmt.Fprintf(os.Stderr, "  remove-tag-rule Remove a tag rule by ID\n")
 	fmt.Fprintf(os.Stderr, "  search         Full-text search stored items\n")
@@ -279,19 +285,22 @@ func removeSourceCmd() {
 	fmt.Printf("Source %d removed.\n", id)
 }
 
-// updateSourceCmd handles the "update-source" subcommand.
+// updateSourceCmd handles the "update-source" subcommand. Only the flags
+// given on the command line are sent; everything else is left unchanged.
 func updateSourceCmd() {
 	flags := flag.NewFlagSet("update-source", flag.ExitOnError)
 	registerClientFlags(flags)
 
 	var (
-		id         int64
-		name       string
-		url        string
-		sourceType string
-		refresh    int
-		enable     bool
-		disable    bool
+		id           int64
+		name         string
+		url          string
+		sourceType   string
+		refresh      int
+		enable       bool
+		disable      bool
+		color        string
+		abbreviation string
 	)
 
 	flags.Int64Var(&id, "i", 0, "Source ID to update (required)")
@@ -306,87 +315,71 @@ func updateSourceCmd() {
 	flags.IntVar(&refresh, "refresh", 0, "New refresh interval in seconds")
 	flags.BoolVar(&enable, "enable", false, "Enable the source")
 	flags.BoolVar(&disable, "disable", false, "Disable the source")
+	flags.StringVar(&color, "color", "", "Hex color for the source chip; '' clears it")
+	flags.StringVar(&abbreviation, "abbreviation", "", "Short display name; '' clears it")
 
 	// Parse args starting after "update-source".
 	args := os.Args[2:]
 	if len(args) == 0 || args[0] == "--help" {
 		fmt.Fprintf(os.Stderr, "Usage: nyttig update-source -i <id> [flags]\n\n")
+		fmt.Fprintf(os.Stderr, "Only the given flags are changed.\n\n")
 		flags.PrintDefaults()
 		os.Exit(0)
 	}
-	flags.Parse(args)
+	_ = flags.Parse(args) // ExitOnError: exits on bad flags
+	set := setFlagNames(flags)
 
 	if id == 0 {
 		fmt.Fprintf(os.Stderr, "Error: --id (-i) is required\n")
 		os.Exit(1)
 	}
-
 	if enable && disable {
 		fmt.Fprintf(os.Stderr, "Error: --enable and --disable are mutually exclusive\n")
 		os.Exit(1)
 	}
 
+	req := &pb.UpdateSourceRequest{Id: id}
+	if set["n"] || set["name"] {
+		req.Name = &name
+	}
+	if set["u"] || set["url"] {
+		req.Url = &url
+	}
+	if set["t"] || set["type"] {
+		req.Type = &sourceType
+	}
+	if set["r"] || set["refresh"] {
+		r := int32(refresh)
+		req.RefreshSec = &r
+	}
+	if enable || disable {
+		req.Enabled = &enable
+	}
+	if set["color"] {
+		req.Color = &color
+	}
+	if set["abbreviation"] {
+		req.Abbreviation = &abbreviation
+	}
+
 	c := newClient()
-	defer c.Close()
+	defer func() { _ = c.Close() }()
 
-	ctx := context.Background()
-
-	// Fetch current source to get existing values
-	resp, err := c.ListSources(ctx)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		os.Exit(1)
-	}
-
-	var src *pb.Source
-	for _, s := range resp.Sources {
-		if s.Id == id {
-			src = s
-			break
-		}
-	}
-	if src == nil {
-		fmt.Fprintf(os.Stderr, "Error: source %d not found\n", id)
-		os.Exit(1)
-	}
-
-	// Build update request with current values
-	req := &pb.UpdateSourceRequest{
-		Id:         id,
-		Name:       src.Name,
-		Url:        src.Url,
-		Type:       src.Type,
-		RefreshSec: src.RefreshSec,
-		Enabled:    src.Enabled,
-	}
-
-	// Override with user-provided values
-	if name != "" {
-		req.Name = name
-	}
-	if url != "" {
-		req.Url = url
-	}
-	if sourceType != "" {
-		req.Type = sourceType
-	}
-	if refresh > 0 {
-		req.RefreshSec = int32(refresh)
-	}
-	if enable {
-		req.Enabled = true
-	}
-	if disable {
-		req.Enabled = false
-	}
-
-	updated, err := c.UpdateSource(ctx, req)
+	updated, err := c.UpdateSource(context.Background(), req)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
 
 	fmt.Printf("Source updated: [%d] %s (%s)\n", updated.Id, updated.Name, updated.Url)
+}
+
+// setFlagNames returns the names of the flags that were given on the command
+// line, so "not given" can be told apart from "given with the zero value".
+func setFlagNames(fs *flag.FlagSet) map[string]bool {
+	set := make(map[string]bool)
+	fs.Visit(func(f *flag.Flag) { set[f.Name] = true })
+	return set
 }
 
 // addTagCmd handles the "add-tag" subcommand.
@@ -504,6 +497,63 @@ func removeTagCmd() {
 	fmt.Printf("Tag %d removed (with its rules and item assignments).\n", id)
 }
 
+// updateTagCmd handles the "update-tag" subcommand.
+func updateTagCmd() {
+	flags := flag.NewFlagSet("update-tag", flag.ExitOnError)
+	registerClientFlags(flags)
+
+	var (
+		id    int64
+		name  string
+		color string
+	)
+
+	flags.Int64Var(&id, "i", 0, "Tag ID to update (required)")
+	flags.Int64Var(&id, "id", 0, "Tag ID to update (required)")
+	flags.StringVar(&name, "n", "", "New tag name")
+	flags.StringVar(&name, "name", "", "New tag name")
+	flags.StringVar(&color, "c", "", "New tag color (hex, e.g. '#FF6B35'); '' clears it")
+	flags.StringVar(&color, "color", "", "New tag color (hex, e.g. '#FF6B35'); '' clears it")
+
+	args := os.Args[2:]
+	if len(args) == 0 || args[0] == "--help" {
+		fmt.Fprintf(os.Stderr, "Usage: nyttig update-tag -i <id> [-n <name>] [-c <color>]\n\n")
+		fmt.Fprintf(os.Stderr, "Keeps the tag's rules and item assignments.\n\n")
+		flags.PrintDefaults()
+		os.Exit(0)
+	}
+	_ = flags.Parse(args) // ExitOnError: exits on bad flags
+	set := setFlagNames(flags)
+
+	if id == 0 {
+		fmt.Fprintf(os.Stderr, "Error: --id (-i) is required\n")
+		os.Exit(1)
+	}
+
+	req := &pb.UpdateTagRequest{Id: id}
+	if set["n"] || set["name"] {
+		req.Name = &name
+	}
+	if set["c"] || set["color"] {
+		req.Color = &color
+	}
+
+	c := newClient()
+	defer func() { _ = c.Close() }()
+
+	tag, err := c.UpdateTag(context.Background(), req)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("Tag updated: [%d] %s", tag.Id, tag.Name)
+	if tag.Color != "" {
+		fmt.Printf(" (%s)", tag.Color)
+	}
+	fmt.Println()
+}
+
 // resolveTagID turns a tag reference into a tag ID. A numeric reference is
 // used as-is; anything else is looked up by exact tag name.
 func resolveTagID(ctx context.Context, c *client.Client, ref string) (int64, error) {
@@ -587,6 +637,67 @@ func addTagRuleCmd() {
 	fmt.Printf("Tag rule added: [%d] %s ← /%s/ on %s\n", rule.Id, rule.TagName, rule.Pattern, rule.Field)
 }
 
+// testTagRuleCmd handles the "test-tag-rule" subcommand: a dry run of a
+// pattern against recently fetched items.
+func testTagRuleCmd() {
+	flags := flag.NewFlagSet("test-tag-rule", flag.ExitOnError)
+	registerClientFlags(flags)
+
+	var (
+		pattern  string
+		field    string
+		sourceID int64
+		limit    int
+	)
+
+	flags.StringVar(&pattern, "p", "", "Regex pattern, Go syntax (required)")
+	flags.StringVar(&pattern, "pattern", "", "Regex pattern, Go syntax (required)")
+	flags.StringVar(&field, "f", "both", "Field to match: title, description, or both")
+	flags.StringVar(&field, "field", "both", "Field to match: title, description, or both")
+	flags.Int64Var(&sourceID, "s", 0, "Only test items from this source ID")
+	flags.Int64Var(&sourceID, "source", 0, "Only test items from this source ID")
+	flags.IntVar(&limit, "l", 20, "Maximum number of matches to show")
+	flags.IntVar(&limit, "limit", 20, "Maximum number of matches to show")
+
+	args := os.Args[2:]
+	if len(args) == 0 || args[0] == "--help" {
+		fmt.Fprintf(os.Stderr, "Usage: nyttig test-tag-rule -p <pattern> [flags]\n\n")
+		fmt.Fprintf(os.Stderr, "Shows which recent items a rule would tag, without saving it.\n\n")
+		flags.PrintDefaults()
+		os.Exit(0)
+	}
+	_ = flags.Parse(args) // ExitOnError: exits on bad flags
+
+	if pattern == "" {
+		fmt.Fprintf(os.Stderr, "Error: --pattern (-p) is required\n")
+		os.Exit(1)
+	}
+
+	c := newClient()
+	defer func() { _ = c.Close() }()
+
+	resp, err := c.TestTagRule(context.Background(), &pb.TestTagRuleRequest{
+		SourceId: sourceID,
+		Field:    field,
+		Pattern:  pattern,
+		Limit:    int32(limit),
+	})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+
+	if len(resp.Items) == 0 {
+		fmt.Printf("No matches in the %d most recent items.\n", resp.Scanned)
+		return
+	}
+
+	for _, it := range resp.Items {
+		fmt.Printf("%6d  %s  %s\n", it.Id, tui.SanitizeLine(it.SourceName), tui.SanitizeLine(it.Title))
+	}
+	fmt.Printf("\n%d match(es) shown, %d most recent items checked.\n", len(resp.Items), resp.Scanned)
+}
+
 // listTagRulesCmd handles the "list-tag-rules" subcommand.
 func listTagRulesCmd() {
 	flags := flag.NewFlagSet("list-tag-rules", flag.ExitOnError)
@@ -665,6 +776,8 @@ func searchCmd() {
 		tagRef   string
 		limit    int
 		offset   int
+		sort     string
+		unviewed bool
 	)
 
 	flags.StringVar(&query, "q", "", "Full-text search query (or pass it as trailing arguments)")
@@ -675,6 +788,8 @@ func searchCmd() {
 	flags.IntVar(&limit, "l", 20, "Maximum number of results")
 	flags.IntVar(&limit, "limit", 20, "Maximum number of results")
 	flags.IntVar(&offset, "offset", 0, "Skip this many results (for paging)")
+	flags.StringVar(&sort, "sort", "newest", "Sort order: newest or oldest")
+	flags.BoolVar(&unviewed, "unviewed", false, "Only items not yet viewed")
 
 	args := os.Args[2:]
 	if len(args) > 0 && args[0] == "--help" {
@@ -706,11 +821,13 @@ func searchCmd() {
 	}
 
 	resp, err := c.Search(ctx, &pb.SearchRequest{
-		Query:    query,
-		SourceId: sourceID,
-		TagId:    tagID,
-		Limit:    int32(limit),
-		Offset:   int32(offset),
+		Query:        query,
+		SourceId:     sourceID,
+		TagId:        tagID,
+		Limit:        int32(limit),
+		Offset:       int32(offset),
+		Sort:         sort,
+		UnviewedOnly: unviewed,
 	})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)

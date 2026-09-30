@@ -1,6 +1,6 @@
 # nyttig-web: plan for a web client
 
-Status: **plan, agreed decisions**. Nothing here is implemented yet.
+Status: **agreed plan; phase 0 is done**, phases 1–4 are not started.
 
 A browser client for nyttig with the same design goals as the TUI: compact,
 information dense, keyboard first, log-viewer inspired, minimal. It runs on
@@ -70,9 +70,21 @@ Only changes that make the web app much better or much simpler to build.
 | D7 | Input validation in the service: URL must be `http(s)`, colors must match `^#[0-9A-Fa-f]{6}$`, `refresh_sec` ≥ 60, and names and patterns have length caps | The web is a new, internet-facing input path. Validate once at the service, not in each client. |
 | D8 | Socket location and permissions (unit and docs only): `/run/nyttig/nyttig.sock` via `RuntimeDirectory=`, `UMask=0007` | The shipped unit uses `PrivateTmp=yes` with `/tmp/nyttig.sock`, so other services probably cannot see the socket. Verify this. |
 
-Prerequisite: fix `proto/buf.yaml` (`path: .`) so code can be regenerated,
-or generate with local `protoc` + `protoc-gen-go(-grpc)` if the Buf registry
-is unreachable. Don't touch the existing `buf lint` naming findings.
+Codegen was fixed first: `buf.yaml`/`buf.gen.yaml` moved to the repository
+root and use local, pinned plugins, and a CI job fails when `internal/proto`
+drifts from the proto (see AGENT.md).
+
+Phase 0 also fixed three bugs found along the way:
+
+- **Colors never reached clients.** `color`/`abbreviation` had been
+  hand-added to the generated structs but not to the embedded descriptor,
+  so protobuf-go dropped them on the wire.
+- **Source edits needed a daemon restart.** A running fetch runner kept its
+  original URL and interval. Edits now restart it (`scheduler.RestartSource`).
+- **`systemctl reload` killed the daemon.** The old unit sent SIGHUP, which
+  nyttigd doesn't handle. The new unit has no reload action.
+
+The nyttig-web unit file is added in phase 1, together with the binary.
 
 **Deferred (nice to have, not now):**
 
@@ -497,8 +509,8 @@ and ports 80 and 443 reachable.
 
 ## Phases (one PR each)
 
-0. **Groundwork:** codegen fix, D1–D8, CLI updates, system unit files in
-   `deploy/systemd/` replacing the root `nyttigd.service` user unit, tests,
+0. **Groundwork (done):** codegen fix, D1–D8, CLI updates, system unit file
+   in `deploy/systemd/` replacing the root `nyttigd.service` user unit, tests,
    README/AGENT.md.
 1. **Feed at TUI parity:** nyttig-web (API, SSE, security middleware,
    embedding) and the SvelteKit feed: desktop and mobile layouts, keymap,

@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -40,6 +41,7 @@ func main() {
 		tlsCert     = flag.String("tls-cert", "", "Server TLS certificate (PEM); enables mTLS together with -tls-key and -tls-client-ca")
 		tlsKey      = flag.String("tls-key", "", "Server TLS private key (PEM)")
 		tlsClientCA = flag.String("tls-client-ca", "", "CA bundle (PEM) used to verify client certificates")
+		blockPriv   = flag.Bool("block-private-addresses", false, "Refuse to fetch feeds from loopback, private or link-local addresses (SSRF protection)")
 	)
 	flag.Parse()
 
@@ -75,6 +77,9 @@ func main() {
 		}
 		if cfg.TLS.ClientCA != "" && !setFlags["tls-client-ca"] {
 			*tlsClientCA = cfg.TLS.ClientCA
+		}
+		if cfg.BlockPrivateAddresses && !setFlags["block-private-addresses"] {
+			*blockPriv = true
 		}
 	}
 
@@ -145,9 +150,15 @@ func main() {
 
 	sched := scheduler.New(srcStore, nil, nil, logger) // fetchFn and clock set below
 
+	// One shared HTTP client for all feed fetches.
+	httpClient := fetcher.NewHTTPClient(fetcher.ClientOptions{BlockPrivateAddresses: *blockPriv})
+	if *blockPriv {
+		logger.Info("feed fetches restricted to public addresses")
+	}
+
 	// fetchFn is the callback the scheduler invokes for each source fetch.
 	fetchFn := func(ctx context.Context, s scheduler.Source) error {
-		return doFetch(ctx, database, s, tgr, hub, logger)
+		return doFetch(ctx, database, httpClient, s, tgr, hub, logger)
 	}
 
 	// Inject fetchFn into the scheduler.
@@ -180,10 +191,14 @@ func main() {
 		sched.RemoveSource(id)
 	})
 	svc.OnSourceUpdated(func(ctx context.Context, src db.Source) {
-		if src.Enabled {
-			sched.EnableSource(ctx, src.ID)
-		} else {
+		if !src.Enabled {
 			sched.DisableSource(src.ID)
+			return
+		}
+		// Restart rather than enable: a running runner keeps the URL and
+		// interval it was started with, so edits need a fresh runner.
+		if err := sched.RestartSource(ctx, src.ID); err != nil {
+			logger.Warn("restart source failed", "source_id", src.ID, "error", err)
 		}
 	})
 
@@ -488,6 +503,7 @@ func (s *dbTaggerStore) AssignTag(itemID, tagID int64) error {
 func doFetch(
 	ctx context.Context,
 	database *sql.DB,
+	httpClient *http.Client,
 	s scheduler.Source,
 	tgr *tagger.Tagger,
 	hub *service.Hub,
@@ -497,7 +513,7 @@ func doFetch(
 	dbSrc := schedulerSourceToDBSource(s)
 
 	// 1. Fetch and parse the feed.
-	result, err := fetcher.Fetch(database, dbSrc)
+	result, err := fetcher.FetchWithClient(database, dbSrc, httpClient)
 	if err != nil {
 		return fmt.Errorf("fetch: %w", err)
 	}

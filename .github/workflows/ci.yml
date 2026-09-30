@@ -54,6 +54,34 @@ jobs:
           # introduces. Drop this once the backlog is cleared.
           only-new-issues: true
 
+  generated:
+    name: Generated code
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      # Pinned to the versions in buf.gen.yaml's header comment. Keep them in
+      # sync when bumping, or this job reports a diff.
+      - name: Install buf and protoc plugins
+        run: |
+          go install github.com/bufbuild/buf/cmd/buf@v1.73.0
+          go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.10
+          go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.5.1
+
+      # protobuf-go serializes from the descriptor embedded in the generated
+      # code, so a hand edit to *.pb.go silently drops fields on the wire.
+      - name: Check generated code is up to date
+        run: |
+          buf generate
+          if ! git diff --exit-code -- internal/proto; then
+            echo "::error::internal/proto is out of date with proto/. Run 'buf generate' and commit the result."
+            exit 1
+          fi
+
   test:
     name: Test
     runs-on: ubuntu-latest

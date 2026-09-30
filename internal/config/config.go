@@ -16,13 +16,17 @@ import (
 
 // Config mirrors the structure of the TOML config file.
 type Config struct {
-	Socket   string    `toml:"socket"`
-	DBPath   string    `toml:"db_path"`
-	LogLevel string    `toml:"log_level"`
-	TLS      TLS       `toml:"tls"`
-	Sources  []Source  `toml:"sources"`
-	Tags     []Tag     `toml:"tags"`
-	TagRules []TagRule `toml:"tag_rules"`
+	Socket   string `toml:"socket"`
+	DBPath   string `toml:"db_path"`
+	LogLevel string `toml:"log_level"`
+	// BlockPrivateAddresses stops feed fetches from connecting to loopback,
+	// private and link-local addresses. Turn it on when the daemon is
+	// managed through an internet-facing client such as nyttig-web.
+	BlockPrivateAddresses bool      `toml:"block_private_addresses"`
+	TLS                   TLS       `toml:"tls"`
+	Sources               []Source  `toml:"sources"`
+	Tags                  []Tag     `toml:"tags"`
+	TagRules              []TagRule `toml:"tag_rules"`
 }
 
 // TLS configures mutual-TLS for the daemon's gRPC listener. When set, the

@@ -21,8 +21,10 @@ import (
 // userAgent is the standard User-Agent string sent with HTTP requests.
 const userAgent = "Nyttig/0.1 (news-aggregator)"
 
-// httpClient is the HTTP client with timeout for feed fetching.
-var httpClient = &http.Client{Timeout: 30 * time.Second}
+// httpClient is the default HTTP client for Fetch: 30s timeout, no address
+// restrictions. The daemon builds its own with NewHTTPClient and calls
+// FetchWithClient.
+var httpClient = NewHTTPClient(ClientOptions{})
 
 // ── RSS 2.0 types ───────────────────────────────────────────────
 
@@ -102,8 +104,8 @@ func Fetch(database *sql.DB, src *db.Source) (*FetchResult, error) {
 	return fetchInternal(database, src, httpClient)
 }
 
-// FetchWithClient is like Fetch but accepts a custom HTTP client (useful
-// for testing with httptest.NewServer).
+// FetchWithClient is like Fetch but accepts a custom HTTP client, such as one
+// from NewHTTPClient or one for testing with httptest.NewServer.
 func FetchWithClient(database *sql.DB, src *db.Source, client doer) (*FetchResult, error) {
 	return fetchInternal(database, src, client)
 }

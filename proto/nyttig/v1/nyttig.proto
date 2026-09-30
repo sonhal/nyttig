@@ -70,13 +70,18 @@ message RemoveSourceRequest {
     int64 id = 1;
 }
 
+// UpdateSourceRequest patches a source. Every mutable field has explicit
+// presence: an unset field is left unchanged, a set field is written. For
+// color and abbreviation, setting an empty string clears the value.
 message UpdateSourceRequest {
-    int64  id          = 1;
-    string name        = 2;
-    string url         = 3;
-    string type        = 4;
-    int32  refresh_sec = 5;
-    bool   enabled     = 6;
+    int64           id           = 1;
+    optional string name         = 2;
+    optional string url          = 3;
+    optional string type         = 4;
+    optional int32  refresh_sec  = 5;
+    optional bool   enabled      = 6;
+    optional string color        = 7;
+    optional string abbreviation = 8;
 }
 
 message ListSourcesResponse {
@@ -92,6 +97,14 @@ message RefreshSourceRequest {
 message AddTagRequest {
     string name  = 1;
     string color = 2;
+}
+
+// UpdateTagRequest patches a tag. Unset fields are left unchanged; setting
+// color to an empty string clears it.
+message UpdateTagRequest {
+    int64           id    = 1;
+    optional string name  = 2;
+    optional string color = 3;
 }
 
 message RemoveTagRequest {
@@ -120,6 +133,20 @@ message ListTagRulesResponse {
     repeated TagRule rules = 1;
 }
 
+// TestTagRuleRequest dry-runs a rule against recently fetched items without
+// saving it. The pattern is validated exactly as AddTagRule validates it.
+message TestTagRuleRequest {
+    int64  source_id = 1;  // 0 = items from all sources
+    string field     = 2;  // title, description, both; defaults to "both"
+    string pattern   = 3;
+    int32  limit     = 4;  // max matches to return; default 20, max 100
+}
+
+message TestTagRuleResponse {
+    repeated Item items   = 1;  // matching items, newest first
+    int32         scanned = 2;  // how many recent items were checked
+}
+
 // ── Full-text search ────────────────────────────────────────
 
 message SearchRequest {
@@ -128,6 +155,8 @@ message SearchRequest {
     int64  tag_id    = 3;  // 0 = all tags
     int32  limit     = 4;  // default: 100
     int32  offset    = 5;  // default: 0
+    string sort      = 6;  // newest, oldest; default newest
+    bool   unviewed_only = 7;
 }
 
 message SearchResponse {
@@ -181,6 +210,7 @@ service Nyttig {
 
     // Tag management
     rpc AddTag(AddTagRequest) returns (Tag);
+    rpc UpdateTag(UpdateTagRequest) returns (Tag);
     rpc RemoveTag(RemoveTagRequest) returns (google.protobuf.Empty);
     rpc ListTags(google.protobuf.Empty) returns (ListTagsResponse);
 
@@ -188,6 +218,7 @@ service Nyttig {
     rpc AddTagRule(AddTagRuleRequest) returns (TagRule);
     rpc RemoveTagRule(RemoveTagRuleRequest) returns (google.protobuf.Empty);
     rpc ListTagRules(google.protobuf.Empty) returns (ListTagRulesResponse);
+    rpc TestTagRule(TestTagRuleRequest) returns (TestTagRuleResponse);
 
     // Core feed stream (bidirectional)
     rpc StreamItems(stream ClientMessage) returns (stream ServerMessage);

@@ -11,7 +11,6 @@ import (
 	"database/sql"
 	"io"
 	"log/slog"
-	"regexp"
 	"sync"
 
 	"google.golang.org/grpc/codes"
@@ -68,7 +67,8 @@ func (s *Service) OnSourceRemoved(fn SourceRemoveFunc) {
 	s.onSourceRemoved = fn
 }
 
-// OnSourceUpdated registers a callback invoked when a source's enabled state changes.
+// OnSourceUpdated registers a callback invoked after an update that changes
+// how a source is fetched: its enabled state, url or refresh interval.
 func (s *Service) OnSourceUpdated(fn SourceLifecycleFunc) {
 	s.onSourceUpdated = fn
 }
@@ -90,20 +90,33 @@ func (s *Service) AddSource(ctx context.Context, req *pb.AddSourceRequest) (*pb.
 		RefreshSec: int(req.RefreshSec),
 		Enabled:    req.Enabled,
 	}
+	if src.Type == "" {
+		src.Type = "rss"
+	}
+	if src.RefreshSec == 0 {
+		src.RefreshSec = defaultRefreshSec
+	}
+	if err := firstErr(
+		validateName("name", src.Name, maxNameLen),
+		validateFeedURL(src.URL),
+		validateFeedType(src.Type),
+		validateRefreshSec(int32(src.RefreshSec)),
+		validateColor(req.Color),
+		validateAbbreviation(req.Abbreviation),
+	); err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
 	if req.Color != "" {
 		src.Color = &req.Color
 	}
 	if req.Abbreviation != "" {
 		src.Abbreviation = &req.Abbreviation
 	}
-	if src.Type == "" {
-		src.Type = "rss"
-	}
-	if src.RefreshSec <= 0 {
-		src.RefreshSec = 3600
-	}
 
 	id, err := db.InsertSource(s.db, src)
+	if isUniqueViolation(err) {
+		return nil, status.Errorf(codes.AlreadyExists, "a source with url %q already exists", src.URL)
+	}
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "insert source: %v", err)
 	}
@@ -134,7 +147,10 @@ func (s *Service) RemoveSource(ctx context.Context, req *pb.RemoveSourceRequest)
 	return &emptypb.Empty{}, nil
 }
 
-// UpdateSource modifies an existing feed source.
+// UpdateSource patches an existing feed source. Only fields set in the
+// request are changed; for color and abbreviation an empty string clears the
+// value. The scheduler is notified when a change affects fetching (enabled,
+// url or refresh interval), so edits take effect without a daemon restart.
 func (s *Service) UpdateSource(ctx context.Context, req *pb.UpdateSourceRequest) (*pb.Source, error) {
 	existing, err := db.GetSource(s.db, req.Id)
 	if err != nil {
@@ -143,32 +159,52 @@ func (s *Service) UpdateSource(ctx context.Context, req *pb.UpdateSourceRequest)
 	if existing == nil {
 		return nil, status.Errorf(codes.NotFound, "source %d not found", req.Id)
 	}
+	before := *existing
 
-	// Patch with non-zero request fields.
-	if req.Name != "" {
-		existing.Name = req.Name
+	var errs []error
+	if req.Name != nil {
+		errs = append(errs, validateName("name", *req.Name, maxNameLen))
+		existing.Name = *req.Name
 	}
-	if req.Url != "" {
-		existing.URL = req.Url
+	if req.Url != nil {
+		errs = append(errs, validateFeedURL(*req.Url))
+		existing.URL = *req.Url
 	}
-	if req.Type != "" {
-		existing.Type = req.Type
+	if req.Type != nil {
+		errs = append(errs, validateFeedType(*req.Type))
+		existing.Type = *req.Type
 	}
-	if req.RefreshSec > 0 {
-		existing.RefreshSec = int(req.RefreshSec)
+	if req.RefreshSec != nil {
+		errs = append(errs, validateRefreshSec(*req.RefreshSec))
+		existing.RefreshSec = int(*req.RefreshSec)
 	}
-	// Enabled: proto3 cannot distinguish "unset" from "false", so callers
-	// MUST send the intended enabled value on every UpdateSource call. The
-	// CLI (update-source) always sends the current value, toggling only when
-	// --enable/--disable is given.
-	existing.Enabled = req.Enabled
+	if req.Enabled != nil {
+		existing.Enabled = *req.Enabled
+	}
+	if req.Color != nil {
+		errs = append(errs, validateColor(*req.Color))
+		existing.Color = optionalString(*req.Color)
+	}
+	if req.Abbreviation != nil {
+		errs = append(errs, validateAbbreviation(*req.Abbreviation))
+		existing.Abbreviation = optionalString(*req.Abbreviation)
+	}
+	if err := firstErr(errs...); err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
 
-	if err := db.UpdateSource(s.db, existing); err != nil {
+	err = db.UpdateSource(s.db, existing)
+	if isUniqueViolation(err) {
+		return nil, status.Errorf(codes.AlreadyExists, "a source with url %q already exists", existing.URL)
+	}
+	if err != nil {
 		return nil, status.Errorf(codes.Internal, "update source: %v", err)
 	}
 
-	// Notify scheduler of enabled/disabled change.
-	if s.onSourceUpdated != nil {
+	fetchChanged := before.Enabled != existing.Enabled ||
+		before.URL != existing.URL ||
+		before.RefreshSec != existing.RefreshSec
+	if fetchChanged && s.onSourceUpdated != nil {
 		s.onSourceUpdated(ctx, *existing)
 	}
 
@@ -225,12 +261,17 @@ func (s *Service) RefreshSource(ctx context.Context, req *pb.RefreshSourceReques
 
 // AddTag creates a new tag.
 func (s *Service) AddTag(ctx context.Context, req *pb.AddTagRequest) (*pb.Tag, error) {
-	var color *string
-	if req.Color != "" {
-		color = &req.Color
+	if err := firstErr(
+		validateName("name", req.Name, maxTagNameLen),
+		validateColor(req.Color),
+	); err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 
-	id, err := db.InsertTag(s.db, req.Name, color)
+	id, err := db.InsertTag(s.db, req.Name, optionalString(req.Color))
+	if isUniqueViolation(err) {
+		return nil, status.Errorf(codes.AlreadyExists, "tag %q already exists", req.Name)
+	}
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "insert tag: %v", err)
 	}
@@ -240,6 +281,45 @@ func (s *Service) AddTag(ctx context.Context, req *pb.AddTagRequest) (*pb.Tag, e
 		return nil, status.Errorf(codes.Internal, "get created tag: %v", err)
 	}
 	return dbTagToProto(tag), nil
+}
+
+// UpdateTag renames and/or recolors a tag in place. Unlike removing and
+// re-adding a tag, this keeps its rules and item assignments.
+func (s *Service) UpdateTag(ctx context.Context, req *pb.UpdateTagRequest) (*pb.Tag, error) {
+	tag, err := db.GetTag(s.db, req.Id)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "get tag: %v", err)
+	}
+	if tag == nil {
+		return nil, status.Errorf(codes.NotFound, "tag %d not found", req.Id)
+	}
+
+	var errs []error
+	if req.Name != nil {
+		errs = append(errs, validateName("name", *req.Name, maxTagNameLen))
+		tag.Name = *req.Name
+	}
+	if req.Color != nil {
+		errs = append(errs, validateColor(*req.Color))
+		tag.Color = optionalString(*req.Color)
+	}
+	if err := firstErr(errs...); err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+
+	err = db.UpdateTag(s.db, tag)
+	if isUniqueViolation(err) {
+		return nil, status.Errorf(codes.AlreadyExists, "tag %q already exists", tag.Name)
+	}
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "update tag: %v", err)
+	}
+
+	updated, err := db.GetTag(s.db, req.Id)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "get updated tag: %v", err)
+	}
+	return dbTagToProto(updated), nil
 }
 
 // RemoveTag deletes a tag and all its associated rules and item associations.
@@ -279,21 +359,16 @@ func (s *Service) AddTagRule(ctx context.Context, req *pb.AddTagRuleRequest) (*p
 	if rule.Field == "" {
 		rule.Field = "both"
 	}
-	switch rule.Field {
-	case "title", "description", "both":
-	default:
-		return nil, status.Errorf(codes.InvalidArgument, "field must be title, description, or both; got %q", rule.Field)
-	}
 	if req.TagId == 0 {
 		return nil, status.Error(codes.InvalidArgument, "tag_id is required")
 	}
-	if req.Pattern == "" {
-		return nil, status.Error(codes.InvalidArgument, "pattern is required")
-	}
 	// Reject bad patterns up front; the tagger would otherwise skip the rule
 	// silently on every fetch.
-	if _, err := regexp.Compile(req.Pattern); err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, "invalid pattern: %v", err)
+	if err := validateField(rule.Field); err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+	if _, err := compilePattern(rule.Pattern); err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 
 	id, err := db.InsertTagRule(s.db, rule)
@@ -329,11 +404,91 @@ func (s *Service) ListTagRules(ctx context.Context, _ *emptypb.Empty) (*pb.ListT
 	return resp, nil
 }
 
+// testTagRuleScan is how many of the most recent items TestTagRule checks.
+const testTagRuleScan = 500
+
+// TestTagRule dry-runs a rule against recent items without saving it, so a
+// client can preview what a pattern would tag. It matches exactly like the
+// tagger (Go RE2 on the raw title/description), which a client could not
+// reproduce with its own regex engine.
+func (s *Service) TestTagRule(ctx context.Context, req *pb.TestTagRuleRequest) (*pb.TestTagRuleResponse, error) {
+	field := req.Field
+	if field == "" {
+		field = "both"
+	}
+	if err := validateField(field); err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+	re, err := compilePattern(req.Pattern)
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+	limit := int(req.Limit)
+	if limit <= 0 {
+		limit = 20
+	}
+	if limit > 100 {
+		limit = 100
+	}
+
+	items, _, err := db.ListItems(s.db, db.ItemFilter{
+		SourceID: req.SourceId,
+		Sort:     "newest",
+		Limit:    testTagRuleScan,
+	})
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "list items: %v", err)
+	}
+
+	resp := &pb.TestTagRuleResponse{Scanned: int32(len(items))}
+	for _, item := range items {
+		desc := ""
+		if item.Description != nil {
+			desc = *item.Description
+		}
+		var match bool
+		switch field {
+		case "title":
+			match = re.MatchString(item.Title)
+		case "description":
+			match = re.MatchString(desc)
+		default:
+			match = re.MatchString(item.Title) || re.MatchString(desc)
+		}
+		if match {
+			resp.Items = append(resp.Items, ItemToProto(item))
+			if len(resp.Items) == limit {
+				break
+			}
+		}
+	}
+	return resp, nil
+}
+
 // ── Search ─────────────────────────────────────────────────────────────────
 
-// Search performs an FTS5 full-text search across items.
+// Search performs an FTS5 full-text search across items. With an empty query
+// it lists items matching the other filters, which clients use for paging
+// beyond what StreamItems sends.
 func (s *Service) Search(ctx context.Context, req *pb.SearchRequest) (*pb.SearchResponse, error) {
-	items, total, err := db.SearchItems(s.db, req.Query, req.SourceId, req.TagId, int(req.Limit), int(req.Offset))
+	switch req.Sort {
+	case "", "newest", "oldest":
+	default:
+		return nil, status.Errorf(codes.InvalidArgument, "sort must be newest or oldest, got %q", req.Sort)
+	}
+	limit := int(req.Limit)
+	if limit <= 0 {
+		limit = 100
+	}
+	items, total, err := db.ListItems(s.db, db.ItemFilter{
+		SourceID:     req.SourceId,
+		TagID:        req.TagId,
+		Search:       req.Query,
+		Sort:         req.Sort,
+		Limit:        limit,
+		Offset:       int(req.Offset),
+		UnviewedOnly: req.UnviewedOnly,
+	})
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "search: %v", err)
 	}
@@ -579,13 +734,38 @@ func (s *Service) itemMatchesFilter(item *pb.Item, filter *pb.StreamFilter) bool
 	if filter.UnviewedOnly && item.Viewed {
 		return false
 	}
-	// Note: FTS5 search filtering is not applied here because new items
-	// pushed mid-stream are typically unfiltered; the client can filter
-	// them on its side if needed.
+	if filter.Search != "" {
+		// Ask FTS5 itself, so pushed items match exactly like the initial
+		// batch does and clients never have to emulate FTS tokenization.
+		ok, err := db.ItemMatchesSearch(s.db, item.Id, filter.Search)
+		if err != nil {
+			slog.Warn("stream: search filter", "item_id", item.Id, "error", err)
+			return false
+		}
+		return ok
+	}
 	return true
 }
 
 // ── Conversion helpers ─────────────────────────────────────────────────────
+
+// optionalString maps "" to nil (SQL NULL) and anything else to a pointer.
+func optionalString(v string) *string {
+	if v == "" {
+		return nil
+	}
+	return &v
+}
+
+// firstErr returns the first non-nil error.
+func firstErr(errs ...error) error {
+	for _, err := range errs {
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
 
 func dbSourceToProto(src *db.Source) *pb.Source {
 	p := &pb.Source{
