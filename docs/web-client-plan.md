@@ -349,6 +349,7 @@ make the server fetch URLs and that renders untrusted feed content.
 
 ## Deployment
 
+nyttig is not deployed yet, so this is a fresh install with no migration.
 The VPS has a single user, so nyttig-web listens on **TCP `127.0.0.1:7070`**
 and Caddy proxies to it. Both daemons run as **system units** (managed by
 PID 1), not user units:
@@ -454,27 +455,22 @@ nyttig.example.com {
 }
 ```
 
-### Migrating from the user unit
-
-The database uses WAL mode, so take a consistent copy with SQLite rather
-than copying the file. Copy, don't move, so the original is the rollback.
+### Fresh install
 
 ```bash
-systemctl --user disable --now nyttigd
 sudo useradd --system --home-dir /var/lib/nyttig --shell /usr/sbin/nologin nyttig
-sqlite3 ~/.local/share/nyttig/nyttig.db ".backup '/tmp/nyttig-migrate.db'"
-sudo install -d -o nyttig -g nyttig -m 0750 /var/lib/nyttig
-sudo install -o nyttig -g nyttig -m 0600 /tmp/nyttig-migrate.db /var/lib/nyttig/nyttig.db
-rm /tmp/nyttig-migrate.db
-sudo install -D -o root -g nyttig -m 0640 ~/.config/nyttig/config.toml /etc/nyttig/config.toml
-sudo install -m 0755 ~/bin/nyttigd ~/bin/nyttig-web /usr/local/bin/
-sudo usermod -aG nyttig "$USER"       # log in again afterwards
+sudo install -m 0755 nyttigd nyttig-web nyttig /usr/local/bin/
+sudo install -D -o root -g nyttig -m 0640 sample_config.toml /etc/nyttig/config.toml
+#   edit /etc/nyttig/config.toml: absolute paths, your sources/tags/rules
+sudo install -m 0644 deploy/systemd/nyttigd.service deploy/systemd/nyttig-web.service \
+  /etc/systemd/system/
+sudo usermod -aG nyttig "$USER"       # TUI access; log in again afterwards
 sudo systemctl daemon-reload
 sudo systemctl enable --now nyttigd nyttig-web
 ```
 
-Rollback: `sudo systemctl disable --now nyttig-web nyttigd`, then
-`systemctl --user enable --now nyttigd`.
+`StateDirectory=` creates `/var/lib/nyttig`, and nyttigd creates and
+migrates the database on first start.
 
 Let's Encrypt via Caddy's automatic HTTPS needs a DNS record for the host
 and ports 80 and 443 reachable.
@@ -501,8 +497,9 @@ and ports 80 and 443 reachable.
 
 ## Phases (one PR each)
 
-0. **Groundwork:** codegen fix, D1–D8, CLI updates, system unit files
-   replacing `nyttigd.service`, tests, README/AGENT.md.
+0. **Groundwork:** codegen fix, D1–D8, CLI updates, system unit files in
+   `deploy/systemd/` replacing the root `nyttigd.service` user unit, tests,
+   README/AGENT.md.
 1. **Feed at TUI parity:** nyttig-web (API, SSE, security middleware,
    embedding) and the SvelteKit feed: desktop and mobile layouts, keymap,
    view tracking, status bar.
