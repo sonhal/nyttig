@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily backup of the nyttigd database
+
+[Timer]
+OnCalendar=*-*-* 03:30:00
+RandomizedDelaySec=30min
+# Run a missed backup at next boot if the VPS was down at 03:30.
+Persistent=true
+
+[Install]
+WantedBy=timers.target

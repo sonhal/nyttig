@@ -68,6 +68,7 @@ sample_config.toml          Example config (loaded by a test, so keep it valid)
 deploy/systemd/             Hardened system units; nyttigd runs as a dedicated `nyttig` user,
                             nyttig-api as a DynamicUser in the `nyttig` group, nyttig-web
                             (the app's Node server) as a DynamicUser
+deploy/README.md            VPS guide: sizing, build for Debian, mTLS for the TUI, backups, upgrades
 deploy/Caddyfile            Example reverse proxy (TLS, basic auth, /api/* vs the app)
 docs/web-client-plan.md     Plan for the nyttig-api browser client (phases and decisions)
 ```
@@ -105,6 +106,12 @@ docs/web-client-plan.md     Plan for the nyttig-api browser client (phases and d
   service calls only when `enabled`, `url` or `refresh_sec` changed. The daemon
   then calls `scheduler.RestartSource`: a running runner keeps the `Source` it
   was started with, so `EnableSource` alone would keep the old URL/interval.
+- **Listeners** (`planListeners` in `cmd/nyttigd/main.go`): one gRPC
+  server per listener, all serving the same service. By default there is
+  one, `socket`, with mTLS if `[tls]` is set. With `[tls] listen` the
+  daemon also serves mTLS on that TCP address and keeps `socket` as a
+  plaintext Unix socket (for nyttig-api); a TCP `socket` is then refused so
+  no plaintext port opens by accident.
 - **Dedup** is by `UNIQUE(source_id, guid)`. GUID is the feed `<guid>` if
   present, else SHA-256 of `<link>`.
 - **Search** input is wrapped by `ftsQuote` (`db/items.go`) so it is matched as

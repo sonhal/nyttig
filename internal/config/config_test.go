@@ -32,6 +32,21 @@ func TestLoad_BlockPrivateAddresses(t *testing.T) {
 	}
 }
 
+func TestLoad_TLSListen(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	data := "[tls]\ncert = \"s.pem\"\nkey = \"s.key\"\nclient_ca = \"ca.pem\"\nlisten = \":9090\"\n"
+	if err := os.WriteFile(path, []byte(data), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.TLS.Listen != ":9090" {
+		t.Errorf("tls.listen = %q, want %q", cfg.TLS.Listen, ":9090")
+	}
+}
+
 func TestLoad_RejectsUnknownKeys(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.toml")
 	if err := os.WriteFile(path, []byte("block_private_adresses = true\n"), 0o600); err != nil {

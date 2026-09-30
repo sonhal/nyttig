@@ -170,11 +170,16 @@ Optional. Enables [mutual TLS](#remote-access-with-mutual-tls) on the daemon's
 listener. Omit the whole table to serve in plaintext (fine for a local Unix
 socket). Paths may use a leading `~`.
 
+Without `listen`, TLS applies to `socket`. With `listen`, the daemon serves
+mTLS on that TCP address and keeps serving `socket` in plaintext for local
+clients such as nyttig-api; `socket` must then be a Unix socket path.
+
 | Field        | Required | Description                                          |
 |--------------|----------|------------------------------------------------------|
 | `cert`       | yes      | Server certificate (PEM) the daemon presents         |
 | `key`        | yes      | Server private key (PEM)                             |
 | `client_ca`  | yes      | CA bundle (PEM) used to verify client certificates   |
+| `listen`     | no       | Extra TCP address for mTLS, e.g. `:9090`              |
 
 ### `[[sources]]`
 
@@ -215,6 +220,7 @@ socket). Paths may use a leading `~`.
 | `--tls-cert`      | —                              | Server certificate (PEM); enables mTLS            |
 | `--tls-key`       | —                              | Server private key (PEM)                          |
 | `--tls-client-ca` | —                              | CA bundle (PEM) used to verify client certs       |
+| `--tls-listen`    | —                              | Extra TCP address served with mTLS; `--socket` stays a plaintext Unix socket |
 | `--block-private-addresses` | `false`              | Refuse to fetch feeds from non-public addresses   |
 
 Flags override the corresponding config values. All three TLS flags are
@@ -409,6 +415,19 @@ client_ca = "~/.config/nyttig/certs/ca.pem"
 The daemon logs `mutual TLS enabled` on startup; it logs a warning if no TLS is
 configured.
 
+To keep a local Unix socket as well, for example for nyttig-api on the same
+server, set `listen` instead of making `socket` a TCP address:
+
+```toml
+socket = "/tmp/nyttig.sock"
+
+[tls]
+cert = "~/.config/nyttig/certs/server.pem"
+key = "~/.config/nyttig/certs/server.key"
+client_ca = "~/.config/nyttig/certs/ca.pem"
+listen = ":9090"
+```
+
 ### 3. Connect the client
 
 ```bash
@@ -594,6 +613,9 @@ The app's build bundles all its dependencies, so it needs no
 
 Then install the Caddyfile (usually `/etc/caddy/Caddyfile`) with your host
 name, user and `caddy hash-password` hash, and reload Caddy.
+
+For a complete VPS setup (the web client behind Caddy, the TUI over mTLS on
+port 9090, backups and upgrades), see [`deploy/README.md`](deploy/README.md).
 
 ## Database
 

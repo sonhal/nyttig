@@ -34,10 +34,15 @@ type Config struct {
 // signed by a CA in ClientCA. Paths may use a leading "~" for the home
 // directory. Leave the whole table out to listen in plaintext (the default,
 // appropriate for a local Unix socket).
+//
+// Without Listen, TLS applies to the socket listener. With Listen (a TCP
+// address such as ":9090"), the daemon serves mTLS there and keeps serving
+// the socket, which must then be a Unix socket path, in plaintext.
 type TLS struct {
 	Cert     string `toml:"cert"`
 	Key      string `toml:"key"`
 	ClientCA string `toml:"client_ca"`
+	Listen   string `toml:"listen"`
 }
 
 // Source is a feed source declared in the config file.

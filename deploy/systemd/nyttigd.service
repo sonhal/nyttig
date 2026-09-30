@@ -30,8 +30,11 @@ Restart=on-failure
 RestartSec=5
 
 # Directories systemd creates and owns for the service.
+# 0700: only the socket is for the "nyttig" group, and it lives in
+# /run/nyttig. The database stays private to nyttigd, so group members
+# such as nyttig-api can't read it directly.
 StateDirectory=nyttig
-StateDirectoryMode=0750
+StateDirectoryMode=0700
 RuntimeDirectory=nyttig
 RuntimeDirectoryMode=0750
 ConfigurationDirectory=nyttig
