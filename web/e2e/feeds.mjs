@@ -65,6 +65,37 @@ ${items}
 </channel></rss>`;
 }
 
+// Big feeds for the tests that need a long list (follow mode, load older).
+// GET /bulk/<name>.xml?n=230 serves that many items, the first one an hour
+// old and each next one an hour older; the first request for a name fixes
+// its size. Items pushed with POST /add?feed=bulk/<name> come first.
+const bulk = new Map();
+
+function bulkFeed(name, n) {
+	let b = bulk.get(name);
+	if (!b) bulk.set(name, (b = { n, pushed: [], base: Date.now() }));
+	const items = [];
+	for (let k = 1; k <= b.n; k++) {
+		items.push({ guid: `${name}-${k}`, title: `${name} item ${k}`, pubDate: new Date(b.base - k * 3600_000).toUTCString() });
+	}
+	const all = [...b.pushed, ...items];
+	const xml = all
+		.map(
+			(it) => `<item>
+<title>${esc(it.title)}</title>
+<link>https://${esc(name)}.example/${esc(it.guid)}</link>
+<guid>${esc(it.guid)}</guid>
+<pubDate>${it.pubDate}</pubDate>
+<description>${esc(it.description ?? `Body of ${it.title}.`)}</description>
+</item>`
+		)
+		.join('\n');
+	return `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"><channel><title>${esc(name)}</title><link>https://${esc(name)}.example</link><description>bulk</description>
+${xml}
+</channel></rss>`;
+}
+
 function extraFeed(name) {
 	const items = [1, 2]
 		.map(
@@ -86,6 +117,9 @@ ${items}
 export function startFeedServer() {
 	let pixelHits = 0;
 	let added = 0;
+	// Pushed items get strictly increasing publication times (RSS has one
+	// second of resolution), so items pushed back to back keep their order.
+	let lastPub = 0;
 	const server = http.createServer((req, res) => {
 		const url = new URL(req.url ?? '/', FEEDS_URL);
 		const m = url.pathname.match(/^\/(\w+)\.xml$/);
@@ -103,6 +137,12 @@ export function startFeedServer() {
 			res.end(extraFeed(extra[1]));
 			return;
 		}
+		const big = url.pathname.match(/^\/bulk\/([\w-]+)\.xml$/);
+		if (big) {
+			res.writeHead(200, { 'Content-Type': 'application/rss+xml' });
+			res.end(bulkFeed(big[1], Number(url.searchParams.get('n') ?? 50)));
+			return;
+		}
 		if (url.pathname === '/pixel.png') {
 			pixelHits++;
 			res.writeHead(404);
@@ -118,11 +158,18 @@ export function startFeedServer() {
 			const feed = url.searchParams.get('feed') ?? 'alpha';
 			const title = url.searchParams.get('title') ?? `Live item ${added}`;
 			added++;
-			feeds[feed].unshift({
+			const pushTo = feed.startsWith('bulk/') ? bulk.get(feed.slice(5))?.pushed : feeds[feed];
+			if (!pushTo) {
+				res.writeHead(404);
+				res.end();
+				return;
+			}
+			lastPub = Math.max(Date.now(), lastPub + 1000);
+			pushTo.unshift({
 				guid: `live-${added}-${Date.now()}`,
 				title,
 				link: `https://${feed}.example/live/${added}`,
-				pubDate: new Date().toUTCString(),
+				pubDate: new Date(lastPub).toUTCString(),
 				description: 'Pushed while the page was open.'
 			});
 			res.writeHead(204);

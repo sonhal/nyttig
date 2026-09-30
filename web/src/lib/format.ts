@@ -28,3 +28,18 @@ export function shortDuration(ms: number): string {
 	if (s < 86400) return `${Math.floor(s / 3600)}h`;
 	return `${Math.floor(s / 86400)}d`;
 }
+
+/**
+ * How long ago a time was: "45s ago", "12m ago", "3h ago", "2d ago", or
+ * "in 5m" for a time ahead of now (a feed with a wrong clock). short drops
+ * the "ago", for the narrow mobile column. "" if unknown.
+ */
+export function formatRelative(ts: string | undefined, now: number, short = false): string {
+	if (!ts) return '';
+	const t = new Date(ts).getTime();
+	if (Number.isNaN(t)) return '';
+	const diff = now - t;
+	// A minute of slack for clocks that disagree.
+	if (diff < -60_000) return 'in ' + shortDuration(-diff);
+	return shortDuration(diff) + (short ? '' : ' ago');
+}

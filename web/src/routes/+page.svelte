@@ -1,36 +1,49 @@
 <!--
-	The feed: filter bar, virtual table and status bar, at parity with the
-	TUI. The filter lives in the URL (?q=&source=&tag=&sort=&unviewed=1), so
-	views can be bookmarked and the back button works.
+	The feed: filter bar, virtual table and status bar. The filter lives in
+	the URL as separate parameters (?q=&source=&tag=&sort=&unviewed=1, IDs for
+	source and tag), so views can be bookmarked, survive renames, and the back
+	button works. The query bar shows it as text (tag:rust src:"Hacker News"
+	...) and parses what you type back into those parameters (query.ts).
 -->
 <script lang="ts">
-	import { onMount, untrack } from 'svelte';
+	import { onMount, tick, untrack } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import * as api from '$lib/api';
 	import FeedRow from '$lib/FeedRow.svelte';
 	import FilterBar from '$lib/FilterBar.svelte';
 	import FilterSheet from '$lib/FilterSheet.svelte';
+	import Help from '$lib/Help.svelte';
 	import ItemDetail from '$lib/ItemDetail.svelte';
+	import PickerView from '$lib/Picker.svelte';
 	import StatusBar from '$lib/StatusBar.svelte';
 	import VirtualList from '$lib/VirtualList.svelte';
 	import { cycleID, filterFromParams, filterQuery, nextSort, sameFilter } from '$lib/filter';
 	import CommandLine from '$lib/CommandLine.svelte';
-	import { CommandLine as CommandLineState } from '$lib/commandline.svelte';
+	import { CommandLine as CommandLineState, execute, type CommandHost } from '$lib/commandline.svelte';
+	import { feedSections } from '$lib/help';
+	import { highlightTerms } from '$lib/highlight';
 	import { keyAction, type Action, type Mode } from '$lib/keymap';
 	import { fetchTimes, sourceDisplays, tagDisplays } from '$lib/meta';
 	import { metadata } from '$lib/metadata.svelte';
-	import { markViewed, moveCursor } from '$lib/reducer';
-	import { safeLink } from '$lib/sanitize';
+	import { Picker } from '$lib/picker.svelte';
+	import { prefs } from '$lib/prefs.svelte';
+	import { applyCompletion, complete, format, parse, type Candidate } from '$lib/query';
+	import { markViewed, moveCursor, setFollow } from '$lib/reducer';
+	import { oneLine, safeLink } from '$lib/sanitize';
 	import { FeedStream } from '$lib/stream.svelte';
 	import type { Filter, Item } from '$lib/types';
 	import { ViewTracker } from '$lib/viewed';
 
 	const METADATA_INTERVAL_MS = 30_000;
 	const UNVIEWED_INTERVAL_MS = 15_000;
+	/** Fetch the next page when the view is this close to the end of the list. */
+	const LOAD_AHEAD_ROWS = 10;
 
 	const stream = new FeedStream();
 	const cl = new CommandLineState();
+	const picker = new Picker();
+	const helpSections = feedSections();
 
 	// Shared with the management views, which reload them after changes.
 	const sources = $derived(metadata.sources);
@@ -42,6 +55,7 @@
 
 	let expandedId: string | null = $state(null);
 	let sheetOpen = $state(false);
+	let helpOpen = $state(false);
 	let searchFocused = $state(false);
 	let mobile = $state(false);
 
@@ -49,7 +63,24 @@
 	let searchInput: HTMLInputElement | undefined = $state();
 
 	const filter: Filter = $derived(filterFromParams(page.url.searchParams));
+	/** The query bar's text. */
 	let draft = $state('');
+	/** The filter as query text, which the bar shows when it is not being edited. */
+	const canonical = $derived(format(filter, sources, tags));
+	/** The text last applied, so the bar keeps it while the URL catches up. */
+	let applied: string | null = null;
+	const parsed = $derived(parse(draft, sources, tags));
+	let caret = $state(0);
+	let active = $state(-1);
+	let submitError = $state('');
+	const completion = $derived(searchFocused ? complete(draft, caret, sources, tags) : null);
+	const suggestions = $derived(completion?.candidates ?? []);
+	// Live errors show only when there is nothing to complete: "tag:ru" is
+	// not wrong, it is unfinished.
+	const queryError = $derived(
+		submitError || (searchFocused && draft.trim() && suggestions.length === 0 ? (parsed.errors[0]?.message ?? '') : '')
+	);
+	const terms = $derived(highlightTerms(filter.q));
 
 	const feed = $derived(stream.state);
 	const items = $derived(feed.items);
@@ -60,8 +91,19 @@
 	const times = $derived(fetchTimes(sources, now));
 	const localUnviewed = $derived(items.reduce((n, it) => n + (it.viewed ? 0 : 1), 0));
 	const mode: Mode = $derived(
-		cl.open ? 'command' : sheetOpen ? 'sheet' : searchFocused ? 'search' : 'normal'
+		cl.open
+			? 'command'
+			: helpOpen
+				? 'help'
+				: picker.open
+					? 'picker'
+					: sheetOpen
+						? 'sheet'
+						: searchFocused
+							? 'search'
+							: 'normal'
 	);
+	const followState = $derived(filter.sort === 'newest' ? (feed.follow ? 'on' : 'off') : 'na');
 
 	// ── Filter ⇄ URL ──────────────────────────────────────────
 
@@ -69,7 +111,6 @@
 	$effect(() => {
 		const f = filter;
 		untrack(() => {
-			draft = f.q;
 			if (connected && sameFilter(connected, f)) return;
 			connected = f;
 			// ":feed" and the view tabs come back to this filter.
@@ -77,6 +118,22 @@
 			stream.connect(f);
 			void loadUnviewed();
 		});
+	});
+
+	// The bar shows the filter as text unless it is being edited: after the
+	// URL changes (keys, chips, back button) and when the names load.
+	$effect(() => {
+		const text = canonical;
+		untrack(() => {
+			if (!searchFocused) draft = text;
+		});
+	});
+
+	// Suggestions start unhighlighted whenever the text or caret changes.
+	$effect(() => {
+		void draft;
+		void caret;
+		untrack(() => (active = -1));
 	});
 
 	function setFilter(f: Filter) {
@@ -123,6 +180,7 @@
 		// Only rows someone can actually see count: not before the snapshot
 		// has arrived, and not while the tab is in the background.
 		if (!feed.complete || document.visibilityState !== 'visible') return;
+		loadOlder(last);
 		const ids: string[] = [];
 		for (let i = first; i <= last; i++) {
 			const it = items[i];
@@ -172,20 +230,104 @@
 		}
 	}
 
+	function leaveSearch() {
+		submitError = '';
+		searchInput?.blur();
+		list?.focus();
+	}
+
+	/** Applies the typed query, or says what is wrong with it and stays in the bar. */
 	function applySearch() {
-		setFilter({ ...filter, q: draft.trim() });
-		searchInput?.blur();
-		list?.focus();
+		const pick = suggestions[active];
+		if (pick) return accept(pick);
+		const r = parsed;
+		if (r.errors.length) {
+			submitError = r.errors[0]!.message;
+			return;
+		}
+		draft = applied = format(r.filter, sources, tags);
+		setFilter(r.filter);
+		leaveSearch();
 	}
 
+	/** Esc: drops the search text, keeps the operators (they have their own keys and chips). */
 	function clearSearch() {
-		draft = '';
-		setFilter({ ...filter, q: '' });
-		searchInput?.blur();
+		const f = { ...filter, q: '' };
+		draft = applied = format(f, sources, tags);
+		setFilter(f);
+		leaveSearch();
+	}
+
+	function onsearchblur() {
+		searchFocused = false;
+		// Abandoned edits are dropped; what was just applied stays until the URL has it.
+		if (draft !== applied) draft = canonical;
+		applied = null;
+	}
+
+	/** Puts a suggested name into the text where the caret is. */
+	function accept(c: Candidate) {
+		if (!completion) return;
+		const r = applyCompletion(draft, completion, c);
+		draft = r.text;
+		submitError = '';
+		void tick().then(() => {
+			searchInput?.focus();
+			searchInput?.setSelectionRange(r.caret, r.caret);
+			caret = r.caret;
+		});
+	}
+
+	function follow() {
+		// Follow is a newest-first mode: from oldest first, F goes there too.
+		if (filter.sort !== 'newest') setFilter({ ...filter, sort: 'newest' });
+		select(0);
+		list?.scrollToTop();
+	}
+
+	function onattop(atTop: boolean) {
+		stream.set(setFollow(stream.state, atTop));
+	}
+
+	function loadOlder(last: number) {
+		if (last >= items.length - 1 - LOAD_AHEAD_ROWS) void stream.loadOlder();
+	}
+
+	function openPicker(kind: 'source' | 'tag') {
+		const entries = kind === 'source' ? sources : tags;
+		picker.start(kind, [
+			{ id: '', label: 'all' },
+			...entries.flatMap((x) => (x.id ? [{ id: x.id, label: oneLine(x.name), color: x.color }] : []))
+		]);
+	}
+
+	function closePicker() {
+		picker.close();
 		list?.focus();
 	}
 
-	function run(a: Action) {
+	function pick(id: string) {
+		const kind = picker.kind;
+		closePicker();
+		if (kind) setFilter({ ...filter, [kind]: id });
+	}
+
+	function closeHelp() {
+		helpOpen = false;
+		list?.focus();
+	}
+
+	const host: CommandHost = {
+		help: () => (helpOpen = true),
+		flash,
+		refresh: (id) => void refresh(id),
+		filter: () => filter,
+		setFilter,
+		follow
+	};
+
+	/** Runs an action; false means the key was not used, so the browser keeps it. */
+	function run(a: Action): boolean | void {
 		switch (a.type) {
 			case 'move':
 				return select(cursor + a.by);
@@ -203,12 +345,45 @@
 				return applySearch();
 			case 'clearSearch':
 				return clearSearch();
+			case 'completeQuery': {
+				const c = suggestions[Math.max(active, 0)];
+				return c ? accept(c) : false;
+			}
+			case 'suggestMove': {
+				const n = suggestions.length;
+				if (n === 0) return false;
+				// -1 (none highlighted) is one more stop in the cycle.
+				active = ((((active + 1 + a.by) % (n + 1)) + (n + 1)) % (n + 1)) - 1;
+				return;
+			}
 			case 'cycleSource':
 				return setFilter({ ...filter, source: cycleID(ids(sources), filter.source) });
 			case 'cycleTag':
 				return setFilter({ ...filter, tag: cycleID(ids(tags), filter.tag) });
+			case 'pickSource':
+				return openPicker('source');
+			case 'pickTag':
+				return openPicker('tag');
+			case 'pickerMove':
+				return picker.move(a.by);
+			case 'pickerSelect': {
+				const o = picker.selected();
+				return o ? pick(o.id) : undefined;
+			}
+			case 'pickerCancel':
+				return closePicker();
 			case 'toggleSort':
 				return setFilter({ ...filter, sort: nextSort(filter.sort) });
+			case 'toggleTime':
+				prefs.toggleTime();
+				return flash('times: ' + prefs.timeMode);
+			case 'follow':
+				return follow();
+			case 'openHelp':
+				helpOpen = true;
+				return;
+			case 'closeHelp':
+				return closeHelp();
 			case 'refreshAll':
 				return void refresh();
 			case 'refreshSource': {
@@ -225,12 +400,22 @@
 				return;
 			case 'openCommand':
 				return cl.start();
-			case 'runCommand':
-				return cl.run();
+			case 'runCommand': {
+				const cmd = cl.run({ sources, tags });
+				if (!cmd) return;
+				list?.focus();
+				return execute(cmd, host);
+			}
 			case 'cancelCommand':
 				cl.cancel();
 				list?.focus();
 				return;
+			case 'completeCommand':
+				return cl.complete({ sources, tags });
+			case 'historyPrev':
+				return cl.historyPrev();
+			case 'historyNext':
+				return cl.historyNext();
 		}
 	}
 
@@ -251,8 +436,8 @@
 		}
 		const a = keyAction(mode, e);
 		if (!a) return;
+		if (run(a) === false) return;
 		e.preventDefault();
-		run(a);
 	}
 
 	// ── Lifecycle ─────────────────────────────────────────────
@@ -307,8 +492,17 @@
 		{tags}
 		bind:draft
 		bind:input={searchInput}
+		{suggestions}
+		{active}
+		error={queryError}
+		oncaret={(pos) => {
+			caret = pos;
+			submitError = '';
+		}}
+		onpick={accept}
+		onhelp={() => (helpOpen = true)}
 		onsearchfocus={() => (searchFocused = true)}
-		onsearchblur={() => (searchFocused = false)}
+		{onsearchblur}
 		oncyclesource={() => run({ type: 'cycleSource' })}
 		oncycletag={() => run({ type: 'cycleTag' })}
 		ontogglesort={() => run({ type: 'toggleSort' })}
@@ -324,6 +518,7 @@
 		key={(it) => it.id}
 		expanded={expandedIndex}
 		{onrange}
+		{onattop}
 		role="grid"
 		aria-label="feed"
 		aria-rowcount={items.length}
@@ -340,10 +535,24 @@
 				source={item.source_id ? srcMeta.get(item.source_id) : undefined}
 				tags={tagMeta}
 				onselect={onRowSelect}
+				{terms}
+				timeMode={prefs.timeMode}
+				{now}
 			/>
 		{/snippet}
 		{#snippet detail(item)}
-			<ItemDetail {item} source={item.source_id ? srcMeta.get(item.source_id) : undefined} />
+			<ItemDetail {item} source={item.source_id ? srcMeta.get(item.source_id) : undefined} {terms} />
+		{/snippet}
+		{#snippet footer()}
+			<span data-testid="older">
+				{#if feed.loading}
+					loading…
+				{:else if feed.end}
+					— end —
+				{:else if stream.olderError}
+					couldn't load older items: {stream.olderError}
+				{/if}
+			</span>
 		{/snippet}
 		{#snippet empty()}
 			<div class="empty">
@@ -363,13 +572,33 @@
 		{now}
 		{note}
 		shown={items.length}
+		follow={followState}
+		pending={feed.pending}
+		onfollow={follow}
+		onhelp={() => (helpOpen = true)}
 	/>
 </div>
 
 <CommandLine {cl} />
 
+{#if helpOpen}
+	<Help title="Keys: feed" sections={helpSections} onclose={closeHelp} />
+{/if}
+
+{#if picker.open}
+	<PickerView {picker} onpick={pick} onclose={closePicker} />
+{/if}
+
 {#if sheetOpen}
-	<FilterSheet {filter} {sources} {tags} onchange={setFilter} onclose={() => (sheetOpen = false)} />
+	<FilterSheet
+		{filter}
+		{sources}
+		{tags}
+		timeMode={prefs.timeMode}
+		onchange={setFilter}
+		ontime={(m) => prefs.setTime(m)}
+		onclose={() => (sheetOpen = false)}
+	/>
 {/if}
 
 <style>

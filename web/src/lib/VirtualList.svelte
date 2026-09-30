@@ -8,7 +8,7 @@
 -->
 <script lang="ts" generics="T">
 	import type { Snippet } from 'svelte';
-	import { onMount } from 'svelte';
+	import { onMount, untrack } from 'svelte';
 	import type { HTMLAttributes } from 'svelte/elements';
 
 	interface Props extends Omit<HTMLAttributes<HTMLDivElement>, 'onscroll' | 'children'> {
@@ -21,8 +21,12 @@
 		row: Snippet<[T, number]>;
 		detail?: Snippet<[T, number]>;
 		empty?: Snippet;
+		/** One more line after the last row (the "loading…" / "end" row). */
+		footer?: Snippet;
 		/** Called with the first and last (partially) visible row index. */
 		onrange?: (first: number, last: number) => void;
+		/** Called when the list scrolls away from the top, and back. */
+		onattop?: (atTop: boolean) => void;
 	}
 
 	let {
@@ -33,7 +37,9 @@
 		row,
 		detail,
 		empty,
+		footer,
 		onrange,
+		onattop,
 		class: className,
 		...rest
 	}: Props = $props();
@@ -95,6 +101,15 @@
 	// Report the visible range whenever it can have changed.
 	$effect(reportRange);
 
+	// Report scrolling away from the top, and back (follow mode).
+	let lastAtTop: boolean | null = null;
+	$effect(() => {
+		const at = scrollTop < 1;
+		if (at === lastAtTop) return;
+		lastAtTop = at;
+		untrack(() => onattop?.(at));
+	});
+
 	// Scroll anchoring: when rows are inserted or removed above the top of
 	// the viewport, keep the same row at the top instead of letting the
 	// content jump. At the very top, new rows scroll into view.
@@ -154,6 +169,13 @@
 		}
 	}
 
+	/** Scrolls to the first row. */
+	export function scrollToTop(): void {
+		if (!el) return;
+		el.scrollTop = 0;
+		scrollTop = 0;
+	}
+
 	/** Number of rows that fit in the viewport. */
 	export function pageRows(): number {
 		return Math.max(1, Math.floor(viewH / rowH));
@@ -178,6 +200,7 @@
 				{/each}
 			</div>
 		</div>
+		{#if footer}<div class="footer">{@render footer()}</div>{/if}
 	{/if}
 </div>
 
@@ -199,6 +222,13 @@
 		left: 0;
 		right: 0;
 		will-change: transform;
+	}
+	.footer {
+		display: flex;
+		align-items: center;
+		height: var(--row-h);
+		padding: 0 1ch;
+		color: var(--dim);
 	}
 	.detail {
 		height: var(--detail-h);
