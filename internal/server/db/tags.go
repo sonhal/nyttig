@@ -198,3 +198,10 @@ func GetTagsForItem(db *sql.DB, itemID int64) ([]*Tag, error) {
 	}
 	return tags, rows.Err()
 }
+
+// UpdateTag writes a tag's name and color. Rules and item assignments
+// reference the tag by ID, so they are kept.
+func UpdateTag(db *sql.DB, t *Tag) error {
+	_, err := db.Exec(`UPDATE tags SET name = ?, color = ? WHERE id = ?`, t.Name, t.Color, t.ID)
+	return err
+}

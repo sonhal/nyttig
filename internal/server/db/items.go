@@ -271,6 +271,25 @@ func loadTagsByItemIDs(db *sql.DB, itemIDs []int64) (map[int64][]*Tag, error) {
 	return result, rows.Err()
 }
 
+// ItemMatchesSearch reports whether the item with the given ID matches the
+// FTS5 search query, using the same quoting as ListItems. An empty query
+// matches everything.
+func ItemMatchesSearch(db *sql.DB, itemID int64, query string) (bool, error) {
+	if query == "" {
+		return true, nil
+	}
+	var one int
+	err := db.QueryRow(`SELECT 1 FROM items_fts WHERE rowid = ? AND items_fts MATCH ?`,
+		itemID, ftsQuote(query)).Scan(&one)
+	if err == sql.ErrNoRows {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
 // SearchItems performs an FTS5 search and returns matching items.
 func SearchItems(db *sql.DB, query string, sourceID int64, tagID int64, limit, offset int) ([]*Item, int, error) {
 	if limit <= 0 {

@@ -319,6 +319,17 @@ func (c *Client) AddTag(ctx context.Context, req *pb.AddTagRequest) (*pb.Tag, er
 	return client.AddTag(ctx, req)
 }
 
+// UpdateTag renames and/or recolors a tag, keeping its rules and assignments.
+func (c *Client) UpdateTag(ctx context.Context, req *pb.UpdateTagRequest) (*pb.Tag, error) {
+	if err := c.ensureConn(ctx); err != nil {
+		return nil, err
+	}
+	c.mu.RLock()
+	client := c.grpc
+	c.mu.RUnlock()
+	return client.UpdateTag(ctx, req)
+}
+
 // RemoveTag removes a tag and all its associations (cascading).
 func (c *Client) RemoveTag(ctx context.Context, id int64) error {
 	if err := c.ensureConn(ctx); err != nil {
@@ -374,6 +385,17 @@ func (c *Client) ListTagRules(ctx context.Context) (*pb.ListTagRulesResponse, er
 	client := c.grpc
 	c.mu.RUnlock()
 	return client.ListTagRules(ctx, &emptypb.Empty{})
+}
+
+// TestTagRule dry-runs a tag rule against recent items without saving it.
+func (c *Client) TestTagRule(ctx context.Context, req *pb.TestTagRuleRequest) (*pb.TestTagRuleResponse, error) {
+	if err := c.ensureConn(ctx); err != nil {
+		return nil, err
+	}
+	c.mu.RLock()
+	client := c.grpc
+	c.mu.RUnlock()
+	return client.TestTagRule(ctx, req)
 }
 
 // Search performs an FTS5 full-text search.

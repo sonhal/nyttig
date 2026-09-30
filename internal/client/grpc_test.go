@@ -12,6 +12,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -76,14 +77,18 @@ func (s *testServer) UpdateSource(ctx context.Context, req *pb.UpdateSourceReque
 	defer s.mu.Unlock()
 	for _, src := range s.sources {
 		if src.Id == req.Id {
-			if req.Name != "" {
-				src.Name = req.Name
+			if req.Name != nil {
+				src.Name = *req.Name
 			}
-			if req.Url != "" {
-				src.Url = req.Url
+			if req.Url != nil {
+				src.Url = *req.Url
 			}
-			src.RefreshSec = req.RefreshSec
-			src.Enabled = req.Enabled
+			if req.RefreshSec != nil {
+				src.RefreshSec = *req.RefreshSec
+			}
+			if req.Enabled != nil {
+				src.Enabled = *req.Enabled
+			}
 			return src, nil
 		}
 	}
@@ -387,7 +392,7 @@ func TestClient_UpdateSource(t *testing.T) {
 
 	ctx := context.Background()
 	src, err := c.UpdateSource(ctx, &pb.UpdateSourceRequest{
-		Id: 1, Name: "Hacker News", RefreshSec: 300,
+		Id: 1, Name: proto.String("Hacker News"), RefreshSec: proto.Int32(300),
 	})
 	if err != nil {
 		t.Fatalf("UpdateSource: %v", err)

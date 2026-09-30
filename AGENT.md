@@ -32,15 +32,17 @@ via a **bidirectional gRPC stream**.
 cmd/nyttig/main.go          Client entrypoint: TUI launch + CLI subcommands
 cmd/nyttigd/main.go         Daemon entrypoint: wires db → fetcher → tagger → scheduler → gRPC
 proto/nyttig/v1/nyttig.proto   Source-of-truth API definition
-proto/buf.yaml, buf.gen.yaml    buf config for codegen (currently broken, see below)
+buf.yaml, buf.gen.yaml      buf config for codegen; run `buf generate` from the repo root
 internal/proto/nyttig/v1/   GENERATED Go from the proto (do not hand-edit)
 internal/config/            TOML config loading + ~ expansion
 internal/client/            gRPC client wrapper + StreamSub helper used by the TUI
 internal/mtls/              Mutual-TLS credential loading shared by daemon and client
 internal/tui/               Bubble Tea Model, filter bar, table, status bar, view tracking
-internal/server/service/    gRPC service impl + Hub (broadcasts pushed items to subscribers)
+internal/server/service/    gRPC service impl + Hub (broadcasts pushed items to subscribers);
+                            validate.go holds all client-input validation
 internal/server/db/         SQLite layer: items, sources, tags, views; embedded migrations
-internal/server/fetcher/    Feed fetch/parse + GUID-based dedup
+internal/server/fetcher/    Feed fetch/parse + GUID-based dedup; client.go builds the HTTP
+                            client, including the private-address (SSRF) block
 internal/server/tagger/     Regex-based auto-tagging engine
 internal/server/scheduler/  Per-source fetch timers; refresh/enable/disable lifecycle
 migrations/                 Copy of the migrations; the DB applies the embedded set in internal/server/db/migrations
@@ -48,8 +50,9 @@ third_party/                Vendored, patched mattn/go-sqlite3 (see note below)
 scripts/gen-certs.sh        Generates a private CA plus server/client certs for mTLS
 .github/workflows/ci.yml    CI pipeline (see below)
 .github/dependabot.yml      Weekly grouped dependency updates
-sample_config.toml          Example config
-nyttigd.service             Example systemd user unit
+sample_config.toml          Example config (loaded by a test, so keep it valid)
+deploy/systemd/             Hardened system unit(s); nyttigd runs as a dedicated `nyttig` user
+docs/web-client-plan.md     Plan for the nyttig-web browser client
 ```
 
 ## Architecture notes (read before changing server code)
@@ -64,14 +67,27 @@ nyttigd.service             Example systemd user unit
 - **The Hub** (`service.go`) holds active `StreamItems` subscribers. The fetch
   pipeline calls `hub.Push(item)`; `Push` is **non-blocking** and drops items
   for slow subscribers (64-buffered channel). `StreamItems` re-filters pushed
-  items per-subscriber against the current `StreamFilter`.
+  items per-subscriber against the current `StreamFilter`, including the
+  search query (checked against `items_fts` with `db.ItemMatchesSearch`).
 - **Adapters between layers** (e.g. `db.Source` ⇄ `scheduler.Source`,
   `db.TagRule` ⇄ `tagger.TagRule`) live in `cmd/nyttigd/main.go`. Each inner
   package defines its own store interfaces (`scheduler.SourceStore`,
   `tagger.RuleStore`) so they don't import the db package directly.
-- **Fetching** uses one shared `http.Client` with a 30s timeout and caps
-  response bodies at 10 MiB (`fetcher/fetch.go`). Keep both bounds when
-  changing the fetcher; feeds are untrusted input.
+- **Fetching** uses one shared `http.Client` from `fetcher.NewHTTPClient`
+  with a 30s timeout, and caps response bodies at 10 MiB (`fetcher/fetch.go`).
+  Keep both bounds when changing the fetcher; feeds are untrusted input.
+  With `block_private_addresses` the client refuses non-public destinations
+  in the dialer's `Control` hook, i.e. on the resolved IP at connect time.
+  Keep the check there: validating the URL or hostname beforehand is
+  bypassable with DNS rebinding and redirects.
+- **Validation** of everything a client sends lives in
+  `service/validate.go` and runs in the service, so every client gets it.
+  Config seeding in `cmd/nyttigd/main.go` writes to the db directly and is
+  not validated (the config file is trusted).
+- **Source edits reach the scheduler** through `OnSourceUpdated`, which the
+  service calls only when `enabled`, `url` or `refresh_sec` changed. The daemon
+  then calls `scheduler.RestartSource`: a running runner keeps the `Source` it
+  was started with, so `EnableSource` alone would keep the old URL/interval.
 - **Dedup** is by `UNIQUE(source_id, guid)`. GUID is the feed `<guid>` if
   present, else SHA-256 of `<link>`.
 - **Search** input is wrapped by `ftsQuote` (`db/items.go`) so it is matched as
@@ -129,6 +145,7 @@ on `ubuntu-latest`, with the Go version taken from `go.mod`:
 | Job | What it checks |
 |---|---|
 | Lint | gofmt, `go mod tidy -diff`, `go vet`, golangci-lint |
+| Generated code | `buf generate` leaves `internal/proto` unchanged |
 | Test | `go test -race -shuffle=on` with coverage |
 | Build | Builds both binaries; runs only after Lint and Test pass |
 | Vulnerability check | `govulncheck ./...` against the code paths the binaries call |
@@ -149,15 +166,32 @@ The proto is the API source of truth. Output lands in
 `internal/server/service/` and the client wrapper in `internal/client/` to
 match.
 
-**`buf generate` does not currently work.** `proto/buf.yaml` declares
-`modules: - path: proto`, which is resolved relative to `proto/` itself, so buf
-looks in `proto/proto/` and fails with `Module "path: "proto"" had no .proto
-files`. Changing it to `path: .` lets `cd proto && buf generate` find the file.
-Generation then uses the remote plugins pinned in `buf.gen.yaml`, which needs
-network access to the Buf Schema Registry. After fixing the path, `buf lint`
-reports about 25 naming-rule violations in the existing API; fixing those
-means breaking changes to the API, so don't do it as a drive-by. Generated
-code must be gofmt-clean, and buf's output already is.
+Generate from the repository root with local, pinned plugins (no Buf
+Schema Registry access needed):
+
+```bash
+go install github.com/bufbuild/buf/cmd/buf@v1.73.0
+go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.10
+go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.5.1
+buf generate
+```
+
+CI's **Generated code** job runs the same commands and fails if
+`internal/proto` changes. That guards against a real past bug: fields were
+added to the Go structs by hand, but protobuf-go serializes from the
+descriptor embedded in the generated file, so `Source.color`/`abbreviation`
+were silently dropped on the wire. `service_test.go`'s
+`TestSourceColorSurvivesWire` checks this too. When bumping a plugin version,
+change it in `buf.gen.yaml`'s comment, the CI job and here.
+
+Managed mode is off on purpose: the proto's own `go_package` sets the Go
+package (`v1`). `buf lint` reports about 25 naming-rule violations in the
+existing API; fixing those means breaking API changes, so don't do it as a
+drive-by.
+
+Fields that clients patch use proto3 `optional` (field presence), e.g.
+`UpdateSourceRequest` and `UpdateTagRequest`: unset = unchanged. Use the same
+pattern for new update RPCs rather than treating zero values as "unset".
 
 ## Dependencies
 
@@ -198,8 +232,8 @@ code must be gofmt-clean, and buf's output already is.
 
 - The repo README warns the project is LLM-generated; treat existing code as the
   spec and verify behavior with tests rather than assuming intent.
-- `UpdateSource` cannot distinguish "enabled not set" from "enabled=false" in
-  proto3 — see the comment in `service.go` before touching enable/disable.
+- Changing a tag's name or color must go through `UpdateTag`. `RemoveTag`
+  cascade-deletes the tag's rules and item assignments.
 - Two migration directories exist (`migrations/` and
   `internal/server/db/migrations/`); the DB applies the embedded set under
   `internal/server/db/migrations/`. Keep them in sync if you add migrations.

@@ -157,6 +157,7 @@ These go at the top of the file, before any `[table]`.
 | `socket`    | `/tmp/nyttig.sock`                | Unix socket path or `host:port`    |
 | `db_path`   | `~/.local/share/nyttig/nyttig.db` | SQLite database path               |
 | `log_level` | `info`                            | `debug`, `info`, `warn`, `error`   |
+| `block_private_addresses` | `false`             | Refuse to fetch feeds from loopback, private or link-local addresses (see [Fetching and SSRF](#fetching-and-ssrf)) |
 
 ### `[tls]`
 
@@ -209,8 +210,9 @@ socket). Paths may use a leading `~`.
 | `--tls-cert`      | —                              | Server certificate (PEM); enables mTLS            |
 | `--tls-key`       | —                              | Server private key (PEM)                          |
 | `--tls-client-ca` | —                              | CA bundle (PEM) used to verify client certs       |
+| `--block-private-addresses` | `false`              | Refuse to fetch feeds from non-public addresses   |
 
-Flags override the corresponding `[tls]` config values. All three TLS flags are
+Flags override the corresponding config values. All three TLS flags are
 required together.
 
 ## Client Flags (`nyttig`)
@@ -270,25 +272,71 @@ Items are automatically marked as viewed when you scroll past them in the TUI (K
 When invoked with arguments, `nyttig` acts as a CLI management tool:
 
 ```
-nyttig add-source      -n <name> -u <url> [-t rss|atom] [-r refresh_sec]
+nyttig add-source      -n <name> -u <url> [-t rss|atom] [-r refresh_sec] [-color <hex>] [-abbreviation <short>]
 nyttig list-sources
-nyttig update-source   -id <source_id> [-n <name>] [-u <url>] [-t rss|atom] [-r refresh_sec] [-enable|-disable]
+nyttig update-source   -id <source_id> [-n <name>] [-u <url>] [-t rss|atom] [-r refresh_sec]
+                       [-enable|-disable] [-color <hex>] [-abbreviation <short>]
 nyttig remove-source   -id <source_id>
 nyttig add-tag         -n <name> [-c <hex_color>]
 nyttig list-tags
+nyttig update-tag      -id <tag_id> [-n <name>] [-c <hex_color>]   # keeps rules and item assignments
 nyttig remove-tag      -id <tag_id>      # also removes the tag's rules and item assignments
 nyttig add-tag-rule    -tag <name|id> -p <regex> [-f title|description|both] [-s source_id] [-priority N]
+nyttig test-tag-rule   -p <regex> [-f title|description|both] [-s source_id] [-l limit]   # dry run
 nyttig list-tag-rules
 nyttig remove-tag-rule -id <rule_id>
-nyttig search          [-tag <name|id>] [-s source_id] [-l limit] [-offset N] [query...]
+nyttig search          [-tag <name|id>] [-s source_id] [-l limit] [-offset N] [-sort newest|oldest] [-unviewed] [query...]
 nyttig refresh         [-id <source_id>]   # omit -id to refresh all
 ```
 
 Each subcommand calls the corresponding gRPC RPC against the daemon. The daemon must be running for these to work.
 
+`update-source` and `update-tag` change only the flags you pass. Pass
+`-color ''` or `-abbreviation ''` to clear a value. Changing a source's URL or
+refresh interval takes effect immediately and triggers a fetch.
+
 Tag rules added with `add-tag-rule` apply to items fetched after the rule is
-created; existing items are not retagged. The daemon rejects invalid regex
-patterns and unknown `field` values.
+created; existing items are not retagged. Use `test-tag-rule` first to see
+which of the 500 most recent items a pattern would match.
+
+### Input validation
+
+The daemon validates everything clients send, so the CLI, the TUI and other
+clients get the same checks:
+
+| Value           | Rule                                                        |
+|-----------------|-------------------------------------------------------------|
+| Source URL      | Absolute `http`/`https` URL with a host, no credentials, at most 2048 bytes |
+| Source type     | `rss` or `atom`                                             |
+| Refresh interval| 60 seconds to 7 days (default 3600)                         |
+| Colors          | `#RRGGBB`, or empty for none                                |
+| Names           | Non-empty, no control characters; sources ≤ 200, tags ≤ 64, abbreviations ≤ 16 characters |
+| Tag rule pattern| Valid Go (RE2) regex, at most 1024 bytes; `field` is `title`, `description` or `both` |
+
+A duplicate source URL or tag name is rejected with `AlreadyExists`. Sources,
+tags and rules from the config file are seeded directly and are not checked.
+
+## Fetching and SSRF
+
+Every source URL is fetched by the daemon. If people you don't fully trust can
+add sources, for example through a web client exposed to the internet, a
+source URL could point at services that are only reachable from the server:
+`http://127.0.0.1:…`, your LAN, or a cloud metadata endpoint such as
+`169.254.169.254`.
+
+Set `block_private_addresses = true` (or pass `--block-private-addresses`) to
+refuse those. The daemon then refuses to connect to:
+
+- loopback, private (RFC 1918, `fc00::/7`) and link-local addresses;
+- carrier-grade NAT (`100.64.0.0/10`, which Tailscale also uses), multicast,
+  and reserved and documentation ranges;
+- IPv4-mapped and NAT64 forms of the above.
+
+The check runs on the resolved IP when the connection is made, so it also
+covers hostnames that resolve to internal addresses, DNS rebinding and
+redirects. A refused fetch shows up as the source's `fetch_error`. HTTP proxy
+environment variables are ignored while the option is on, because through a
+proxy the real destination can't be checked.
 
 ## Tagging System
 
@@ -375,17 +423,35 @@ by a different CA, are rejected at the TLS handshake.
 
 ## Running as a Systemd Service
 
-An example user-level systemd service is provided in `nyttigd.service`. To use it:
+[`deploy/systemd/nyttigd.service`](deploy/systemd/nyttigd.service) is a
+hardened **system** unit that runs the daemon as a dedicated `nyttig` user.
+systemd creates `/var/lib/nyttig` for the database, `/run/nyttig` for the
+socket and `/etc/nyttig` for the config.
 
 ```bash
-mkdir -p ~/.config/systemd/user
-cp nyttigd.service ~/.config/systemd/user/
-systemctl --user daemon-reload
-systemctl --user enable --now nyttigd
-systemctl --user status nyttigd
+sudo useradd --system --home-dir /var/lib/nyttig --shell /usr/sbin/nologin nyttig
+sudo install -m 0755 nyttigd nyttig /usr/local/bin/
+sudo install -D -o root -g nyttig -m 0640 sample_config.toml /etc/nyttig/config.toml
+sudo install -m 0644 deploy/systemd/nyttigd.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now nyttigd
 ```
 
-The service runs under your user account and uses the default socket path at `/tmp/nyttig.sock`. Adjust the `ExecStart` path if you installed the binary to a different location.
+The socket is `/run/nyttig/nyttig.sock`, readable and writable by the `nyttig`
+group only. To use the TUI or CLI, add yourself to the group, log in again,
+and pass the socket:
+
+```bash
+sudo usermod -aG nyttig "$USER"
+nyttig --socket /run/nyttig/nyttig.sock
+```
+
+Use absolute paths in `/etc/nyttig/config.toml`: `~` expands to the service
+user's home, `/var/lib/nyttig`. The unit's `--socket` and `--db-path` flags
+override the file. Logs go to the journal: `sudo journalctl -u nyttigd`.
+
+The daemon has no reload action. Restart it (`sudo systemctl restart nyttigd`)
+to pick up config changes.
 
 ## Database
 

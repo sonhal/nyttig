@@ -153,6 +153,20 @@ func (s *Scheduler) EnableSource(ctx context.Context, id int64) error {
 	return nil
 }
 
+// RestartSource reloads a source from the store and restarts its runner, so
+// changes to its URL or refresh interval take effect. The restarted runner
+// fetches immediately, like a newly enabled source. It also starts a source
+// that was not running.
+func (s *Scheduler) RestartSource(ctx context.Context, id int64) error {
+	src, err := s.store.GetSource(id)
+	if err != nil {
+		return fmt.Errorf("get source %d: %w", id, err)
+	}
+	s.stopRunner(id)
+	s.startRunner(src)
+	return nil
+}
+
 // DisableSource stops a running source without removing it from the store. The
 // source can be re-enabled later.
 func (s *Scheduler) DisableSource(id int64) {
