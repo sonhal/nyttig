@@ -1,9 +1,11 @@
 <!--
 	The feed: filter bar, virtual table and status bar. The filter lives in
 	the URL as separate parameters (?q=&source=&tag=&sort=&unviewed=1, IDs for
-	source and tag), so views can be bookmarked, survive renames, and the back
+	source and tag), so a filter can be bookmarked, survive renames, and the back
 	button works. The query bar shows it as text (tag:rust src:"Hacker News"
 	...) and parses what you type back into those parameters (query.ts).
+	A saved view is a tab (ViewTabs) that opens the feed with the view's
+	filter; ?view=<id> only marks the tab as active (views.ts).
 -->
 <script lang="ts">
 	import { onMount, tick, untrack } from 'svelte';
@@ -17,6 +19,7 @@
 	import ItemDetail from '$lib/ItemDetail.svelte';
 	import PickerView from '$lib/Picker.svelte';
 	import StatusBar from '$lib/StatusBar.svelte';
+	import ViewTabs from '$lib/ViewTabs.svelte';
 	import VirtualList from '$lib/VirtualList.svelte';
 	import { cycleID, filterFromParams, filterQuery, nextSort, sameFilter } from '$lib/filter';
 	import CommandLine from '$lib/CommandLine.svelte';
@@ -35,6 +38,7 @@
 	import { FeedStream } from '$lib/stream.svelte';
 	import type { Filter, Item } from '$lib/types';
 	import { ViewTracker } from '$lib/viewed';
+	import { activeView, favorites, isModified, viewForKey, viewHref, viewSearch } from '$lib/views';
 
 	const METADATA_INTERVAL_MS = 30_000;
 	const UNVIEWED_INTERVAL_MS = 15_000;
@@ -66,6 +70,10 @@
 	let searchInput: HTMLInputElement | undefined = $state();
 
 	const filter: Filter = $derived(filterFromParams(page.url.searchParams));
+	/** The ?view= parameter, kept through filter changes so the tab stays open (shown with "*"). */
+	const viewParam = $derived(/^[1-9][0-9]{0,18}$/.test(page.url.searchParams.get('view') ?? '') ? page.url.searchParams.get('view')! : '');
+	const openView = $derived(activeView(page.url.searchParams, metadata.views));
+	const tabViews = $derived(favorites(metadata.views));
 	/** The query bar's text. */
 	let draft = $state('');
 	/** The filter as query text, which the bar shows when it is not being edited. */
@@ -116,11 +124,15 @@
 		untrack(() => {
 			if (connected && sameFilter(connected, f)) return;
 			connected = f;
-			// ":feed" and the view tabs come back to this filter.
-			metadata.feedSearch = filterQuery(f);
 			stream.connect(f);
 			void loadUnviewed();
 		});
+	});
+
+	// ":feed" and the nav links come back to this filter and this tab.
+	$effect(() => {
+		const search = viewSearch(viewParam, filter);
+		untrack(() => (metadata.feedSearch = search));
 	});
 
 	// The bar shows the filter as text unless it is being edited: after the
@@ -141,7 +153,7 @@
 
 	function setFilter(f: Filter) {
 		if (sameFilter(f, filter)) return;
-		void goto(page.url.pathname + filterQuery(f), { keepFocus: true, noScroll: true });
+		void goto(page.url.pathname + viewSearch(viewParam, f), { keepFocus: true, noScroll: true });
 	}
 
 	// ── Metadata and counts ───────────────────────────────────
@@ -316,7 +328,19 @@
 		if (last >= items.length - 1 - LOAD_AHEAD_ROWS) void stream.loadOlder();
 	}
 
-	function openPicker(kind: 'source' | 'tag') {
+	function openPicker(kind: 'source' | 'tag' | 'view') {
+		if (kind === 'view') {
+			// Favorites first, marked with a star; "all" is the unfiltered feed.
+			const favs = tabViews;
+			const rest = metadata.views.filter((v) => !v.favorite);
+			picker.start('view', [
+				{ id: '', label: 'all' },
+				...[...favs.map((v) => ({ v, star: true })), ...rest.map((v) => ({ v, star: false }))].flatMap(({ v, star }) =>
+					v.id ? [{ id: v.id, label: (star ? '★ ' : '') + oneLine(v.name) }] : []
+				)
+			]);
+			return;
+		}
 		const entries =
 			kind === 'source'
 				? sources.map((x) => ({ x, depth: 0 }))
@@ -335,7 +359,14 @@
 	function pick(id: string) {
 		const kind = picker.kind;
 		closePicker();
+		if (kind === 'view') return openViewById(id);
 		if (kind) setFilter({ ...filter, [kind]: id });
+	}
+
+	/** Opens a view (id "" is the unfiltered feed). */
+	function openViewById(id: string) {
+		const v = metadata.views.find((x) => x.id === id);
+		void goto(v ? viewHref(v) : '/', { keepFocus: true, noScroll: true });
 	}
 
 	function closeHelp() {
@@ -349,6 +380,7 @@
 		refresh: (id) => void refresh(id),
 		filter: () => filter,
 		setFilter,
+		activeView: () => openView?.id ?? '',
 		follow
 	};
 
@@ -390,6 +422,13 @@
 				return openPicker('source');
 			case 'pickTag':
 				return openPicker('tag');
+			case 'viewPicker':
+				return openPicker('view');
+			case 'viewTab': {
+				if (a.n === 0) return openViewById('');
+				const v = viewForKey(metadata.views, a.n);
+				return v?.id ? openViewById(v.id) : flash(`no favorite view ${a.n}`);
+			}
 			case 'pickerMove':
 				return picker.move(a.by);
 			case 'pickerSelect': {
@@ -427,7 +466,7 @@
 			case 'openCommand':
 				return cl.start();
 			case 'runCommand': {
-				const cmd = cl.run({ sources, tags });
+				const cmd = cl.run({ sources, tags, views: metadata.views });
 				if (!cmd) return;
 				list?.focus();
 				return execute(cmd, host);
@@ -437,7 +476,7 @@
 				list?.focus();
 				return;
 			case 'completeCommand':
-				return cl.complete({ sources, tags });
+				return cl.complete({ sources, tags, views: metadata.views });
 			case 'historyPrev':
 				return cl.historyPrev();
 			case 'historyNext':
@@ -512,6 +551,13 @@
 <svelte:window {onkeydown} />
 
 <div class="app">
+	<ViewTabs
+		tabs={tabViews}
+		active={openView}
+		modified={openView ? isModified(openView, filter) : false}
+		onnavigate={() => list?.focus()}
+		onsave={() => cl.start('save ')}
+	/>
 	<FilterBar
 		{filter}
 		{sources}
@@ -630,7 +676,7 @@
 <style>
 	.app {
 		display: grid;
-		grid-template-rows: auto minmax(0, 1fr) auto;
+		grid-template-rows: auto auto minmax(0, 1fr) auto;
 		height: 100vh;
 		height: 100dvh;
 		padding-left: env(safe-area-inset-left);

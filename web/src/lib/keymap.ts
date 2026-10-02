@@ -1,6 +1,6 @@
 // Keyboard handling as a pure mode machine: each view has one global
 // keydown listener that asks keyAction() (the feed) or manageKeyAction()
-// (sources, tags, rules) what a key means in the current mode.
+// (sources, tags, rules, views) what a key means in the current mode.
 //
 // Every mode's keys live in a table of bindings (BINDINGS below). The key
 // handler looks keys up in those tables and the help overlay (help.ts) is
@@ -13,7 +13,7 @@
 //   sheet    the mobile filter sheet is open; only Esc is intercepted
 //   command  the ":" command line has focus; only COMMAND's keys are
 //            intercepted
-//   picker   the S/T fuzzy picker has focus (its input takes the typing)
+//   picker   the S/T/v fuzzy picker has focus (its input takes the typing)
 //   help     the help overlay is open; q, Esc and ? close it
 //
 // Management modes: normal, command and help as above, plus
@@ -39,6 +39,9 @@ export type Action =
 	| { type: 'cycleTag' }
 	| { type: 'pickSource' }
 	| { type: 'pickTag' }
+	/** 1-9: the nth favorite view; 0: the unfiltered feed. */
+	| { type: 'viewTab'; n: number }
+	| { type: 'viewPicker' }
 	| { type: 'pickerMove'; by: number }
 	| { type: 'pickerSelect' }
 	| { type: 'pickerCancel' }
@@ -114,15 +117,26 @@ const NORMAL: FeedBinding[] = [
 	b('Filter', ['S'], { type: 'pickSource' }, 'pick a source by name'),
 	b('Filter', ['T'], { type: 'pickTag' }, 'pick a tag by name'),
 	b('Filter', ['o'], { type: 'toggleSort' }, 'toggle newest/oldest first'),
+	b('Saved views', ['1'], { type: 'viewTab', n: 1 }, 'go to favorite view 1-9'),
+	b('Saved views', ['2'], { type: 'viewTab', n: 2 }, 'go to favorite view 1-9'),
+	b('Saved views', ['3'], { type: 'viewTab', n: 3 }, 'go to favorite view 1-9'),
+	b('Saved views', ['4'], { type: 'viewTab', n: 4 }, 'go to favorite view 1-9'),
+	b('Saved views', ['5'], { type: 'viewTab', n: 5 }, 'go to favorite view 1-9'),
+	b('Saved views', ['6'], { type: 'viewTab', n: 6 }, 'go to favorite view 1-9'),
+	b('Saved views', ['7'], { type: 'viewTab', n: 7 }, 'go to favorite view 1-9'),
+	b('Saved views', ['8'], { type: 'viewTab', n: 8 }, 'go to favorite view 1-9'),
+	b('Saved views', ['9'], { type: 'viewTab', n: 9 }, 'go to favorite view 1-9'),
+	b('Saved views', ['0'], { type: 'viewTab', n: 0 }, 'the unfiltered feed'),
+	b('Saved views', ['v'], { type: 'viewPicker' }, 'pick a saved view by name'),
 	b('Feed', ['F'], { type: 'follow' }, 'follow: jump to the newest and stick to it'),
 	b('Feed', ['r'], { type: 'refreshAll' }, 'refresh all sources'),
 	b('Feed', ['R'], { type: 'refreshSource' }, "refresh the selected item's source"),
 	b('Feed', ['Enter'], { type: 'open' }, 'open the link in a new tab'),
 	b('Feed', [' ', 'l'], { type: 'toggleExpand' }, 'expand or collapse the row'),
 	b('Feed', ['D'], { type: 'toggleTime' }, 'relative or absolute times'),
-	b('Views', [':'], { type: 'openCommand' }, 'command line'),
-	b('Views', ['?'], { type: 'openHelp' }, 'this help'),
-	b('Views', ['q', 'Escape'], { type: 'close' }, 'close the expanded row')
+	b('General', [':'], { type: 'openCommand' }, 'command line'),
+	b('General', ['?'], { type: 'openHelp' }, 'this help'),
+	b('General', ['q', 'Escape'], { type: 'close' }, 'close the expanded row')
 ];
 
 const SEARCH: FeedBinding[] = [
@@ -200,8 +214,11 @@ export type ManageAction =
 	| { type: 'add' }
 	| { type: 'edit' }
 	| { type: 'delete' }
-	/** Enable or disable the selected source. */
+	/** Enable or disable the selected source; favorite or unfavorite a view. */
 	| { type: 'toggle' }
+	/** Views: move the selected view one place up or down the list. */
+	| { type: 'moveUp' }
+	| { type: 'moveDown' }
 	/** Fetch the selected source now. */
 	| { type: 'refresh' }
 	/** Leave the view for the feed. */
@@ -214,7 +231,7 @@ export type ManageAction =
 
 /** A toolbar button in a management view; each is also a key. */
 export interface Tool {
-	type: 'add' | 'edit' | 'delete' | 'toggle' | 'refresh';
+	type: 'add' | 'edit' | 'delete' | 'toggle' | 'refresh' | 'moveUp' | 'moveDown';
 	label: string;
 	/** The key shown in the legend. */
 	key: string;
@@ -232,11 +249,13 @@ const MANAGE: ManageBinding[] = [
 	b('Edit', ['a'], { type: 'add' }, 'add', { tool: 'add' }),
 	b('Edit', ['e', 'Enter'], { type: 'edit' }, 'edit the selected row', { tool: 'edit' }),
 	b('Edit', ['x', 'Delete'], { type: 'delete' }, 'delete the selected row', { tool: 'delete' }),
-	b('Edit', [' '], { type: 'toggle' }, 'enable or disable the selected source', { tool: 'toggle' }),
+	b('Edit', [' '], { type: 'toggle' }, 'enable or disable the selected source, or favorite a view', { tool: 'toggle' }),
+	b('Edit', ['K'], { type: 'moveUp' }, 'move the selected view up', { tool: 'moveUp' }),
+	b('Edit', ['J'], { type: 'moveDown' }, 'move the selected view down', { tool: 'moveDown' }),
 	b('Edit', ['r'], { type: 'refresh' }, 'refresh the selected source now', { tool: 'refresh' }),
-	b('Views', ['q'], { type: 'feed' }, 'back to the feed'),
-	b('Views', [':'], { type: 'openCommand' }, 'command line'),
-	b('Views', ['?'], { type: 'openHelp' }, 'this help')
+	b('General', ['q'], { type: 'feed' }, 'back to the feed'),
+	b('General', [':'], { type: 'openCommand' }, 'command line'),
+	b('General', ['?'], { type: 'openHelp' }, 'this help')
 ];
 
 const FORM: ManageBinding[] = [b('Form', ['Escape'], { type: 'cancel' }, 'close the form without saving')];

@@ -260,8 +260,6 @@
 		.bar {
 			gap: 1ch;
 			padding: 0 8px;
-			padding-top: env(safe-area-inset-top);
-			height: calc(var(--bar-h) + env(safe-area-inset-top));
 		}
 		.chips {
 			display: none;

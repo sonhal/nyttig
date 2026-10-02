@@ -74,3 +74,26 @@ export interface RuleTest {
 	/** How many recent items the daemon checked. */
 	scanned: number;
 }
+
+/**
+ * A saved view's filter as nyttig-api sends and takes it: the keys of
+ * Filter, with zero values left out. It is always present on a view (it can
+ * be {}), and IDs are strings.
+ */
+export interface ViewFilter {
+	q?: string;
+	source?: string;
+	tag?: string;
+	sort?: string;
+	unviewed?: boolean;
+}
+
+/** A saved view. Unlike the other types this is not protojson: see viewJSON in internal/api/manage.go. */
+export interface SavedView {
+	id?: string;
+	name?: string;
+	filter?: ViewFilter;
+	favorite?: boolean;
+	/** The display order of the views, from 0. */
+	position?: number;
+}

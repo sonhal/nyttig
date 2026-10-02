@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { applyToFilter, commonPrefix, completeCommand, parseCommand, type Command } from './command';
 import { defaultFilter } from './filter';
-import type { Source, Tag } from './types';
+import type { SavedView, Source, Tag } from './types';
 
 const sources: Source[] = [
 	{ id: '1', name: 'Alpha News', abbreviation: 'ALP' },
@@ -11,7 +11,11 @@ const tags: Tag[] = [
 	{ id: '1', name: 'linux' },
 	{ id: '2', name: 'Release notes' }
 ];
-const ctx = { sources, tags };
+const views: SavedView[] = [
+	{ id: '1', name: 'Security', favorite: true },
+	{ id: '2', name: 'Linux news' }
+];
+const ctx = { sources, tags, views };
 
 const parse = (s: string) => parseCommand(s, ctx);
 const cmd = (s: string): Command => {
@@ -51,6 +55,43 @@ describe('parseCommand: pages', () => {
 	it('takes no argument', () => {
 		expect(error('sources now')).toBe('sources takes no argument');
 		expect(error('help me')).toBe('help takes no argument');
+	});
+});
+
+describe('parseCommand: saved views', () => {
+	it('opens a view by name, any case, or a unique prefix', () => {
+		expect(cmd('view Security')).toEqual({ type: 'view', id: '1' });
+		expect(cmd('view security')).toEqual({ type: 'view', id: '1' });
+		expect(cmd('v linux')).toEqual({ type: 'view', id: '2' });
+		expect(cmd('view "Linux news"')).toEqual({ type: 'view', id: '2' });
+		expect(cmd('view sec')).toEqual({ type: 'view', id: '1' });
+	});
+
+	it('opens the unfiltered feed with all', () => {
+		expect(cmd('view all')).toEqual({ type: 'view', id: '' });
+		expect(cmd('v *')).toEqual({ type: 'view', id: '' });
+		// A view called "all" wins over the keyword.
+		const r = parseCommand('view all', { ...ctx, views: [{ id: '9', name: 'all' }] });
+		expect(r).toEqual({ ok: true, cmd: { type: 'view', id: '9' } });
+	});
+
+	it('explains what is wrong', () => {
+		expect(error('view')).toBe('view: a view name, or all');
+		expect(error('view nope')).toBe('unknown view: nope');
+		expect(parseCommand('view x').ok).toBe(false);
+	});
+
+	it('saves into the active view, or under a name', () => {
+		expect(cmd('save')).toEqual({ type: 'save', name: '' });
+		expect(cmd('save My view')).toEqual({ type: 'save', name: 'My view' });
+		expect(cmd('save "Quoted"')).toEqual({ type: 'save', name: 'Quoted' });
+		expect(cmd('sav')).toEqual({ type: 'save', name: '' });
+	});
+
+	it('opens the management page', () => {
+		expect(cmd('views')).toEqual({ type: 'page', page: 'views' });
+		expect(error('views x')).toBe('views takes no argument');
+		expect(error('vie')).toContain('ambiguous');
 	});
 });
 
@@ -160,6 +201,10 @@ describe('completeCommand', () => {
 		expect(completeCommand('ta l', ctx).candidates).toEqual([]);
 		expect(completeCommand('sor n', ctx).candidates).toEqual(['newest']);
 		expect(completeCommand('sources x', ctx).candidates).toEqual([]);
+		expect(completeCommand('view ', ctx).candidates).toEqual(['Security', 'Linux news', 'all']);
+		expect(completeCommand('v li', ctx)).toEqual({ from: 2, candidates: ['Linux news'] });
+		expect(completeCommand('view se', ctx).candidates).toEqual(['Security']);
+		expect(completeCommand('save x', ctx).candidates).toEqual([]);
 	});
 });
 
