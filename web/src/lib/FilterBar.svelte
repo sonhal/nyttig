@@ -6,12 +6,13 @@
 <script lang="ts">
 	import type { Candidate } from './query';
 	import { oneLine, safeColor } from './sanitize';
-	import type { Filter, Source, Tag } from './types';
+	import type { Assessor, Filter, Source, Tag } from './types';
 
 	interface Props {
 		filter: Filter;
 		sources: Source[];
 		tags: Tag[];
+		assessors?: Assessor[];
 		/** The query input's text, which is applied on Enter. */
 		draft: string;
 		input?: HTMLInputElement;
@@ -29,6 +30,7 @@
 		onsearchblur: () => void;
 		oncyclesource: () => void;
 		oncycletag: () => void;
+		onpickassessor?: () => void;
 		oncyclesince: () => void;
 		ontogglesort: () => void;
 		ontoggleunviewed: () => void;
@@ -40,6 +42,7 @@
 		filter,
 		sources,
 		tags,
+		assessors = [],
 		draft = $bindable(),
 		input = $bindable(),
 		suggestions = [],
@@ -52,6 +55,7 @@
 		onsearchblur,
 		oncyclesource,
 		oncycletag,
+		onpickassessor,
 		oncyclesince,
 		ontogglesort,
 		ontoggleunviewed,
@@ -65,6 +69,16 @@
 	function caret() {
 		if (input) oncaret?.(input.selectionStart ?? input.value.length);
 	}
+
+	const scoreName = $derived(
+		filter.assessor
+			? (oneLine(assessors.find((a) => a.id === filter.assessor)?.name) || '#' + filter.assessor) +
+					(filter.minScore !== null ? '≥' + filter.minScore : '')
+			: 'none'
+	);
+	const unassessedName = $derived(
+		filter.unassessed ? oneLine(assessors.find((a) => a.id === filter.unassessed)?.name) || '#' + filter.unassessed : ''
+	);
 
 	const tagName = $derived(
 		filter.tag ? oneLine(tags.find((t) => t.id === filter.tag)?.name) || '#' + filter.tag : 'all'
@@ -109,6 +123,12 @@
 		<button type="button" onclick={oncyclesince} title="cycle time window (since:)" data-testid="chip-since"
 			><span class="k">since:</span><span class="v">{filter.since || 'any'}</span></button
 		>
+		<button type="button" onclick={onpickassessor} title="pick an assessor (a), clear it (A)" data-testid="chip-score"
+			><span class="k">score:</span><span class="v">{scoreName}</span></button
+		>
+		{#if unassessedName}
+			<span class="static" data-testid="chip-unassessed"><span class="k">unassessed:</span><span class="v">{unassessedName}</span></span>
+		{/if}
 		<button type="button" onclick={ontogglesort} title="toggle sort (o)"
 			><span class="k">sort:</span><span class="v">{filter.sort}</span></button
 		>

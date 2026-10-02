@@ -7,18 +7,19 @@
 <script lang="ts">
 	import { onMount, untrack } from 'svelte';
 	import { hasErrors, validateView, type ViewForm } from './forms';
-	import type { Source, Tag } from './types';
+	import type { Assessor, Source, Tag } from './types';
 
 	interface Props {
 		initial: ViewForm;
 		editing: boolean;
 		sources: Source[];
 		tags: Tag[];
+		assessors?: Assessor[];
 		onsave: (f: ViewForm) => Promise<void>;
 		oncancel: () => void;
 	}
 
-	let { initial, editing, sources, tags, onsave, oncancel }: Props = $props();
+	let { initial, editing, sources, tags, assessors = [], onsave, oncancel }: Props = $props();
 
 	let f: ViewForm = $state(untrack(() => ({ ...initial })));
 	let submitted = $state(false);
@@ -26,7 +27,7 @@
 	let serverError = $state('');
 	let form: HTMLFormElement | undefined = $state();
 
-	const errors = $derived(submitted ? validateView(f, sources, tags) : {});
+	const errors = $derived(submitted ? validateView(f, sources, tags, assessors) : {});
 
 	onMount(() => form?.querySelector<HTMLInputElement>('input')?.focus());
 
@@ -34,7 +35,7 @@
 		e.preventDefault();
 		if (saving) return;
 		submitted = true;
-		if (hasErrors(validateView(f, sources, tags))) {
+		if (hasErrors(validateView(f, sources, tags, assessors))) {
 			queueMicrotask(() => form?.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus());
 			return;
 		}
@@ -74,7 +75,7 @@
 					type="text"
 					bind:value={f.query}
 					maxlength="500"
-					placeholder={'words  tag:<name>  src:<name>  is:unviewed  sort:oldest'}
+					placeholder={'words  tag:<name>  src:<name>  is:unviewed  score:<assessor>>=0.7  sort:oldest'}
 					autocomplete="off"
 					autocapitalize="off"
 					spellcheck="false"

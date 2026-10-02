@@ -41,6 +41,10 @@ type fakeClient struct {
 
 	views []*pb.SavedView
 
+	assessors []*pb.Assessor
+	// putResult is what PutAssessment returns; it defaults to an echo.
+	putResult *pb.Assessment
+
 	// stream is returned by StreamItems; streamErr fails the call instead.
 	stream    *fakeStream
 	streamErr error

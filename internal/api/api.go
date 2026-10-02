@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -17,6 +18,7 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"github.com/sonhal/nyttig/internal/client"
 	pb "github.com/sonhal/nyttig/internal/proto/nyttig/v1"
 )
 
@@ -131,6 +133,11 @@ type feedFilter struct {
 	TagID        int64
 	Sort         string
 	UnviewedOnly bool
+	// Assessment filters: AssessorID selects whose scores MinScore and
+	// sort=score use; the daemon rejects them without it.
+	AssessorID   int64
+	MinScore     *float64
+	UnassessedBy int64
 	After        *timestamppb.Timestamp // nil = no window
 }
 
@@ -171,18 +178,121 @@ func parseFeedFilter(v url.Values) (feedFilter, error) {
 		return f, err
 	}
 	switch s := v.Get("sort"); s {
-	case "", "newest", "oldest":
+	case "", "newest", "oldest", "score":
 		f.Sort = s
 	default:
-		return f, fmt.Errorf("%w: sort must be newest or oldest", errBadParam)
+		return f, fmt.Errorf("%w: sort must be newest, oldest or score", errBadParam)
 	}
 	if f.UnviewedOnly, err = parseBool(v, "unviewed"); err != nil {
 		return f, err
+	}
+	if f.AssessorID, err = parseID(v, "assessor"); err != nil {
+		return f, err
+	}
+	if f.UnassessedBy, err = parseID(v, "unassessed"); err != nil {
+		return f, err
+	}
+	if s := v.Get("min_score"); s != "" {
+		x, err := strconv.ParseFloat(s, 64)
+		if err != nil || math.IsNaN(x) || math.IsInf(x, 0) || x < 0 || x > 1 {
+			return f, fmt.Errorf("%w: min_score must be a number from 0 to 1", errBadParam)
+		}
+		f.MinScore = &x
 	}
 	if f.After, err = parseAfter(v); err != nil {
 		return f, err
 	}
 	return f, nil
+}
+
+// maxViewRef bounds the view= parameter (a name or an ID).
+const maxViewRef = 200
+
+// errViewNotFound is returned (wrapped) when view= names no saved view.
+var errViewNotFound = client.ErrViewNotFound
+
+// feedRequest turns the query of /api/items and /api/stream into the
+// SearchRequest-shaped filter the daemon takes. Without view= the parameters
+// are the filter. With view=<id or name> the saved view is the base (an ID if
+// a view has it, else the name, any case; unknown is errViewNotFound) and a
+// parameter that is present replaces the view's field, the same rule as
+// `nyttig search -view` (client.ViewSearchRequest does both). A view's window
+// ("since:1d") becomes the cutoff now minus that window, taken once here, so
+// one request or one stream snapshot shares a single cutoff; an explicit
+// after= wins over it. Paging and tag_exact are the caller's.
+func feedRequest(ctx context.Context, c pb.NyttigClient, now time.Time, v url.Values) (*pb.SearchRequest, error) {
+	f, err := parseFeedFilter(v)
+	if err != nil {
+		return nil, err
+	}
+	var view *pb.SavedView
+	if ref := v.Get("view"); ref != "" {
+		if len(ref) > maxViewRef {
+			return nil, fmt.Errorf("%w: view is longer than %d bytes", errBadParam, maxViewRef)
+		}
+		resp, err := c.ListSavedViews(ctx, &emptypb.Empty{})
+		if err != nil {
+			return nil, err
+		}
+		if view, err = client.FindView(resp.Views, ref); err != nil {
+			return nil, err
+		}
+	}
+	// A parameter that is present replaces the view's field, and present but
+	// empty (or 0 / false) clears it: unviewed=0 drops is:unviewed, min_score=
+	// the minimum, assessor= the assessor (the minimum and the score sort go
+	// with it), unassessed= its filter, after= the window, sort=newest a score
+	// sort. Absent keeps the view's.
+	var o client.Overrides
+	if v.Has("q") {
+		o.Query = &f.Query
+	}
+	if v.Has("source") {
+		o.SourceID = &f.SourceID
+	}
+	if v.Has("tag") {
+		o.TagID = &f.TagID
+	}
+	if v.Has("sort") {
+		o.Sort = &f.Sort
+	}
+	if v.Has("unviewed") {
+		o.UnviewedOnly = &f.UnviewedOnly
+	}
+	if v.Has("assessor") {
+		o.AssessorID = &f.AssessorID
+	}
+	if v.Has("min_score") {
+		o.MinScore = f.MinScore
+		o.NoMinScore = f.MinScore == nil
+	}
+	if v.Has("unassessed") {
+		o.UnassessedBy = &f.UnassessedBy
+	}
+	if v.Has("after") {
+		none := ""
+		o.Since = &none // an empty after= drops the view's window
+	}
+	o.After = f.After
+	return client.ViewSearchRequest(view, o, now)
+}
+
+// writeFeedError answers a failed feedRequest: 400 for a bad parameter, 404
+// for an unknown view, and the daemon's error otherwise.
+func writeFeedError(w http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, errBadParam):
+		writeError(w, http.StatusBadRequest, err.Error())
+	case errors.Is(err, errViewNotFound):
+		writeError(w, http.StatusNotFound, err.Error())
+	default:
+		if _, ok := status.FromError(err); ok {
+			writeRPCError(w, err)
+			return
+		}
+		// A view whose stored window the parser rejects.
+		writeError(w, http.StatusBadRequest, err.Error())
+	}
 }
 
 func parseIntParam(v url.Values, key string, def, lo, hi int) (int, error) {
@@ -203,6 +313,8 @@ func parseIntParam(v url.Values, key string, def, lo, hi int) (int, error) {
 // through the pb.NyttigClient interface.
 type handlers struct {
 	client pb.NyttigClient
+	// now is the clock for a view's window (view=); tests fix it.
+	now func() time.Time
 }
 
 func (a *handlers) rpcContext(r *http.Request) (context.Context, context.CancelFunc) {
@@ -268,11 +380,6 @@ func (a *handlers) refresh(w http.ResponseWriter, r *http.Request) {
 // counts and for loading items older than the stream's snapshot.
 func (a *handlers) items(w http.ResponseWriter, r *http.Request) {
 	v := r.URL.Query()
-	f, err := parseFeedFilter(v)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
-		return
-	}
 	limit, err := parseIntParam(v, "limit", 100, 1, maxSearchLimit)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
@@ -291,17 +398,15 @@ func (a *handlers) items(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := a.rpcContext(r)
 	defer cancel()
-	resp, err := a.client.Search(ctx, &pb.SearchRequest{
-		Query:        f.Query,
-		SourceId:     f.SourceID,
-		TagId:        f.TagID,
-		TagExact:     tagExact,
-		Sort:         f.Sort,
-		UnviewedOnly: f.UnviewedOnly,
-		After:        f.After,
-		Limit:        int32(limit),
-		Offset:       int32(offset),
-	})
+	req, err := feedRequest(ctx, a.client, a.now(), v)
+	if err != nil {
+		writeFeedError(w, err)
+		return
+	}
+	req.TagExact = tagExact
+	req.Limit = int32(limit)
+	req.Offset = int32(offset)
+	resp, err := a.client.Search(ctx, req)
 	if err != nil {
 		writeRPCError(w, err)
 		return

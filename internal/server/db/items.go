@@ -31,6 +31,10 @@ type Item struct {
 	FetchedAt   time.Time
 	Tags        []*Tag
 	Viewed      bool
+
+	// Assessments are every assessment of the item, ordered by assessor
+	// name. GetItem and ListItems fill it.
+	Assessments []*Assessment
 }
 
 // ItemFilter defines criteria for listing items.
@@ -39,10 +43,19 @@ type ItemFilter struct {
 	TagID        int64  // 0 = all tags; matches the tag or any tag below it
 	TagExact     bool   // match TagID only, not its descendants
 	Search       string // FTS5 query, empty = no filter
-	Sort         string // "newest" (default) or "oldest"
+	Sort         string // "newest" (default), "oldest" or "score"
 	Limit        int    // default: 100
 	Offset       int
 	UnviewedOnly bool
+
+	// Assessments (see docs/assessments-plan.md, "Filter semantics").
+	// AssessorID selects whose scores MinScore and Sort "score" use and
+	// changes nothing on its own. An assessment is in scope when the filter
+	// has no tag, the assessment has no tag, or its tag is in TagID's subtree
+	// (TagID itself with TagExact).
+	AssessorID   int64     // 0 = none
+	MinScore     *float64  // an in-scope score from AssessorID of at least this
+	UnassessedBy int64     // no in-scope assessment (scored or not) by this assessor
 	After        time.Time // zero = no window; else only items dated at or after it
 }
 
@@ -139,6 +152,12 @@ func GetItem(db *sql.DB, id int64) (*Item, error) {
 		return nil, err
 	}
 
+	byItem, err := loadAssessmentsByItemIDs(db, []int64{id})
+	if err != nil {
+		return nil, err
+	}
+	item.Assessments = byItem[id]
+
 	return item, nil
 }
 
@@ -150,6 +169,10 @@ func ListItems(db *sql.DB, filter ItemFilter) ([]*Item, int, error) {
 	}
 	if filter.Limit <= 0 {
 		filter.Limit = 100
+	}
+
+	if err := validateAssessmentFilter(filter); err != nil {
+		return nil, 0, err
 	}
 
 	// Build WHERE clauses and args.
@@ -177,6 +200,19 @@ func ListItems(db *sql.DB, filter ItemFilter) ([]*Item, int, error) {
 		conditions = append(conditions, "COALESCE(i.published, i.fetched_at) >= ?")
 		args = append(args, filter.After.UTC().Format(dateCutoffLayout))
 	}
+	scope, scopeArgs := assessmentScopeSQL(filter)
+	if filter.MinScore != nil {
+		conditions = append(conditions, `i.id IN (SELECT a.item_id FROM assessments a
+			WHERE a.assessor_id = ? AND a.score >= ?`+scope+`)`)
+		args = append(args, filter.AssessorID, *filter.MinScore)
+		args = append(args, scopeArgs...)
+	}
+	if filter.UnassessedBy > 0 {
+		conditions = append(conditions, `i.id NOT IN (SELECT a.item_id FROM assessments a
+			WHERE a.assessor_id = ?`+scope+`)`)
+		args = append(args, filter.UnassessedBy)
+		args = append(args, scopeArgs...)
+	}
 	if filter.Search != "" {
 		conditions = append(conditions, "i.id IN (SELECT rowid FROM items_fts WHERE items_fts MATCH ?)")
 		args = append(args, ftsQuote(filter.Search))
@@ -198,6 +234,17 @@ func ListItems(db *sql.DB, filter ItemFilter) ([]*Item, int, error) {
 		orderClause = "i.published ASC NULLS LAST, i.fetched_at ASC"
 	}
 
+	// The score sort ranks by the highest in-scope score of the assessor;
+	// items without one go last, then newest first.
+	var orderArgs []interface{}
+	if filter.Sort == "score" {
+		orderClause = `(SELECT MAX(a.score) FROM assessments a
+			WHERE a.item_id = i.id AND a.assessor_id = ?` + scope + `) DESC NULLS LAST,
+			i.published DESC NULLS LAST, i.fetched_at DESC`
+		orderArgs = append(orderArgs, filter.AssessorID)
+		orderArgs = append(orderArgs, scopeArgs...)
+	}
+
 	// Main query with source name and view flag.
 	query := `SELECT i.id, i.source_id, s.name, i.guid, i.link, i.title, i.description, i.author, i.published, i.fetched_at,
 		COALESCE((SELECT 1 FROM view_state WHERE item_id = i.id), 0)
@@ -211,6 +258,7 @@ func ListItems(db *sql.DB, filter ItemFilter) ([]*Item, int, error) {
 	query += " ORDER BY " + orderClause + " LIMIT ? OFFSET ?"
 
 	allArgs := append([]interface{}{}, args...)
+	allArgs = append(allArgs, orderArgs...)
 	allArgs = append(allArgs, filter.Limit, filter.Offset)
 
 	rows, err := db.Query(query, allArgs...)
@@ -253,8 +301,13 @@ func ListItems(db *sql.DB, filter ItemFilter) ([]*Item, int, error) {
 		if err != nil {
 			return nil, 0, err
 		}
+		assessMap, err := loadAssessmentsByItemIDs(db, itemIDs)
+		if err != nil {
+			return nil, 0, err
+		}
 		for _, item := range items {
 			item.Tags = tagMap[item.ID]
+			item.Assessments = assessMap[item.ID]
 		}
 	}
 

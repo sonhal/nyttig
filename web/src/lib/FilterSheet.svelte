@@ -5,19 +5,21 @@
 	import { oneLine } from './sanitize';
 	import { SINCE_PRESETS } from './since';
 	import { treeOrder } from './tagtree';
-	import type { Filter, Source, Tag } from './types';
+	import { withAssessor } from './filter';
+	import type { Assessor, Filter, Source, Tag } from './types';
 
 	interface Props {
 		filter: Filter;
 		sources: Source[];
 		tags: Tag[];
+		assessors?: Assessor[];
 		timeMode: TimeMode;
 		onchange: (f: Filter) => void;
 		ontime: (mode: TimeMode) => void;
 		onclose: () => void;
 	}
 
-	let { filter, sources, tags, timeMode, onchange, ontime, onclose }: Props = $props();
+	let { filter, sources, tags, assessors = [], timeMode, onchange, ontime, onclose }: Props = $props();
 
 	// Tree order, children indented (non-breaking spaces survive in <option>).
 	const tagRows = $derived(treeOrder(tags));
@@ -53,6 +55,26 @@
 			{/each}
 		</select>
 	</label>
+	{#if assessors.length > 0}
+		<label>
+			<span>score</span>
+			<select value={filter.assessor} onchange={(e) => onchange(withAssessor(filter, e.currentTarget.value))}>
+				<option value="">none</option>
+				{#each assessors as a (a.id)}
+					<option value={a.id}>{oneLine(a.name)}</option>
+				{/each}
+			</select>
+		</label>
+		<label>
+			<span>unassessed</span>
+			<select value={filter.unassessed} onchange={(e) => set('unassessed', e.currentTarget.value)}>
+				<option value="">any</option>
+				{#each assessors as a (a.id)}
+					<option value={a.id}>{oneLine(a.name)}</option>
+				{/each}
+			</select>
+		</label>
+	{/if}
 	<label>
 		<span>since</span>
 		<select value={filter.since} onchange={(e) => set('since', e.currentTarget.value)} data-testid="sheet-since">
@@ -65,10 +87,14 @@
 		<span>sort</span>
 		<select
 			value={filter.sort}
-			onchange={(e) => set('sort', e.currentTarget.value === 'oldest' ? 'oldest' : 'newest')}
+			onchange={(e) => {
+				const v = e.currentTarget.value;
+				set('sort', v === 'oldest' ? 'oldest' : v === 'score' && filter.assessor ? 'score' : 'newest');
+			}}
 		>
 			<option value="newest">newest</option>
 			<option value="oldest">oldest</option>
+			{#if filter.assessor}<option value="score">score</option>{/if}
 		</select>
 	</label>
 	<label>
@@ -91,6 +117,7 @@
 		<a href="/tags" data-testid="manage-tags">tags</a>
 		<a href="/rules" data-testid="manage-rules">rules</a>
 		<a href="/views" data-testid="manage-views">views</a>
+		<a href="/assessors" data-testid="manage-assessors">assess</a>
 	</nav>
 	<button type="button" class="done" onclick={onclose}>done</button>
 </div>
@@ -137,7 +164,7 @@
 	}
 	.manage {
 		display: grid;
-		grid-template-columns: 10ch repeat(4, 1fr);
+		grid-template-columns: 10ch repeat(5, 1fr);
 		align-items: center;
 		gap: 8px;
 	}

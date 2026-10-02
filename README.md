@@ -262,6 +262,14 @@ and link card.
 | `color` | no       | —       | Hex color for TUI chip, e.g. `"#FF6B35"`  |
 | `parents` | no     | —       | Names of parent tags (see [Tag tree](#tag-tree)); may be declared later in the file, an unknown name is created |
 
+### `[[assessors]]`
+
+| Field         | Required | Default | Description                                          |
+|---------------|----------|---------|------------------------------------------------------|
+| `name`        | yes      | —       | Assessor name (unique); an existing one is left as it is |
+| `description` | no       | —       | What the score means, shown with the scores          |
+| `color`       | no       | —       | Hex color for the score chip, e.g. `"#D97757"`       |
+
 ### `[[tag_rules]]`
 
 | Field      | Required | Default | Description                                              |
@@ -309,7 +317,11 @@ These are global flags accepted by every subcommand and the TUI.
 | `Esc`        | Clear search and defocus search bar.                     |
 | `s`          | Cycle source filter (all → specific source → all).       |
 | `t`          | Cycle tag filter (all → specific tag → all), parents before their children. A parent's label shows how many tags it covers: `cyber security +2`. |
-| `o`          | Toggle sort order (newest ↔ oldest).                     |
+| `o`          | Cycle the sort order (newest → oldest, and `score` once an assessor is selected). |
+| `=`          | Rate the selected item yourself: a prompt takes `<score> [note]` (`Enter` rates, `Esc` cancels), see [Rating items yourself](#rating-items-yourself). |
+| `a`          | Cycle the assessor whose scores are shown first and used by `m` and the `score` sort (none → each assessor → none); the bar shows `score: [claude]`. |
+| `m`          | With an assessor: cycle the minimum score (none → 0.5 → 0.7 → 0.9 → none). |
+| `i`          | Show or hide a line above the status bar with the selected item's assessments (assessor, tag, score, note). |
 | `r`          | Force refresh all sources immediately.                   |
 | `Enter`      | Open selected item's link in default browser.            |
 | `j` / `↓`    | Move selection down.                                     |
@@ -319,6 +331,14 @@ These are global flags accepted by every subcommand and the TUI.
 | `Ctrl+d`     | Page down (half screen).                                 |
 | `Ctrl+u`     | Page up (half screen).                                   |
 | `q` / `Ctrl+c`| Quit the TUI.                                           |
+
+Rows show one score chip per assessor that scored the item, `[claude 0.9]` in
+the assessor's color (see [Assessments](#assessments)); new and changed scores
+arrive live. An item that starts matching the filter is added in its sort
+position, and one that stops matching stays until the next filter change.
+Notes and assessor names are untrusted: control characters are stripped and
+they are shown on one line. The TUI has no "not assessed by" filter; use
+`nyttig search -unassessed-by` or the web app for that.
 
 ### View tracking
 
@@ -360,13 +380,23 @@ nyttig test-tag-rule   -p <regex> [-f title|description|both] [-s source_id] [-l
 nyttig list-tag-rules
 nyttig remove-tag-rule -id <rule_id>
 nyttig list-views                        # name, ★ for favorites, and the filter written like the web query bar
-nyttig add-view        -n <name> [-q <text>] [-source <name|id>] [-tag <name|id>] [-unviewed] [-since <window>] [-sort newest|oldest] [-favorite]
+nyttig add-view        -n <name> [-q <text>] [-source <name|id>] [-tag <name|id>] [-unviewed] [-since <window>] [-sort newest|oldest|score] [-favorite]
+                       [-assessor <name|id>] [-min-score <0-1>] [-unassessed-by <name|id>]
 nyttig update-view     (-id <id> | -n <name>) [-rename <name>] [-q <text>] [-source <name|id> | -no-source]
-                       [-tag <name|id> | -no-tag] [-sort newest|oldest] [-unviewed[=false]]
+                       [-tag <name|id> | -no-tag] [-sort newest|oldest|score] [-unviewed[=false]]
                        [-since <window> | -no-since] [-favorite[=false]]
+                       [-assessor <name|id> | -no-assessor] [-min-score <0-1> | -no-min-score] [-unassessed-by <name|id>]
 nyttig remove-view     (-id <id> | -n <name>)
 nyttig reorder-views   <id|name>...      # every view once, in the new order
-nyttig search          [-view <name|id>] [-tag <name|id>] [-s source_id] [-l limit] [-offset N] [-sort newest|oldest] [-unviewed] [-since <window>] [-exact] [query...]
+nyttig list-assessors
+nyttig add-assessor    -n <name> [-description <text>] [-c <hex_color>]
+nyttig update-assessor (-id <id> | -n <name>) [-rename <name>] [-description <text>] [-c <hex_color>]
+nyttig remove-assessor (-id <id> | -n <name>)   # also removes all of its assessments
+nyttig assess          <item-id> -assessor <name|id> [-tag <name|id>] [-score <0-1>] [-note <text>]
+nyttig unassess        <item-id> -assessor <name|id> [-tag <name|id>]
+nyttig rate            <item-id> <score 0-1> [note...]   # you, as the assessor "me" (created on first use)
+nyttig search          [-view <name|id>] [-tag <name|id>] [-s source_id] [-l limit] [-offset N] [-sort newest|oldest|score] [-unviewed] [-since <window>] [-exact]
+                       [-assessor <name|id>] [-min-score <0-1>] [-unassessed-by <name|id>] [query...]
 nyttig refresh         [-id <source_id>]   # omit -id to refresh all
 ```
 
@@ -396,6 +426,18 @@ time nyttigd fetched it when the feed gives none. A view stores the window as
 you typed it (`30d` stays `30d`), and `search -view NAME -since 1y` replaces
 the view's window.
 
+Assessors score items from outside the daemon (see [Assessments](#assessments)).
+`assess` stores a score from 0 to 1, a note, or both, for the item as a whole
+or, with `-tag`, for one tag; assessing again replaces the earlier assessment
+with the same assessor and tag. In `search`, `-assessor` picks whose scores
+`-min-score` and `-sort score` use (the sort is only by score when you ask for
+it), `-unassessed-by` lists the items an assessor has not assessed yet, and a
+SCORES column appears when a listed item has a score. With `-tag`, only the
+assessor's scores for that tag (including its child tags) and for the item as
+a whole count. A view saves the same fields (`score:claude>=0.7`,
+`unassessed:claude` and `sort:score` in `list-views`); deleting the assessor
+keeps the view and drops those fields (a `score` sort becomes `newest`).
+
 Tag rules added with `add-tag-rule` apply to items fetched after the rule is
 created; existing items are not retagged. Use `test-tag-rule` first to see
 which of the 500 most recent items a pattern would match.
@@ -412,9 +454,12 @@ clients get the same checks:
 | Refresh interval| 60 seconds to 7 days (default 3600)                         |
 | Colors          | `#RRGGBB`, or empty for none                                |
 | Names           | Non-empty (a `bluesky` source may omit its name), no control characters; sources ≤ 200, tags ≤ 64, abbreviations ≤ 16 characters |
+| Assessor        | Name ≤ 64 characters, description ≤ 500 characters without control characters, optional `#RRGGBB` color |
+| Score           | A number from 0 to 1 (NaN and infinities are rejected); `min_score` follows the same rule and, like `sort: score`, needs an assessor |
+| Note            | Valid UTF-8, at most 4096 bytes; an assessment needs a score or a note |
 | Tag rule pattern| Valid Go (RE2) regex, at most 1024 bytes; `field` is `title`, `description` or `both` |
 
-A duplicate source URL or tag name is rejected with `AlreadyExists`. Sources,
+A duplicate source URL, tag name or assessor name is rejected with `AlreadyExists`. Sources,
 tags and rules from the config file are seeded directly and are not checked.
 
 ## Fetching and SSRF
@@ -663,6 +708,8 @@ the keymap, so it is always current.
 | `S`, `T`           | Pick a source / tag by name (fuzzy, `Enter` picks, `Esc` closes) |
 | `1`-`9`, `0`       | Open favorite saved view 1-9 / the unfiltered feed (see [Saved views](#saved-views)) |
 | `v`                | Pick a saved view by name (fuzzy)                  |
+| `=`                | Rate the selected item yourself (types `:rate ` for you, see [Rating items yourself](#rating-items-yourself)) |
+| `a`, `A`           | Pick an assessor by name (its scores are shown first, see [Assessments](#assessments)) / clear it |
 | `o`                | Toggle sort (newest / oldest)                     |
 | `F`                | Follow: jump to the newest and stick to it         |
 | `D`                | Relative ("12m ago") or absolute times; remembered in the browser |
@@ -675,8 +722,11 @@ the keymap, so it is always current.
 
 **Query bar.** `kernel tag:rust src:"Hacker News" is:unviewed since:7d sort:oldest`:
 `tag:` (also matches child tags), `src:` (a name or abbreviation, any case), `is:unviewed`,
-`since:<window>` and `sort:newest|oldest` set the filter; every other word is the full-text
-search. Names with spaces are quoted. Names are completed as you type
+`since:<window>` and `sort:newest|oldest|score` set the filter; `score:<assessor>` picks an
+assessor whose scores are shown first, `score:claude>=0.7` keeps only items it
+scored at least that, `unassessed:<assessor>` keeps items it has not assessed,
+and `sort:score` orders by the assessor's scores (it needs a `score:` term).
+Every other word is the full-text search. Names with spaces are quoted. Names are completed as you type
 (`Tab` accepts, `↑`/`↓` choose; on a phone tap a suggestion), and an
 unknown name is an error under the bar instead of being ignored. The bar
 always shows the current filter in this syntax. Matching words are
@@ -710,8 +760,8 @@ fresh snapshot (the newest 200), dropping the older pages.
 
 **Command line** (`:`; `Tab` completes, again to cycle; `↑`/`↓` history;
 a unique prefix is enough): `:feed` `:sources` `:tags` `:rules` `:views` (`:q` is
-the feed), `:sort [newest|oldest]`, `:unviewed [on|off]`, `:src <name>|all`,
-`:tag <name>|all`, `:view <name>|all` (`:v`), `:save [name]`,
+the feed), `:assessors`, `:sort [newest|oldest|score]`, `:unviewed [on|off]`, `:src <name>|all`,
+`:tag <name>|all`, `:score <assessor>|all [min]`, `:unassessed <assessor>|all`, `:rate <score> [note]`, `:view <name>|all` (`:v`), `:save [name]`,
 `:refresh [source]`, `:time [relative|absolute]`, `:follow`, `:help`. The
 filter and view commands also work from the management pages, and go to the
 feed.
@@ -750,6 +800,21 @@ down (the tabs follow), `x` deletes it. View names are unique (any case),
 at most 64 characters, and there can be 100 views. Deleting a source or tag
 keeps the views that filter on it, without that part of their filter; the
 delete confirmation says how many views it affects.
+
+#### Assessments in the web app
+
+Each row shows one chip per assessor that scored the item, `[claude 0.9]` in
+the assessor's color (its highest score for the item, the selected assessor
+first). The expanded row lists every assessment: assessor, tag, score, age and
+the note. Notes and assessor names are untrusted, so they are shown as text
+only (markup in a note is read as text, like a feed description), never as
+HTML or Markdown. New scores arrive live; an item that starts matching the
+filter is added in its sort position, and one that stops matching stays until
+the next reload. A view saves its assessor, minimum score, "not assessed by"
+and its sort, `score` included, so opening it restores the order. The
+`:assessors` page (also the tab and the phone's `⚙` sheet) adds, edits and
+deletes assessors; deleting one deletes its assessments, and the confirmation
+says how many views stop filtering on it.
 
 #### Sources, tags and rules
 
@@ -831,6 +896,10 @@ reverse proxy that does TLS and authentication:
   per-request nonce), plus `nosniff`, `Referrer-Policy: no-referrer` and
   `Cross-Origin-Opener-Policy` from `web/src/hooks.server.ts`. API
   responses get the same headers and a `default-src 'none'` policy.
+- Assessor notes and names are untrusted too (an LLM's note can repeat markup
+  from the feed it read): nyttig-api strips control and bidirectional override
+  characters and the page renders them as text only. Every credential that
+  can reach nyttig-api is full admin; see [Assessments](#assessments).
 - Feed content is untrusted: it is only rendered as text, links must be
   `http(s)` (checked in nyttig-api and in the page) and open with
   `noopener,noreferrer`, colors must be `#RRGGBB`, and no feed images are
@@ -872,6 +941,155 @@ name, user and `caddy hash-password` hash, and reload Caddy.
 For a complete VPS setup (the web client behind Caddy, the TUI over mTLS on
 port 9090, backups and upgrades), see [`deploy/README.md`](deploy/README.md).
 
+## Assessments
+
+Other systems can attach a judgement to a news item: an optional **score**
+from 0.0 to 1.0, an optional **note**, and the **assessor** that made it.
+Claude can read items tagged `CVE` and score how much each matters for that
+tag; a deterministic reader can write `CVSS/10` as its score and
+`CVE-2026-1234, CVSS 9.8` as its note; you can rate items yourself. Nyttig only
+stores, filters and shows them; the assessors are separate programs (see
+[Writing an assessor](#writing-an-assessor)).
+
+- **One assessment per item, assessor and tag.** The tag is optional: without
+  it the assessment is for the item as a whole. An item tagged `CVE` and
+  `linux security` can score 0.9 for one and 0.2 for the other. Assessing
+  again replaces the earlier assessment (`updated_at` says when); there is no
+  history.
+- **Scores are never combined.** Claude's 0.7 is its judgement of importance;
+  the CVE reader's 0.7 is a CVSS score of 7.0, so every filter and sort names
+  one assessor, and each assessor's `description` says what its scale means.
+- **Filters** (the CLI, `GET /api/items`, `/api/stream`, `Search`, `StreamItems`
+  and saved views): `assessor` selects whose scores to use and changes nothing
+  by itself; `min_score` keeps items that assessor scored at least that;
+  `unassessed` keeps items it has not assessed (scored or not), which is how an
+  assessor finds work (`tag=CVE` plus `unassessed=<claude>`); `sort=score` orders
+  by the assessor's highest score, items without one last. The sort is always
+  explicit: `score:claude` alone stays chronological, which suits a live feed.
+  `min_score` or `sort=score` without an assessor is an error.
+- **Scope.** With a tag filter, only assessments that are in scope count: the
+  item as a whole, the filter tag, and the tags below it (just the tag itself
+  with `tag_exact`). A score for an unrelated tag is ignored.
+- **Live updates.** A new assessment reaches open streams at once (an
+  `item_update` message over gRPC, `event: update` over SSE). Clients update an
+  item they show and add one that now matches; they never remove one live, so
+  an item whose score was lowered stays until the next reload.
+
+### Rating items yourself
+
+You are an assessor too: `me` is a built-in assessor that is created the first
+time you rate something, with the description "Your own ratings, 0 to 1".
+Your scores give a ground truth to compare Claude's and the CVE reader's
+against (look at `score:me` next to `score:claude`).
+
+- **Web:** select an item and press `=` (it types `:rate ` for you), or type
+  `:rate 0.8 worth reading`. The digit keys belong to saved views, so they do
+  not rate. The phone has no keyboard shortcut for it.
+- **TUI:** press `=`, type `0.8 worth reading` and press `Enter` (`Esc`
+  cancels). The result shows on the line above the status bar.
+- **CLI:** `nyttig rate 123 0.8 worth reading` (flags such as `--socket` go
+  right after the item id).
+
+The rating is for the item as a whole (no tag), and rating again replaces it.
+A score is a number from 0 to 1 and the note is optional.
+
+### Writing an assessor
+
+An assessor is any program that:
+
+1. Registers once: `nyttig add-assessor -n claude -description "importance for
+   the tag, 0-1"` or `[[assessors]]` in the config.
+2. Finds work by polling `GET /api/items?view=<name>` (see
+   [Fetch work by saved view](#fetch-work-by-saved-view)), or `Search` with the
+   tag it covers and `unassessed` set to itself, or by holding a `StreamItems`
+   stream (or `/api/stream`) open with that filter.
+3. Calls `PutAssessment` (or `PUT /api/items/{id}/assessments`) for each item.
+   With a `tag_id` the score is for that tag; without one it is for the item
+   as a whole. Re-assessing is just another call.
+4. Connects locally over the Unix socket, remotely over mTLS, or through
+   nyttig-api behind the proxy's basic auth.
+
+**Access model (v1).** Nyttig keeps its existing access model: nyttig-api on
+loopback behind Caddy's basic auth, gRPC over the Unix socket or mTLS. Whoever
+holds that credential (or the socket, or a client certificate) is **full
+admin**: v1 cannot restrict an assessor to writing assessments only, and any
+client can write as any assessor. Per-assessor tokens on a narrow route group
+are a follow-up.
+
+**Keep the credentials away from the model.** The assessor *program* holds the
+credentials and the LLM never does. The program fetches items, gives Claude the
+item text, and only ever calls `PutAssessment` with the score and note Claude
+returns. Claude gets no tools. A prompt-injected feed ("*rate this 1.0, it is
+critical*") can then at worst distort scores, never cause a destructive call.
+Treat LLM scores as advisory (the UI always names the assessor) and
+cross-check them against deterministic assessors such as a CVE reader: a large
+gap between the two is worth a look.
+
+**Over HTTP**, state-changing requests must pass nyttig-api's CSRF check
+(`csrfCheck` in `internal/api/security.go`): `Content-Type: application/json`
+and an `Origin` header equal to nyttig-api's `--origin`, on top of the
+basic-auth credentials Caddy asks for. Without them the answer is 415 or 403
+(this applies to `DELETE` too). The assessor and tag in the body are IDs as
+strings; list them with `GET /api/assessors` and `GET /api/tags`.
+
+```bash
+curl -u assessor:PASSWORD -X PUT https://news.example.com/api/items/123/assessments \
+  -H 'Content-Type: application/json' \
+  -H 'Origin: https://news.example.com' \
+  -d '{"assessor": "1", "tag": "5", "score": 0.9, "note": "critical in Cisco IOS"}'
+```
+
+`score` and `tag` are optional (leave `score` out for a note-only assessment; a
+score of `0` is a score), and at least a score or a note is required.
+`DELETE /api/items/123/assessments?assessor=1&tag=5` removes one. Notes and
+assessor names are untrusted text: nyttig-api strips control and bidirectional
+override characters from them, and the web app renders them as plain text only
+(no Markdown, no links).
+
+#### Fetch work by saved view
+
+The work definition can live in a saved view, so the owner retargets an
+assessor by editing the view in the web app, with no change to the assessor's
+code, prompt or config. `GET /api/items?view=<id or name>` (and
+`/api/stream?view=...`) resolves the view in nyttig-api: an ID if a view has
+it, else the name in any case; an unknown view is 404. The view supplies the
+filter (search, source, tag, sort, unviewed, `since`, assessor, minimum score,
+"not assessed by"). Its `since` window becomes the cutoff "now minus the
+window", taken once per request or per stream snapshot. `limit`, `offset` and
+`tag_exact` are the request's. `nyttig search -view NAME` resolves views the
+same way (the same code, `internal/client`).
+
+The recommended pattern is a **shared reading view plus request parameters**,
+not a view per assessor. Your own `cve` view (`tag:CVE since:7d`) is also what
+a daily Claude Routine polls:
+
+- `GET /api/items?view=cve` is everything in the window. Use it for a daily
+  "add and update" run: `PUT` replaces the earlier assessment of an item.
+- `GET /api/items?view=cve&unassessed=<claude id>` is only the new items. A
+  view that already says `unassessed:claude` (say `claude-cve` =
+  `tag:CVE since:1d unassessed:claude`) gives the same list with no parameter,
+  and an item drops out of it as soon as it is assessed.
+
+A parameter that is present replaces the view's field, and **present but empty
+(or `0` / `false`) clears it**: `unviewed=0`, `min_score=`, `assessor=` (the
+minimum and a score sort go with it), `unassessed=`, `after=` (the window;
+`after=<unix seconds>` replaces it), `q=`, `tag=`, `source=`, and `sort=newest`
+over a score sort. A bare `since` is not a parameter. In the CLI, `-unviewed=false`,
+`-assessor ''`, `-unassessed-by ''`, `-tag ''`, `-since ''` and a negative
+`-min-score` do the same.
+
+**A view's reading settings also apply to the assessor.** `is:unviewed` hides
+the items you have already read, and `score:claude>=0.7` means Claude never
+sees an item it has not scored. Clear them in the request:
+
+```bash
+curl -u assessor:PASSWORD \
+  'https://news.example.com/api/items?view=cve&unviewed=0&min_score=&unassessed=1'
+```
+
+A paged read (`offset`) of a view with a window counts "now" per request; pass
+`after=<unix seconds>` taken once to keep the window fixed between pages.
+
 ## Database
 
 Nyttig uses SQLite with FTS5 for full-text search. The default database path is `~/.local/share/nyttig/nyttig.db`. The database is created and migrated automatically on first daemon start.
@@ -892,6 +1110,8 @@ as `sqlite_version`, and the daemon refuses to start if that library lacks FTS5.
 | `tag_parents` | Tag tree: (child, parent) edges, a tag can have several parents |
 | `view_state`  | Per-item view tracking (row exists = viewed)      |
 | `saved_views` | Saved views: named filters, favorites and their order |
+| `assessors`   | Systems that score items (name, what the score means, color) |
+| `assessments` | One assessor's score (0 to 1) and/or note on an item, optionally for one tag |
 | `items_fts`   | FTS5 virtual table for full-text search           |
 
 Item dates (`items.published`) are stored in UTC with whole seconds

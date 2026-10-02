@@ -16,6 +16,13 @@ type ItemMsg struct {
 	Item *pb.Item
 }
 
+// ItemUpdateMsg carries an item whose assessments changed, with all of them.
+// Matches says whether it matches the stream's current filter.
+type ItemUpdateMsg struct {
+	Item    *pb.Item
+	Matches bool
+}
+
 // ResetMsg signals that the server has reset the stream (e.g. after a filter
 // change). The TUI should clear the current item list and prepare for a fresh
 // batch.
@@ -61,6 +68,8 @@ func ListenStream(sub *client.StreamSub) tea.Cmd {
 		switch msg.Msg.(type) {
 		case *pb.ServerMessage_Item:
 			return ItemMsg{Item: msg.GetItem()}
+		case *pb.ServerMessage_ItemUpdate:
+			return ItemUpdateMsg{Item: msg.GetItemUpdate(), Matches: msg.GetUpdateMatches()}
 		case *pb.ServerMessage_Reset_:
 			return ResetMsg{}
 		case *pb.ServerMessage_Complete:

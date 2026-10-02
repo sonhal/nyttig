@@ -23,9 +23,12 @@ export function viewToFilter(v: SavedView): Filter {
 		q: f.q ?? '',
 		source: f.source ?? '',
 		tag: f.tag ?? '',
-		sort: f.sort === 'oldest' ? 'oldest' : 'newest',
+		sort: f.sort === 'oldest' ? 'oldest' : f.sort === 'score' && f.assessor ? 'score' : 'newest',
 		unviewed: !!f.unviewed,
-		since: validSince(f.since)
+		since: validSince(f.since),
+		assessor: f.assessor ?? '',
+		minScore: f.assessor && typeof f.min_score === 'number' ? f.min_score : null,
+		unassessed: f.unassessed ?? ''
 	};
 }
 
@@ -38,6 +41,10 @@ export function filterToViewBody(f: Filter): ViewFilter {
 	if (f.sort !== defaultFilter.sort) b.sort = f.sort;
 	if (f.unviewed) b.unviewed = true;
 	if (f.since) b.since = f.since;
+	if (f.assessor) b.assessor = f.assessor;
+	// A minimum of 0 is a minimum, so it is kept.
+	if (f.assessor && f.minScore !== null) b.min_score = f.minScore;
+	if (f.unassessed) b.unassessed = f.unassessed;
 	return b;
 }
 
@@ -94,13 +101,25 @@ export function findView(views: readonly SavedView[], name: string): SavedView |
 	return starts.length === 1 ? starts[0] : undefined;
 }
 
-/** The views whose filter names this source or tag (deleting it drops that part of the filter). */
-export function viewsUsing(by: { source: string } | { tag: string }, views: readonly SavedView[]): SavedView[] {
-	return views.filter((v) => ('source' in by ? v.filter?.source === by.source : v.filter?.tag === by.tag));
+/**
+ * The views whose filter names this source, tag or assessor (deleting it
+ * drops that part of the filter). An assessor counts for its scores and for
+ * "not assessed by".
+ */
+export function viewsUsing(
+	by: { source: string } | { tag: string } | { assessor: string },
+	views: readonly SavedView[]
+): SavedView[] {
+	return views.filter((v) => {
+		const f = v.filter;
+		if ('source' in by) return f?.source === by.source;
+		if ('tag' in by) return f?.tag === by.tag;
+		return f?.assessor === by.assessor || f?.unassessed === by.assessor;
+	});
 }
 
 /** "2 views filter on this source; they will stop filtering on it", or "" for none. */
-export function usageWarning(what: 'source' | 'tag', n: number): string {
+export function usageWarning(what: 'source' | 'tag' | 'assessor', n: number): string {
 	if (n === 0) return '';
 	return `${n} ${n === 1 ? 'view filters' : 'views filter'} on this ${what}; ${n === 1 ? 'it' : 'they'} will stop filtering on it.`;
 }

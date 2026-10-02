@@ -66,6 +66,22 @@ func setupDB(t *testing.T) *sql.DB {
 			item_id   INTEGER PRIMARY KEY REFERENCES items(id) ON DELETE CASCADE,
 			viewed_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 		);
+		CREATE TABLE assessors (
+			id          INTEGER PRIMARY KEY AUTOINCREMENT,
+			name        TEXT NOT NULL UNIQUE,
+			description TEXT,
+			color       TEXT,
+			created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+		);
+		CREATE TABLE assessments (
+			id          INTEGER PRIMARY KEY AUTOINCREMENT,
+			item_id     INTEGER NOT NULL REFERENCES items(id)     ON DELETE CASCADE,
+			assessor_id INTEGER NOT NULL REFERENCES assessors(id) ON DELETE CASCADE,
+			tag_id      INTEGER          REFERENCES tags(id)      ON DELETE CASCADE,
+			score       REAL,
+			note        TEXT,
+			updated_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+		);
 	`
 	if _, err := database.Exec(schema); err != nil {
 		t.Fatalf("create schema: %v", err)

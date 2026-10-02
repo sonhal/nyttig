@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -14,6 +15,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"github.com/sonhal/nyttig/internal/client"
 	pb "github.com/sonhal/nyttig/internal/proto/nyttig/v1"
 )
 
@@ -27,6 +29,9 @@ import (
 //
 //	event: reset      a snapshot follows; the client starts a new buffer
 //	event: item       id: <item id>, data: protojson Item
+//	event: update     data: {"matches": bool, "item": protojson Item}; an item
+//	                  whose assessments changed. Replace the item if shown;
+//	                  insert it only when matches is true; never remove
 //	event: complete   the snapshot is done; later items are live pushes
 //	: ping            comment every pingInterval so proxies keep the line open
 //
@@ -56,12 +61,21 @@ type streamHandler struct {
 	pingInterval time.Duration
 	queueSize    int
 	log          *slog.Logger
+	now          func() time.Time // the clock for a view's window (view=)
 }
 
 func (h *streamHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	f, err := parseFeedFilter(r.URL.Query())
+	// The view (if any) and its window are resolved once, here: the cutoff
+	// is that of this snapshot, and a reconnect resolves them again.
+	rctx, rcancel := context.WithTimeout(r.Context(), rpcTimeout)
+	now := time.Now
+	if h.now != nil {
+		now = h.now
+	}
+	req, err := feedRequest(rctx, h.client, now(), r.URL.Query())
+	rcancel()
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeFeedError(w, err)
 		return
 	}
 
@@ -73,14 +87,7 @@ func (h *streamHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		writeRPCError(w, err)
 		return
 	}
-	if err := stream.Send(&pb.ClientMessage{Msg: &pb.ClientMessage_Filter{Filter: &pb.StreamFilter{
-		SourceId:     f.SourceID,
-		TagId:        f.TagID,
-		Search:       f.Query,
-		Sort:         f.Sort,
-		UnviewedOnly: f.UnviewedOnly,
-		After:        f.After,
-	}}}); err != nil {
+	if err := stream.Send(&pb.ClientMessage{Msg: &pb.ClientMessage_Filter{Filter: client.StreamFilterOf(req)}}); err != nil {
 		writeRPCError(w, recvError(stream, err))
 		return
 	}
@@ -268,6 +275,21 @@ func (s *sseWriter) message(m *pb.ServerMessage) {
 			return
 		}
 		s.event("item", strconv.FormatInt(item.Id, 10), b)
+	case *pb.ServerMessage_ItemUpdate:
+		item, err := marshaler.Marshal(sanitizeItem(v.ItemUpdate))
+		if err != nil {
+			s.err = fmt.Errorf("encode item update: %w", err)
+			return
+		}
+		b, err := json.Marshal(struct {
+			Matches bool            `json:"matches"`
+			Item    json.RawMessage `json:"item"`
+		}{m.UpdateMatches, item})
+		if err != nil {
+			s.err = fmt.Errorf("encode item update: %w", err)
+			return
+		}
+		s.event("update", "", b)
 	case *pb.ServerMessage_Reset_:
 		s.event("reset", "", []byte("{}"))
 	case *pb.ServerMessage_Complete:

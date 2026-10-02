@@ -16,26 +16,43 @@ type SavedView struct {
 	Search       string
 	SourceID     *int64
 	TagID        *int64
-	Sort         string // "newest" or "oldest"
+	Sort         string // "newest", "oldest" or "score"
 	UnviewedOnly bool
 	Since        string // rolling window such as "7d"; empty = none
 	Favorite     bool
 	Position     int
+
+	// Assessment filter fields; nil = not set. Deleting an assessor clears
+	// them (and a "score" sort), see migration 8.
+	AssessorID   *int64
+	MinScore     *float64
+	UnassessedBy *int64
 }
 
 // ErrViewOrder is returned by ReorderSavedViews when the IDs are not exactly
 // the set of existing views.
 var ErrViewOrder = errors.New("ids must list every saved view exactly once")
 
-const savedViewColumns = `id, name, search, source_id, tag_id, sort, unviewed_only, since, favorite, position`
+const savedViewColumns = `id, name, search, source_id, tag_id, sort, unviewed_only, since, favorite, position, assessor_id, min_score, unassessed_by`
 
 type rowScanner interface{ Scan(dest ...any) error }
 
 func scanSavedView(r rowScanner) (*SavedView, error) {
 	v := &SavedView{}
-	var src, tag sql.NullInt64
-	if err := r.Scan(&v.ID, &v.Name, &v.Search, &src, &tag, &v.Sort, &v.UnviewedOnly, &v.Since, &v.Favorite, &v.Position); err != nil {
+	var src, tag, assessor, unassessed sql.NullInt64
+	var minScore sql.NullFloat64
+	if err := r.Scan(&v.ID, &v.Name, &v.Search, &src, &tag, &v.Sort, &v.UnviewedOnly, &v.Since, &v.Favorite, &v.Position,
+		&assessor, &minScore, &unassessed); err != nil {
 		return nil, err
+	}
+	if assessor.Valid {
+		v.AssessorID = &assessor.Int64
+	}
+	if minScore.Valid {
+		v.MinScore = &minScore.Float64
+	}
+	if unassessed.Valid {
+		v.UnassessedBy = &unassessed.Int64
 	}
 	if src.Valid {
 		v.SourceID = &src.Int64
@@ -66,10 +83,11 @@ func sortOrDefault(s string) string {
 // A duplicate name (case-insensitive) is a UNIQUE constraint error.
 func InsertSavedView(db *sql.DB, v *SavedView) (int64, error) {
 	res, err := db.Exec(`INSERT INTO saved_views
-		(name, search, source_id, tag_id, sort, unviewed_only, since, favorite, position)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, (SELECT COALESCE(MAX(position), -1) + 1 FROM saved_views))`,
+		(name, search, source_id, tag_id, sort, unviewed_only, since, favorite, assessor_id, min_score, unassessed_by, position)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, (SELECT COALESCE(MAX(position), -1) + 1 FROM saved_views))`,
 		v.Name, v.Search, nullableID(v.SourceID), nullableID(v.TagID),
-		sortOrDefault(v.Sort), v.UnviewedOnly, v.Since, v.Favorite)
+		sortOrDefault(v.Sort), v.UnviewedOnly, v.Since, v.Favorite,
+		nullableID(v.AssessorID), v.MinScore, nullableID(v.UnassessedBy))
 	if err != nil {
 		return 0, err
 	}
@@ -117,9 +135,11 @@ func CountSavedViews(db *sql.DB) (int, error) {
 // position). It reports whether a view with that ID existed.
 func UpdateSavedView(db *sql.DB, v *SavedView) (bool, error) {
 	res, err := db.Exec(`UPDATE saved_views SET name = ?, search = ?, source_id = ?, tag_id = ?,
-		sort = ?, unviewed_only = ?, since = ?, favorite = ? WHERE id = ?`,
+		sort = ?, unviewed_only = ?, since = ?, favorite = ?, assessor_id = ?, min_score = ?, unassessed_by = ?
+		WHERE id = ?`,
 		v.Name, v.Search, nullableID(v.SourceID), nullableID(v.TagID),
-		sortOrDefault(v.Sort), v.UnviewedOnly, v.Since, v.Favorite, v.ID)
+		sortOrDefault(v.Sort), v.UnviewedOnly, v.Since, v.Favorite,
+		nullableID(v.AssessorID), v.MinScore, nullableID(v.UnassessedBy), v.ID)
 	if err != nil {
 		return false, err
 	}
@@ -195,5 +215,14 @@ func CountViewsUsingSource(db *sql.DB, sourceID int64) (int, error) {
 func CountViewsUsingTag(db *sql.DB, tagID int64) (int, error) {
 	var n int
 	err := db.QueryRow(`SELECT COUNT(*) FROM saved_views WHERE tag_id = ?`, tagID).Scan(&n)
+	return n, err
+}
+
+// CountViewsUsingAssessor returns how many views filter on an assessor, by
+// its scores or by "not assessed by".
+func CountViewsUsingAssessor(db *sql.DB, assessorID int64) (int, error) {
+	var n int
+	err := db.QueryRow(`SELECT COUNT(*) FROM saved_views WHERE assessor_id = ? OR unassessed_by = ?`,
+		assessorID, assessorID).Scan(&n)
 	return n, err
 }

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ApiError, isNotFound, removeRule, removeSource, removeTag, searchItems } from './api';
+import { ApiError, isNotFound, putAssessment, removeAssessment, removeAssessor, removeRule, removeSource, removeTag, searchItems } from './api';
 import { defaultFilter } from './filter';
 
 function stubFetch(status: number, body?: unknown) {
@@ -80,5 +80,39 @@ describe('searchItems', () => {
 		const fn = stubFetch(200, {});
 		await searchItems(defaultFilter, 1, 0, true);
 		expect(new URL(urlOf(fn), 'http://x').searchParams.has('tag_exact')).toBe(false);
+	});
+});
+
+describe('assessments', () => {
+	it('putAssessment sends the body as JSON to the item', async () => {
+		const fn = stubFetch(200, { id: '8' });
+		await putAssessment('12', { assessor: '3', tag: '5', score: 0, note: 'n' });
+		const [url, init] = fn.mock.calls[0] as unknown as [string, RequestInit];
+		expect(url).toBe('/api/items/12/assessments');
+		expect(init.method).toBe('PUT');
+		expect(JSON.parse(init.body as string)).toEqual({ assessor: '3', tag: '5', score: 0, note: 'n' });
+		expect((init.headers as Record<string, string>)['Content-Type']).toBe('application/json');
+	});
+
+	it('removeAssessment names the assessor and, optionally, the tag', async () => {
+		const fn = stubFetch(204);
+		await removeAssessment('12', '3');
+		await removeAssessment('12', '3', '5');
+		expect(fn.mock.calls.map((c) => (c as unknown as [string])[0])).toEqual([
+			'/api/items/12/assessments?assessor=3',
+			'/api/items/12/assessments?assessor=3&tag=5'
+		]);
+	});
+
+	it('the item list sends the assessor filters', async () => {
+		const fn = stubFetch(200, { items: [], total: 0 });
+		await searchItems({ ...defaultFilter, assessor: '3', minScore: 0.7, unassessed: '4', sort: 'score' }, 10);
+		const url = (fn.mock.calls[0] as unknown as [string])[0];
+		expect(url).toBe('/api/items?sort=score&assessor=3&min_score=0.7&unassessed=4&limit=10');
+	});
+
+	it('removing an unknown assessor is a 404', async () => {
+		stubFetch(404, { error: 'assessor 7 not found' });
+		expect(isNotFound(await removeAssessor('7').catch((e: unknown) => e))).toBe(true);
 	});
 });

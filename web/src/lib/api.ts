@@ -3,7 +3,7 @@
 // nyttig-api's CSRF check requires.
 
 import { apiParams } from './filter';
-import type { Filter, Item, RuleTest, SavedView, Source, Tag, TagRule, ViewFilter } from './types';
+import type { Assessment, Assessor, Filter, Item, RuleTest, SavedView, Source, Tag, TagRule, ViewFilter } from './types';
 
 export class ApiError extends Error {
 	constructor(
@@ -78,6 +78,22 @@ export interface RuleBody {
 	priority?: number;
 }
 
+export interface AssessorBody {
+	name?: string;
+	description?: string;
+	color?: string;
+}
+
+export interface AssessmentBody {
+	/** Assessor ID. */
+	assessor: string;
+	/** Tag ID; absent for the item as a whole. */
+	tag?: string;
+	/** From 0 to 1; absent for no score (0 is a score). */
+	score?: number;
+	note?: string;
+}
+
 export interface ViewBody {
 	name?: string;
 	/** On PATCH this replaces the whole filter. */
@@ -109,6 +125,33 @@ export function updateTag(id: string, patch: TagBody): Promise<Tag> {
 
 export function removeTag(id: string): Promise<void> {
 	return request<void>('DELETE', idPath('/api/tags', id));
+}
+
+export async function listAssessors(): Promise<Assessor[]> {
+	return (await request<{ assessors?: Assessor[] }>('GET', '/api/assessors')).assessors ?? [];
+}
+
+export function addAssessor(body: AssessorBody): Promise<Assessor> {
+	return request<Assessor>('POST', '/api/assessors', body);
+}
+
+export function updateAssessor(id: string, patch: AssessorBody): Promise<Assessor> {
+	return request<Assessor>('PATCH', idPath('/api/assessors', id), patch);
+}
+
+export function removeAssessor(id: string): Promise<void> {
+	return request<void>('DELETE', idPath('/api/assessors', id));
+}
+
+/** Stores an assessment, replacing the same assessor's earlier one for the same tag. */
+export function putAssessment(itemId: string, body: AssessmentBody): Promise<Assessment> {
+	return request<Assessment>('PUT', idPath('/api/items', itemId) + '/assessments', body);
+}
+
+export function removeAssessment(itemId: string, assessor: string, tag = ''): Promise<void> {
+	const p = new URLSearchParams({ assessor });
+	if (tag) p.set('tag', tag);
+	return request<void>('DELETE', idPath('/api/items', itemId) + '/assessments?' + p.toString());
 }
 
 export async function listViews(): Promise<SavedView[]> {

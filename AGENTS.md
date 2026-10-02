@@ -125,7 +125,8 @@ via a **bidirectional gRPC stream**.
 ## Repository layout
 
 ```
-cmd/nyttig/main.go          Client entrypoint: TUI launch + CLI subcommands
+cmd/nyttig/main.go          Client entrypoint: TUI launch + CLI subcommands (views.go: saved
+                            views, assess.go: assessors and assessments)
 cmd/nyttigd/main.go         Daemon entrypoint: wires db → fetcher → tagger → scheduler → gRPC
 proto/nyttig/v1/nyttig.proto   Source-of-truth API definition
 buf.yaml, buf.gen.yaml      buf config for codegen; run `buf generate` from the repo root
@@ -134,26 +135,30 @@ internal/config/            TOML config loading + ~ expansion
 internal/since/             Parser for rolling windows (7d, 1mo): Parse + Cutoff, shared rules with web/src/lib/since.ts
 internal/client/            gRPC client wrapper + StreamSub helper used by the TUI
 internal/mtls/              Mutual-TLS credential loading shared by daemon and client
-internal/tui/               Bubble Tea Model, filter bar, table, status bar, view tracking
+internal/tui/               Bubble Tea Model, filter bar, table, status bar, view tracking;
+                            assess.go: score chips, the score order for live inserts, the
+                            detail line
 internal/api/               nyttig-api's HTTP API: routing (server.go), JSON handlers (api.go),
-                            source/tag/rule management (manage.go), SSE bridge (stream.go),
+                            source/tag/rule management (manage.go), assessors and
+                            assessments (assessments.go), SSE bridge (stream.go),
                             security middleware (security.go)
 cmd/nyttig-api/main.go      nyttig-api entrypoint: flags, listen-address guard, HTTP server
 web/                        The SvelteKit app (pnpm); "pnpm build" writes a Node server to web/build/
 web/src/lib/                Pure modules (reducer, keymap, filter, query, command, highlight,
                             fuzzy, history, help, sanitize, viewed, forms, latest, meta, since,
-                            format, tagtree, views) with Vitest tests next to them, plus the
+                            format, tagtree, views, scores) with Vitest tests next to them, plus the
                             Svelte components (ViewTabs.svelte is the saved views' tab row above
                             the filter bar); metadata.svelte.ts holds the sources, tags and
                             saved views every page shares, prefs.svelte.ts the time format
                             (localStorage)
-web/src/routes/             / is the feed; sources/, tags/, rules/ and views/ are the management
-                            pages (ManageView.svelte is their shared frame)
+web/src/routes/             / is the feed; sources/, tags/, rules/, views/ and assessors/ are the
+                            management pages (ManageView.svelte is their shared frame)
 web/e2e/                    Playwright tests; stack.mjs starts a feed server, nyttigd, nyttig-api,
                             the app server and a Caddy-like proxy (proxy.mjs)
 internal/server/service/    gRPC service impl + Hub (broadcasts pushed items to subscribers);
                             validate.go holds all client-input validation
-internal/server/db/         SQLite layer: items, sources, tags, views; embedded migrations
+internal/server/db/         SQLite layer: items, sources, tags, views, assessors and assessments
+                            (assessments.go); embedded migrations
 internal/server/fetcher/    Feed fetch/parse + GUID-based dedup; client.go builds the HTTP
                             client, including the private-address (SSRF) block
 internal/server/tagger/     Regex-based auto-tagging engine
@@ -172,6 +177,7 @@ docs/web-client-plan.md     Plan for the nyttig-api browser client (phases and d
 docs/tag-tree-plan.md       Plan for parent tags (the tag tree): decisions and phases
 docs/saved-views-plan.md    Plan for saved views (named filters, feed tabs): decisions and phases
 docs/date-filter-plan.md    Plan for the date window (since:7d) in filters and views: decisions and phases
+docs/assessments-plan.md    Plan for assessments (scores and notes from external assessors): decisions and phases
 CLAUDE.md                   `@AGENTS.md`: makes Claude Code load this file
 ```
 
@@ -192,6 +198,12 @@ which phases are done and whether they are merged; keep it current.
   for slow subscribers (64-buffered channel). `StreamItems` re-filters pushed
   items per-subscriber against the current `StreamFilter`, including the
   search query (checked against `items_fts` with `db.ItemMatchesSearch`).
+  `Hub.PushUpdate` sends an item whose assessments changed (`PutAssessment`
+  and `RemoveAssessment` build the full item and call it) as `item_update`
+  to every subscriber, flagged with `update_matches` (the subscriber's
+  `itemMatchesFilter`, including `assessmentsMatch` for `min_score` and
+  `unassessed_by`); clients update an item they show, insert a matching one
+  they don't, and never remove one live.
   `Hub.Close` ends every active and later `StreamItems` call with
   `codes.Unavailable`; the daemon calls it before `GracefulStop`, which would
   otherwise wait out its timeout for streams that only end when the client
@@ -257,7 +269,7 @@ which phases are done and whether they are merged; keep it current.
   `tag_exact`.
 - **Saved views** (`saved_views`, `docs/saved-views-plan.md`) are named
   filters stored in the daemon (`ViewFilter`: search, one source, one tag,
-  sort, unviewed, since) and shared by the web app and the CLI. They are **resolved
+  sort, unviewed, since, and the assessment fields) and shared by the web app and the CLI. They are **resolved
   client-side into a plain filter**: nothing in the stream, the Hub,
   `ListItems` or `itemMatchesFilter` knows about views. A deleted source or
   tag is `ON DELETE SET NULL` on the view, so the view stays and loses that
@@ -270,7 +282,7 @@ which phases are done and whether they are merged; keep it current.
   (`views.ts`: `isModified`). The tabs are the favorites in position order,
   and only the first nine have a number key. **nyttig-api's view JSON is not
   protojson** (`viewJSON` in `internal/api/manage.go`): a view is
-  `{id, name, filter: {q, source, tag, since, sort, unviewed}, favorite, position}`
+  `{id, name, filter: {q, source, tag, since, sort, unviewed, assessor, min_score, unassessed}, favorite, position}`
   with string IDs, zero values left out and `filter` always present (the
   daemon spells out `sort: "newest"`). The filter keys are the web `Filter`
   type's and the feed URL's, in requests and responses alike, and a PATCH
@@ -297,6 +309,45 @@ which phases are done and whether they are merged; keep it current.
   Months and years are calendar arithmetic in UTC with `AddDate`'s
   end-of-month overflow (31 March minus 1mo is 3 March), the same in Go and
   JS. Rows age out of an open list only on reload or reconnect, by design.
+- **Assessments.** An assessor (`assessors`) writes at most one assessment
+  per `(item, assessor, tag)` (`assessments`; the tag is optional, NULL = the
+  whole item). `PutAssessment` is an upsert whose conflict target is the
+  expression `IFNULL(tag_id, 0)`, matching the unique index, because a plain
+  UNIQUE treats NULLs as distinct. Filters (`ItemFilter.AssessorID`,
+  `MinScore`, `UnassessedBy`, `Sort: "score"`) only count assessments **in
+  scope** for the filter's tag: no tag in the filter, a whole-item
+  assessment, or a tag in the filter tag's subtree (the tag itself with
+  `TagExact`). `min_score` or the score sort without an assessor is an error
+  (`ErrAssessorRequired`). Scores of different assessors are never merged.
+  Deleting an assessor deletes its assessments; saved views that use it keep
+  existing (migration 8's trigger clears `min_score` and a `score` sort, the
+  foreign keys clear the ids). Notes and assessor names are untrusted text.
+  The service (`service/assessments.go`) validates scores (NaN and ±Inf
+  explicitly, since every comparison with NaN is false), notes and the filter
+  fields shared by `SearchRequest`, `StreamFilter` and `ViewFilter`
+  (`validateAssessmentFilter`); an unknown item, assessor or tag is
+  `NotFound`. A score is `optional double` on the wire so 0 differs from none.
+  The assessment filters and the date window (`ItemFilter.After`) combine with
+  AND: `itemMatchesFilter` checks `itemInWindow` first, so an `item_update`
+  for an item outside the window has `update_matches = false` and no client
+  inserts it (`TestAssessmentFilters_WithWindowAgree`). Migration 8 (the
+  assessments) follows migration 7 (`saved_views.since`); its `saved_views`
+  rebuild carries `since`. On `ViewFilter` the assessment fields are 7-9, on
+  `SearchRequest` 10-12 and on `StreamFilter` 8-10 (after main's `since` /
+  `after`).
+- **TUI assessments.** The filter bar cycles the assessor (`a`) and the
+  minimum score (`m`); the score sort exists only while an assessor is
+  selected, and dropping the assessor drops the minimum and the sort
+  (`dropAssessor`). `item_update` becomes `ItemUpdateMsg`; `Table.ApplyUpdate`
+  replaces a shown item in place, inserts a matching one in `itemOrder` and
+  never removes one. `itemOrder` and `scoreOf` (`assess.go`) mirror the
+  daemon's order and scope rules; keep them in step with `db.ListItems`.
+- **Rating yourself** (phase 8). `me` is an ordinary assessor that the
+  *clients* create the first time they need it: `client.EnsureMe` (CLI and
+  TUI, `nyttig rate`, `=` in the TUI) and `ensureMe` in `web/src/lib/rate.ts`
+  (`:rate`, `=` in the web app). Both look it up by name and, on
+  `AlreadyExists` / 409, look again, so two clients racing is fine. The daemon
+  knows nothing special about it. Ratings are for the item as a whole.
 - **Tagging** is rule-based only (no manual tagging). Rules are regex over
   `title`/`description`/`both`, global or per-source, evaluated by `priority`.
 - **View tracking** is K9s-style: the TUI marks items viewed as they scroll
@@ -309,6 +360,11 @@ which phases are done and whether they are merged; keep it current.
   zero values are left out; the TypeScript types in `web/src/lib/types.ts`
   mirror that. `/api/stream` opens one `StreamItems` per SSE connection and
   never changes its filter: the browser reconnects instead.
+  Assessor and assessment bodies (`assessments.go`) follow the same pattern;
+  assessor and tag are ID strings, `/api/items` and `/api/stream` take
+  `assessor`, `min_score`, `unassessed` and `sort=score`, and the SSE bridge
+  sends `event: update` with `{matches, item}` for `item_update`. Notes and
+  assessor names go through `safeText` (`sanitize.go`).
   Management bodies (`manage.go`) are read member by member into a
   `jsonBody`, which keeps field presence for PATCH (absent = unchanged,
   mapped to the proto3 `optional` fields) and rejects unknown, duplicate
@@ -320,6 +376,16 @@ which phases are done and whether they are merged; keep it current.
   changes), and closes the connection when its bounded queue overflows so
   the browser resyncs. Items and colors are sanitized on the way out
   (`sanitize.go`), and again in the browser.
+- **Fetching by view** (phase 9). `GET /api/items?view=<id or name>` and
+  `/api/stream?view=` resolve a saved view in nyttig-api (`feedRequest` in
+  `internal/api/api.go`), through the same functions as `nyttig search -view`
+  (`internal/client/viewquery.go`: `FindView`, `ViewSearchRequest`,
+  `StreamFilterOf`) so the two cannot drift. The view's `since` becomes
+  `after = now - window` once per request or stream snapshot (`Config.Now`
+  fixes the clock in tests); there is still no `since` HTTP parameter. A
+  parameter that is present replaces the view's field and present-but-empty
+  (or `0`/`false`) clears it; clearing the assessor also drops the minimum
+  and a score sort. Unknown view: 404 (`client.ErrViewNotFound`).
 - **Web log-viewer features** (phase 3). `keymap.ts` holds every mode's keys
   as binding tables; the key handler and the help overlay (`help.ts`) both
   read them, so add a key there and it shows in `?`. `query.ts` parses and
@@ -337,6 +403,18 @@ which phases are done and whether they are merged; keep it current.
   `policy.test.ts` fails on `{@html}`. The e2e feed server has bulk feeds
   (`/bulk/<name>.xml?n=230`, push with `/add?feed=bulk/<name>`) for the tests
   that need long lists; they add their own source and delete it.
+- **Web assessments** (phase 6). `Filter` has `assessor`, `minScore` and
+  `unassessed` next to `sort: 'score'`; `filter.ts` drops a minimum score or
+  the score sort that has no assessor, as the daemon would refuse them.
+  `query.ts` reads `score:<assessor>[>=0.7]`, `unassessed:<assessor>` and
+  `sort:score` (an error without a `score:` term), and quotes an assessor name
+  that contains `>`. `scores.ts` is the one place that decides which assessments
+  count (`inScope`, `scoreOf`) and which chips a row shows. The reducer handles
+  `update` events (replace in place, insert when the daemon says it matches,
+  never remove) and orders by `state.score` under `sort: 'score'`, new items
+  last. `a` / `A` pick and clear the assessor (`1`-`9`, `0`, `v` are saved views).
+  Notes and assessor names are untrusted: render them with `htmlToText` /
+  `oneLine`, never `{@html}`.
 - **Feed content in the browser is untrusted.** Never use `{@html}`; render
   text only (`htmlToText` in `web/src/lib/sanitize.ts`), links through
   `safeLink`, colors through `safeColor`, and don't load feed images. The
@@ -351,7 +429,8 @@ which phases are done and whether they are merged; keep it current.
   removing the old one.
 - **Config** (`internal/config`): `socket`, `db_path` and `log_level` are
   top-level keys (there is no `[server]` table), followed by `[tls]`,
-  `[[sources]]`, `[[tags]]` and `[[tag_rules]]`. `config.Load` rejects unknown
+  `[[sources]]`, `[[tags]]`, `[[tag_rules]]` and `[[assessors]]` (seeded by
+  name, never overwritten). `config.Load` rejects unknown
   keys. The daemon reads a file only when `--config` is passed (no default
   path), and flags override file values. If you change the config structs,
   update `sample_config.toml` and the README's example and reference tables.

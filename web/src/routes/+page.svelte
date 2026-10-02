@@ -21,13 +21,13 @@
 	import StatusBar from '$lib/StatusBar.svelte';
 	import ViewTabs from '$lib/ViewTabs.svelte';
 	import VirtualList from '$lib/VirtualList.svelte';
-	import { cycleID, filterFromParams, filterQuery, nextSort, sameFilter } from '$lib/filter';
+	import { cycleID, filterFromParams, filterQuery, nextSort, sameFilter, withAssessor } from '$lib/filter';
 	import CommandLine from '$lib/CommandLine.svelte';
 	import { CommandLine as CommandLineState, execute, type CommandHost } from '$lib/commandline.svelte';
 	import { feedSections } from '$lib/help';
 	import { highlightTerms } from '$lib/highlight';
 	import { keyAction, type Action, type Mode } from '$lib/keymap';
-	import { fetchTimes, sourceDisplays, tagDisplays } from '$lib/meta';
+	import { assessorDisplays, fetchTimes, sourceDisplays, tagDisplays } from '$lib/meta';
 	import { metadata } from '$lib/metadata.svelte';
 	import { Picker } from '$lib/picker.svelte';
 	import { prefs } from '$lib/prefs.svelte';
@@ -35,7 +35,9 @@
 	import { applyCompletion, complete, format, parse, type Candidate } from '$lib/query';
 	import { describeSince, nextSince } from '$lib/since';
 	import { markViewed, moveCursor, setFollow } from '$lib/reducer';
+	import { ensureMe } from '$lib/rate';
 	import { oneLine, safeLink } from '$lib/sanitize';
+	import { tagScope, type ScoreScope } from '$lib/scores';
 	import { FeedStream } from '$lib/stream.svelte';
 	import type { Filter, Item } from '$lib/types';
 	import { ViewTracker } from '$lib/viewed';
@@ -54,6 +56,7 @@
 	// Shared with the management views, which reload them after changes.
 	const sources = $derived(metadata.sources);
 	const tags = $derived(metadata.tags);
+	const assessors = $derived(metadata.assessors);
 	// Tree order, each tag once: the order of the t key and the T picker.
 	const treeTags = $derived(treeOrder(tags));
 	let unviewedTotal: number | null = $state(null);
@@ -78,14 +81,14 @@
 	/** The query bar's text. */
 	let draft = $state('');
 	/** The filter as query text, which the bar shows when it is not being edited. */
-	const canonical = $derived(format(filter, sources, tags));
+	const canonical = $derived(format(filter, sources, tags, assessors));
 	/** The text last applied, so the bar keeps it while the URL catches up. */
 	let applied: string | null = null;
-	const parsed = $derived(parse(draft, sources, tags));
+	const parsed = $derived(parse(draft, sources, tags, assessors));
 	let caret = $state(0);
 	let active = $state(-1);
 	let submitError = $state('');
-	const completion = $derived(searchFocused ? complete(draft, caret, sources, tags) : null);
+	const completion = $derived(searchFocused ? complete(draft, caret, sources, tags, assessors) : null);
 	const suggestions = $derived(completion?.candidates ?? []);
 	// Live errors show only when there is nothing to complete: "tag:ru" is
 	// not wrong, it is unfinished.
@@ -100,6 +103,7 @@
 	const expandedIndex = $derived(expandedId === null ? -1 : items.findIndex((it) => it.id === expandedId));
 	const srcMeta = $derived(sourceDisplays(sources));
 	const tagMeta = $derived(tagDisplays(tags));
+	const assessorMeta = $derived(assessorDisplays(assessors));
 	const times = $derived(fetchTimes(sources, now));
 	const localUnviewed = $derived(items.reduce((n, it) => n + (it.viewed ? 0 : 1), 0));
 	const mode: Mode = $derived(
@@ -119,15 +123,27 @@
 
 	// ── Filter ⇄ URL ──────────────────────────────────────────
 
+	/** The scores the score sort orders by: one assessor's, in the filter tag's scope. */
+	function scoreScope(f: Filter): ScoreScope | null {
+		return f.sort === 'score' && f.assessor ? { assessor: f.assessor, tags: tagScope(tags, f.tag) } : null;
+	}
+
 	let connected: Filter | null = null;
 	$effect(() => {
 		const f = filter;
 		untrack(() => {
 			if (connected && sameFilter(connected, f)) return;
 			connected = f;
-			stream.connect(f);
+			stream.connect(f, scoreScope(f));
 			void loadUnviewed();
 		});
+	});
+
+	// The scope needs the tag tree, which can load after the stream connects.
+	$effect(() => {
+		void tags;
+		const f = filter;
+		untrack(() => stream.setScore(scoreScope(f)));
 	});
 
 	// ":feed" and the nav links come back to this filter and this tab.
@@ -281,7 +297,7 @@
 			submitError = r.errors[0]!.message;
 			return;
 		}
-		draft = applied = format(r.filter, sources, tags);
+		draft = applied = format(r.filter, sources, tags, assessors);
 		setFilter(r.filter);
 		leaveSearch();
 	}
@@ -289,7 +305,7 @@
 	/** Esc: drops the search text, keeps the operators (they have their own keys and chips). */
 	function clearSearch() {
 		const f = { ...filter, q: '' };
-		draft = applied = format(f, sources, tags);
+		draft = applied = format(f, sources, tags, assessors);
 		setFilter(f);
 		leaveSearch();
 	}
@@ -329,7 +345,14 @@
 		if (last >= items.length - 1 - LOAD_AHEAD_ROWS) void stream.loadOlder();
 	}
 
-	function openPicker(kind: 'source' | 'tag' | 'view') {
+	function openPicker(kind: 'source' | 'tag' | 'view' | 'assessor') {
+		if (kind === 'assessor') {
+			picker.start('assessor', [
+				{ id: '', label: 'all' },
+				...assessors.flatMap((a) => (a.id ? [{ id: a.id, label: oneLine(a.name), color: a.color }] : []))
+			]);
+			return;
+		}
 		if (kind === 'view') {
 			// Favorites first, marked with a star; "all" is the unfiltered feed.
 			const favs = tabViews;
@@ -361,6 +384,7 @@
 		const kind = picker.kind;
 		closePicker();
 		if (kind === 'view') return openViewById(id);
+		if (kind === 'assessor') return setFilter(withAssessor(filter, id));
 		if (kind) setFilter({ ...filter, [kind]: id });
 	}
 
@@ -382,8 +406,26 @@
 		filter: () => filter,
 		setFilter,
 		activeView: () => openView?.id ?? '',
-		follow
+		follow,
+		rate: (score, note) => void rate(score, note)
 	};
+
+	/** :rate: scores the selected item as the assessor "me", which is created the first time. */
+	async function rate(score: number, note: string) {
+		const it = items[cursor];
+		if (!it) {
+			flash('error: no item selected');
+			return;
+		}
+		try {
+			const id = await ensureMe(metadata.assessors);
+			if (!metadata.assessors.some((a) => a.id === id)) void metadata.reloadAssessors();
+			await api.putAssessment(it.id, { assessor: id, score, ...(note ? { note } : {}) });
+			flash(`rated ${oneLine(it.title) || 'the item'}: ${score}`);
+		} catch (e) {
+			flash('error: ' + (e instanceof Error ? e.message : String(e)));
+		}
+	}
 
 	/** Runs an action; false means the key was not used, so the browser keeps it. */
 	function run(a: Action): boolean | void {
@@ -423,6 +465,10 @@
 				return openPicker('source');
 			case 'pickTag':
 				return openPicker('tag');
+			case 'pickAssessor':
+				return openPicker('assessor');
+			case 'clearAssessor':
+				return setFilter(withAssessor(filter, ''));
 			case 'viewPicker':
 				return openPicker('view');
 			case 'viewTab': {
@@ -440,6 +486,8 @@
 				return closePicker();
 			case 'toggleSort':
 				return setFilter({ ...filter, sort: nextSort(filter.sort) });
+			case 'rate':
+				return cl.start('rate ');
 			case 'toggleTime':
 				prefs.toggleTime();
 				return flash('times: ' + prefs.timeMode);
@@ -467,7 +515,7 @@
 			case 'openCommand':
 				return cl.start();
 			case 'runCommand': {
-				const cmd = cl.run({ sources, tags, views: metadata.views });
+				const cmd = cl.run({ sources, tags, views: metadata.views, assessors });
 				if (!cmd) return;
 				list?.focus();
 				return execute(cmd, host);
@@ -477,7 +525,7 @@
 				list?.focus();
 				return;
 			case 'completeCommand':
-				return cl.complete({ sources, tags, views: metadata.views });
+				return cl.complete({ sources, tags, views: metadata.views, assessors });
 			case 'historyPrev':
 				return cl.historyPrev();
 			case 'historyNext':
@@ -563,6 +611,7 @@
 		{filter}
 		{sources}
 		{tags}
+		{assessors}
 		bind:draft
 		bind:input={searchInput}
 		{suggestions}
@@ -578,6 +627,7 @@
 		{onsearchblur}
 		oncyclesource={() => run({ type: 'cycleSource' })}
 		oncycletag={() => run({ type: 'cycleTag' })}
+		onpickassessor={() => run({ type: 'pickAssessor' })}
 		oncyclesince={() => setFilter({ ...filter, since: nextSince(filter.since) })}
 		ontogglesort={() => run({ type: 'toggleSort' })}
 		ontoggleunviewed={() => setFilter({ ...filter, unviewed: !filter.unviewed })}
@@ -608,6 +658,8 @@
 				expanded={i === expandedIndex}
 				source={item.source_id ? srcMeta.get(item.source_id) : undefined}
 				tags={tagMeta}
+				assessors={assessorMeta}
+				selectedAssessor={filter.assessor}
 				onselect={onRowSelect}
 				{terms}
 				timeMode={prefs.timeMode}
@@ -615,7 +667,14 @@
 			/>
 		{/snippet}
 		{#snippet detail(item)}
-			<ItemDetail {item} source={item.source_id ? srcMeta.get(item.source_id) : undefined} {terms} />
+			<ItemDetail
+				{item}
+				source={item.source_id ? srcMeta.get(item.source_id) : undefined}
+				{terms}
+				assessors={assessorMeta}
+				tagNames={tagMeta}
+				{now}
+			/>
 		{/snippet}
 		{#snippet footer()}
 			<span data-testid="older">
@@ -670,6 +729,7 @@
 		{filter}
 		{sources}
 		{tags}
+		{assessors}
 		timeMode={prefs.timeMode}
 		onchange={setFilter}
 		ontime={(m) => prefs.setTime(m)}

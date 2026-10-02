@@ -120,3 +120,16 @@ field = "both"
 tag = "linux security"
 pattern = "(?i)\\blinux\\b.*\\b(vulnerabilit|exploit|privilege escalation)"
 field = "both"
+
+# Assessors score items through the API (a model, a CVE reader, you). The
+# description says what the score means; it is shown next to the scores.
+# An assessor that already exists is left as it is. See "Assessments" in the
+# README for how to write one.
+[[assessors]]
+name = "claude"
+description = "How much the item matters for its tag, 0 to 1"
+color = "#D97757"
+
+[[assessors]]
+name = "cvss"
+description = "CVSS base score divided by 10"

@@ -1,6 +1,6 @@
 # Date filter plan
 
-Status: **phases 1–6 implemented, not yet merged** (the database, the daemon, the CLI, the HTTP API and the web app).
+Status: **phases 1–6 implemented and merged** (#25: the database, the daemon, the CLI, the HTTP API and the web app). The assessments branch later renumbered its own migration (8) and proto fields around this one; see `docs/assessments-plan.md`.
 
 Views (and the feed filter in general) get a rolling time window: "only items
 from the last day / week / month". A view called `today` is `since:24h`, one
@@ -218,3 +218,8 @@ Then `buf generate` (local plugins; never hand-edit `internal/proto/`).
 - The e2e feed server's "hour" item is 1.5 hours old (not 1), so that a
   `since:1h` window is empty however fast the test runs.
 - The TUI is unchanged, as planned.
+- Merged with the assessments branch: the window and the assessment filters
+  combine (AND) in `ListItems`, the Hub (`TestAssessmentFilters_WithWindowAgree`),
+  saved views, the CLI, nyttig-api and the web filter. The `sort:score` order
+  and `update` events obey the window; an item outside it is never inserted by
+  a live update.

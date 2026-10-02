@@ -19,6 +19,7 @@ import {
 	type FeedState,
 	type StreamEvent
 } from './reducer';
+import type { ScoreScope } from './scores';
 import { sinceAfter } from './since';
 import type { Filter, Item } from './types';
 
@@ -81,8 +82,19 @@ export class FeedStream {
 		return () => this.listeners.delete(fn);
 	}
 
-	/** Connects with filter f, replacing any current connection. */
-	connect(f: Filter): void {
+	/**
+	 * Sets whose scores the score sort orders by (null for the other sorts).
+	 * The page calls it when the tag tree it derives the scope from loads or
+	 * changes; the list is not re-sorted, only later live inserts are placed
+	 * by it.
+	 */
+	setScore(score: ScoreScope | null): void {
+		if (this.state.score === score) return;
+		this.state = { ...this.state, score };
+	}
+
+	/** Connects with filter f, replacing any current connection. score is its scope when f sorts by score. */
+	connect(f: Filter, score: ScoreScope | null = null): void {
 		this.filter = f;
 		this.backoff = MIN_BACKOFF_MS;
 		// Keep the rows on screen until the new snapshot is complete, but
@@ -93,6 +105,7 @@ export class FeedStream {
 		this.state = {
 			...s,
 			sort: f.sort,
+			score,
 			unviewedOnly: f.unviewed,
 			complete: false,
 			loading: false,
@@ -168,6 +181,17 @@ export class FeedStream {
 			}
 			if (typeof item?.id !== 'string') return;
 			this.apply({ type: 'item', item });
+		});
+		es.addEventListener('update', (e) => {
+			if (this.es !== es) return;
+			let d: { matches?: boolean; item?: Item };
+			try {
+				d = JSON.parse((e as MessageEvent<string>).data) as { matches?: boolean; item?: Item };
+			} catch {
+				return;
+			}
+			if (typeof d?.item?.id !== 'string') return;
+			this.apply({ type: 'update', item: d.item, matches: d.matches === true });
 		});
 		es.addEventListener('complete', () => {
 			if (this.es !== es) return;

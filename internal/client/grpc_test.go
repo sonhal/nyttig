@@ -30,6 +30,11 @@ type testServer struct {
 	items   []*pb.Item
 	viewed  map[int64]bool
 
+	assessors []*pb.Assessor
+	// assessorRace, when set, is added just before the next AddAssessor
+	// answers, as if another client had created it first.
+	assessorRace *pb.Assessor
+
 	// StreamItems control
 	streamMu sync.Mutex
 	streams  []pb.Nyttig_StreamItemsServer
@@ -41,6 +46,49 @@ func newTestServer() *testServer {
 		viewed: make(map[int64]bool),
 		itemCh: make(chan *pb.Item, 10),
 	}
+}
+
+func (s *testServer) AddAssessor(ctx context.Context, req *pb.AddAssessorRequest) (*pb.Assessor, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	// Another client creating the same assessor at the same moment.
+	if s.assessorRace != nil {
+		s.assessors = append(s.assessors, s.assessorRace)
+		s.assessorRace = nil
+	}
+	for _, a := range s.assessors {
+		if a.Name == req.Name {
+			return nil, status.Error(codes.AlreadyExists, "assessor already exists")
+		}
+	}
+	a := &pb.Assessor{Id: int64(len(s.assessors) + 1), Name: req.Name, Description: req.Description, Color: req.Color}
+	s.assessors = append(s.assessors, a)
+	return a, nil
+}
+
+func (s *testServer) ListAssessors(ctx context.Context, _ *emptypb.Empty) (*pb.ListAssessorsResponse, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return &pb.ListAssessorsResponse{Assessors: append([]*pb.Assessor(nil), s.assessors...)}, nil
+}
+
+func (s *testServer) PutAssessment(ctx context.Context, req *pb.PutAssessmentRequest) (*pb.Assessment, error) {
+	return &pb.Assessment{Id: 1, ItemId: req.ItemId, AssessorId: req.AssessorId, TagId: req.TagId, Score: req.Score, Note: req.Note}, nil
+}
+
+func (s *testServer) RemoveAssessment(ctx context.Context, req *pb.RemoveAssessmentRequest) (*emptypb.Empty, error) {
+	if req.ItemId != 7 {
+		return nil, status.Error(codes.NotFound, "assessment not found")
+	}
+	return &emptypb.Empty{}, nil
+}
+
+func (s *testServer) RemoveAssessor(ctx context.Context, req *pb.RemoveAssessorRequest) (*emptypb.Empty, error) {
+	return &emptypb.Empty{}, nil
+}
+
+func (s *testServer) UpdateAssessor(ctx context.Context, req *pb.UpdateAssessorRequest) (*pb.Assessor, error) {
+	return &pb.Assessor{Id: req.Id, Name: req.GetName()}, nil
 }
 
 func (s *testServer) AddSource(ctx context.Context, req *pb.AddSourceRequest) (*pb.Source, error) {
@@ -430,6 +478,38 @@ func TestClient_RefreshSource(t *testing.T) {
 	}
 	if err := c.RefreshSource(ctx, 1); err != nil {
 		t.Fatalf("RefreshSource(1): %v", err)
+	}
+}
+
+func TestClient_Assessments(t *testing.T) {
+	c, _, cleanup := setupTest(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	a, err := c.AddAssessor(ctx, &pb.AddAssessorRequest{Name: "claude", Description: "d"})
+	if err != nil || a.Name != "claude" {
+		t.Fatalf("AddAssessor = %v, %v", a, err)
+	}
+	if up, err := c.UpdateAssessor(ctx, &pb.UpdateAssessorRequest{Id: 1, Name: proto.String("x")}); err != nil || up.Name != "x" {
+		t.Fatalf("UpdateAssessor = %v, %v", up, err)
+	}
+	list, err := c.ListAssessors(ctx)
+	if err != nil || len(list.Assessors) != 1 {
+		t.Fatalf("ListAssessors = %v, %v", list, err)
+	}
+	zero := 0.0
+	got, err := c.PutAssessment(ctx, &pb.PutAssessmentRequest{ItemId: 7, AssessorId: 1, Score: &zero, Note: "n"})
+	if err != nil || got.Score == nil || *got.Score != 0 || got.Note != "n" {
+		t.Fatalf("PutAssessment = %v, %v", got, err)
+	}
+	if err := c.RemoveAssessment(ctx, &pb.RemoveAssessmentRequest{ItemId: 7, AssessorId: 1}); err != nil {
+		t.Fatalf("RemoveAssessment: %v", err)
+	}
+	if err := c.RemoveAssessment(ctx, &pb.RemoveAssessmentRequest{ItemId: 8, AssessorId: 1}); status.Code(err) != codes.NotFound {
+		t.Fatalf("RemoveAssessment(missing) = %v, want NotFound", err)
+	}
+	if err := c.RemoveAssessor(ctx, 1); err != nil {
+		t.Fatalf("RemoveAssessor: %v", err)
 	}
 }
 

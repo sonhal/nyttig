@@ -669,12 +669,21 @@ func (s *Service) checkViewRefs(f *pb.ViewFilter) error {
 			return status.Errorf(codes.NotFound, "tag %d not found", f.TagId)
 		}
 	}
+	for _, id := range []int64{f.AssessorId, f.UnassessedBy} {
+		if id == 0 {
+			continue
+		}
+		if err := s.checkAssessor(id); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
 // applyViewFilter copies a (validated) proto filter onto v; nil clears it.
 func applyViewFilter(v *db.SavedView, f *pb.ViewFilter) {
 	v.Search, v.SourceID, v.TagID, v.Sort, v.UnviewedOnly, v.Since = "", nil, nil, "newest", false, ""
+	v.AssessorID, v.MinScore, v.UnassessedBy = nil, nil, nil
 	if f == nil {
 		return
 	}
@@ -692,6 +701,18 @@ func applyViewFilter(v *db.SavedView, f *pb.ViewFilter) {
 	}
 	v.UnviewedOnly = f.UnviewedOnly
 	v.Since = f.Since
+	if f.AssessorId != 0 {
+		id := f.AssessorId
+		v.AssessorID = &id
+	}
+	if f.MinScore != nil {
+		score := *f.MinScore
+		v.MinScore = &score
+	}
+	if f.UnassessedBy != 0 {
+		id := f.UnassessedBy
+		v.UnassessedBy = &id
+	}
 }
 
 func dbSavedViewToProto(v *db.SavedView) *pb.SavedView {
@@ -701,6 +722,16 @@ func dbSavedViewToProto(v *db.SavedView) *pb.SavedView {
 	}
 	if v.TagID != nil {
 		f.TagId = *v.TagID
+	}
+	if v.AssessorID != nil {
+		f.AssessorId = *v.AssessorID
+	}
+	if v.MinScore != nil {
+		score := *v.MinScore
+		f.MinScore = &score
+	}
+	if v.UnassessedBy != nil {
+		f.UnassessedBy = *v.UnassessedBy
 	}
 	return &pb.SavedView{Id: v.ID, Name: v.Name, Filter: f, Favorite: v.Favorite, Position: int32(v.Position)}
 }
@@ -837,10 +868,11 @@ func (s *Service) TestTagRule(ctx context.Context, req *pb.TestTagRuleRequest) (
 // it lists items matching the other filters, which clients use for paging
 // beyond what StreamItems sends.
 func (s *Service) Search(ctx context.Context, req *pb.SearchRequest) (*pb.SearchResponse, error) {
-	switch req.Sort {
-	case "", "newest", "oldest":
-	default:
-		return nil, status.Errorf(codes.InvalidArgument, "sort must be newest or oldest, got %q", req.Sort)
+	if err := firstErr(
+		validateSort(req.Sort),
+		validateAssessmentFilter(req.AssessorId, req.MinScore, req.UnassessedBy, req.Sort),
+	); err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 	after, err := afterTime(req.After)
 	if err != nil {
@@ -860,6 +892,9 @@ func (s *Service) Search(ctx context.Context, req *pb.SearchRequest) (*pb.Search
 		Offset:       int(req.Offset),
 		UnviewedOnly: req.UnviewedOnly,
 		After:        after,
+		AssessorID:   req.AssessorId,
+		MinScore:     req.MinScore,
+		UnassessedBy: req.UnassessedBy,
 	})
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "search: %v", err)
@@ -956,6 +991,21 @@ func (h *Hub) Push(item *pb.Item) {
 		case s.sendCh <- &pb.ServerMessage{Msg: &pb.ServerMessage_Item{Item: item}}:
 		default:
 			// Buffer full; drop for this slow subscriber.
+		}
+	}
+}
+
+// PushUpdate broadcasts an item whose assessments changed, with all of them.
+// Like Push it never blocks and drops the message for a slow subscriber.
+// Each subscriber's StreamItems decides whether the item matches its filter.
+func (h *Hub) PushUpdate(item *pb.Item) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for s := range h.subs {
+		select {
+		case s.sendCh <- &pb.ServerMessage{Msg: &pb.ServerMessage_ItemUpdate{ItemUpdate: item}}:
+		default:
+			// Buffer full; this subscriber stays stale until its next reset.
 		}
 	}
 }
@@ -1060,6 +1110,18 @@ func (s *Service) StreamItems(stream pb.Nyttig_StreamItemsServer) error {
 					return err
 				}
 			}
+			// An updated item is always sent: the client may be showing it
+			// even if it no longer matches (it is never removed live). The
+			// flag tells it whether to insert an item it does not show.
+			if item := itemMsg.GetItemUpdate(); item != nil {
+				out := &pb.ServerMessage{
+					Msg:           itemMsg.Msg,
+					UpdateMatches: s.itemMatchesFilter(item, filter),
+				}
+				if err := stream.Send(out); err != nil {
+					return err
+				}
+			}
 
 		case err := <-recvErrCh:
 			if err == io.EOF {
@@ -1088,6 +1150,13 @@ func (s *Service) sendFilteredItems(stream pb.Nyttig_StreamItemsServer, filter *
 		limit = 200
 	}
 
+	if err := firstErr(
+		validateSort(filter.Sort),
+		validateAssessmentFilter(filter.AssessorId, filter.MinScore, filter.UnassessedBy, filter.Sort),
+	); err != nil {
+		return status.Error(codes.InvalidArgument, err.Error())
+	}
+
 	sort := filter.Sort
 	if sort == "" {
 		sort = "newest"
@@ -1101,6 +1170,9 @@ func (s *Service) sendFilteredItems(stream pb.Nyttig_StreamItemsServer, filter *
 		Limit:        limit,
 		UnviewedOnly: filter.UnviewedOnly,
 		After:        after,
+		AssessorID:   filter.AssessorId,
+		MinScore:     filter.MinScore,
+		UnassessedBy: filter.UnassessedBy,
 	}
 
 	items, _, err := db.ListItems(s.db, dbFilter)
@@ -1150,6 +1222,9 @@ func (s *Service) itemMatchesFilter(item *pb.Item, filter *pb.StreamFilter) bool
 	if !itemInWindow(item, filter.After) {
 		return false
 	}
+	if !s.assessmentsMatch(item, filter.AssessorId, filter.MinScore, filter.UnassessedBy, filter.TagId, false) {
+		return false
+	}
 	if filter.Search != "" {
 		// Ask FTS5 itself, so pushed items match exactly like the initial
 		// batch does and clients never have to emulate FTS tokenization.
@@ -1161,6 +1236,46 @@ func (s *Service) itemMatchesFilter(item *pb.Item, filter *pb.StreamFilter) bool
 		return ok
 	}
 	return true
+}
+
+// assessmentsMatch applies the assessment filters to an item in memory, the
+// twin of the SQL in db.ListItems. An assessment is in scope when there is no
+// filter tag, it has no tag (a whole-item assessment), or its tag is in the
+// filter tag's subtree (the tag itself when exact).
+func (s *Service) assessmentsMatch(item *pb.Item, assessorID int64, minScore *float64, unassessedBy, tagID int64, exact bool) bool {
+	if minScore == nil && unassessedBy == 0 {
+		return true
+	}
+	var subtree map[int64]bool
+	if tagID != 0 && !exact {
+		subtree = s.tagGraph.Load().subtree(tagID)
+	}
+	inScope := func(a *pb.Assessment) bool {
+		switch {
+		case tagID == 0, a.TagId == 0:
+			return true
+		case exact:
+			return a.TagId == tagID
+		default:
+			return subtree[a.TagId]
+		}
+	}
+	scored, assessed := false, false
+	for _, a := range item.Assessments {
+		if !inScope(a) {
+			continue
+		}
+		if a.AssessorId == unassessedBy && unassessedBy != 0 {
+			assessed = true
+		}
+		if minScore != nil && a.AssessorId == assessorID && a.Score != nil && *a.Score >= *minScore {
+			scored = true
+		}
+	}
+	if minScore != nil && !scored {
+		return false
+	}
+	return !assessed
 }
 
 // itemInWindow applies a stream filter's cutoff with the rule ListItems uses:
@@ -1289,6 +1404,9 @@ func ItemToProto(item *db.Item) *pb.Item {
 	}
 	for i, t := range item.Tags {
 		p.Tags[i] = dbTagToProto(t)
+	}
+	for _, a := range item.Assessments {
+		p.Assessments = append(p.Assessments, dbAssessmentToProto(a))
 	}
 	return p
 }

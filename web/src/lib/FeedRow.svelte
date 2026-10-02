@@ -10,8 +10,9 @@
 	import type { TimeMode } from './command';
 	import { formatDate, formatRelative, formatTime } from './format';
 	import Highlight from './Highlight.svelte';
-	import type { SourceDisplay, TagDisplay } from './meta';
+	import type { AssessorDisplay, SourceDisplay, TagDisplay } from './meta';
 	import { domainOf, htmlToText, oneLine, safeColor } from './sanitize';
+	import { formatScore, scoreChips } from './scores';
 	import type { Item } from './types';
 
 	interface Props {
@@ -22,6 +23,10 @@
 		source: SourceDisplay | undefined;
 		/** Current tags by ID; they win over the item's copy of its tags. */
 		tags: Map<string, TagDisplay>;
+		/** Current assessors by ID, for the score chips' names and colors. */
+		assessors?: Map<string, AssessorDisplay>;
+		/** The assessor whose scores the feed uses: its chip comes first. */
+		selectedAssessor?: string;
 		onselect: (index: number) => void;
 		/** The free-text words of the query, marked in the title and description. */
 		terms?: readonly string[];
@@ -37,12 +42,15 @@
 		expanded,
 		source,
 		tags,
+		assessors = new Map(),
+		selectedAssessor = '',
 		onselect,
 		terms = [],
 		timeMode = 'absolute',
 		now = 0
 	}: Props = $props();
 
+	const chips = $derived(scoreChips(item, selectedAssessor));
 	const title = $derived(oneLine(item.title) || '(untitled)');
 	const desc = $derived(htmlToText(item.description));
 	const domain = $derived(domainOf(item.link));
@@ -86,6 +94,12 @@
 				{/each}
 			</span>
 		{/if}
+		{#each chips as c (c.assessorId)}
+			{@const cur = assessors.get(c.assessorId)}
+			<span class="chip score" class:selected-assessor={c.assessorId === selectedAssessor} data-testid="score-chip"
+				>[<span style:color={cur?.color}>{oneLine(cur?.name || c.name)} {formatScore(c.score)}</span>]</span
+			>
+		{/each}
 		<span class="title"><Highlight text={title} {terms} /></span>
 		{#if desc}<span class="desc"><Highlight text={desc} {terms} /></span>{/if}
 		<span class="domain">{domain}</span>
@@ -143,6 +157,9 @@
 		color: var(--dim);
 	}
 	.src {
+		flex: none;
+	}
+	.score {
 		flex: none;
 	}
 	.tags {

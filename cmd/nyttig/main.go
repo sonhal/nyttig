@@ -110,6 +110,20 @@ func main() {
 		removeViewCmd()
 	case "reorder-views":
 		reorderViewsCmd()
+	case "list-assessors":
+		listAssessorsCmd()
+	case "add-assessor":
+		addAssessorCmd()
+	case "update-assessor":
+		updateAssessorCmd()
+	case "remove-assessor":
+		removeAssessorCmd()
+	case "assess":
+		assessCmd()
+	case "unassess":
+		unassessCmd()
+	case "rate":
+		rateCmd()
 	case "refresh":
 		refreshCmd()
 	default:
@@ -138,6 +152,13 @@ func printHelp() {
 	fmt.Fprintf(os.Stderr, "  update-view    Change a view (only the given flags change)\n")
 	fmt.Fprintf(os.Stderr, "  remove-view    Remove a view by ID or name\n")
 	fmt.Fprintf(os.Stderr, "  reorder-views  Set the order of the views\n")
+	fmt.Fprintf(os.Stderr, "  list-assessors List assessors (systems that score items)\n")
+	fmt.Fprintf(os.Stderr, "  add-assessor   Register an assessor\n")
+	fmt.Fprintf(os.Stderr, "  update-assessor Change an assessor (only the given flags change)\n")
+	fmt.Fprintf(os.Stderr, "  remove-assessor Remove an assessor and its assessments\n")
+	fmt.Fprintf(os.Stderr, "  assess         Score and/or note an item as an assessor\n")
+	fmt.Fprintf(os.Stderr, "  unassess       Remove an assessor's assessment of an item\n")
+	fmt.Fprintf(os.Stderr, "  rate           Rate an item yourself (the assessor 'me', created on first use)\n")
 	fmt.Fprintf(os.Stderr, "  search         Full-text search stored items (-view NAME runs a saved view)\n")
 	fmt.Fprintf(os.Stderr, "  refresh        Force immediate fetch of all sources (or one with -i)\n")
 	fmt.Fprintf(os.Stderr, "\nGlobal flags:\n")
@@ -850,7 +871,11 @@ func searchCmd() {
 		unviewed bool
 		exact    bool
 		viewRef  string
-		window   string
+
+		assessorRef   string
+		minScore      float64
+		unassessedRef string
+		window        string
 	)
 
 	flags.StringVar(&viewRef, "view", "", "Run this saved view's filter (name or ID); flags you pass override its filter")
@@ -858,13 +883,16 @@ func searchCmd() {
 	flags.StringVar(&query, "query", "", "Full-text search query (or pass it as trailing arguments)")
 	flags.Int64Var(&sourceID, "s", 0, "Only items from this source ID")
 	flags.Int64Var(&sourceID, "source", 0, "Only items from this source ID")
-	flags.StringVar(&tagRef, "tag", "", "Only items with this tag or a tag below it (name or ID)")
+	flags.StringVar(&tagRef, "tag", "", "Only items with this tag or a tag below it (name or ID); empty drops a -view's tag")
 	flags.BoolVar(&exact, "exact", false, "With -tag: only items with exactly this tag, not its child tags")
 	flags.IntVar(&limit, "l", 20, "Maximum number of results")
 	flags.IntVar(&limit, "limit", 20, "Maximum number of results")
 	flags.IntVar(&offset, "offset", 0, "Skip this many results (for paging)")
-	flags.StringVar(&sort, "sort", "newest", "Sort order: newest or oldest")
+	flags.StringVar(&sort, "sort", "newest", "Sort order: newest, oldest or score (needs -assessor)")
 	flags.BoolVar(&unviewed, "unviewed", false, "Only items not yet viewed")
+	flags.StringVar(&assessorRef, "assessor", "", "Whose scores -min-score and -sort score use (name or ID); shown first")
+	flags.Float64Var(&minScore, "min-score", 0, "Only items this assessor scored at least this (0 to 1; needs -assessor); negative drops a -view's minimum")
+	flags.StringVar(&unassessedRef, "unassessed-by", "", "Only items this assessor has not assessed (name or ID)")
 	flags.StringVar(&window, "since", "", "Only items from the last 24h, 7d, 2w, 1mo or 1y (published date, else fetch date)")
 
 	args := os.Args[2:]
@@ -888,65 +916,81 @@ func searchCmd() {
 	defer c.Close()
 
 	ctx := context.Background()
-	var tagID int64
+	// Whatever was passed explicitly overrides the view's filter, field by
+	// field (client.ViewSearchRequest, which nyttig-api's ?view= uses too).
+	var o client.Overrides
+	if query != "" {
+		o.Query = &query
+	}
+	if set["s"] || set["source"] {
+		o.SourceID = &sourceID
+	}
+	// An empty -tag, -assessor or -unassessed-by clears the view's part, and
+	// a negative -min-score drops its minimum.
+	if set["tag"] {
+		var id int64
+		if tagRef != "" {
+			var err error
+			if id, err = resolveTagID(ctx, c, tagRef); err != nil {
+				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+				os.Exit(1)
+			}
+		}
+		o.TagID = &id
+	}
+	if set["sort"] {
+		o.Sort = &sort
+	}
+	if set["unviewed"] {
+		o.UnviewedOnly = &unviewed
+	}
+	if set["since"] {
+		o.Since = &window
+	}
+	if set["assessor"] {
+		var id int64
+		if assessorRef != "" {
+			id = mustAssessorID(ctx, c, assessorRef)
+		}
+		o.AssessorID = &id
+	}
+	if set["min-score"] {
+		if minScore < 0 {
+			o.NoMinScore = true
+		} else {
+			o.MinScore = &minScore
+		}
+	}
+	if set["unassessed-by"] {
+		var id int64
+		if unassessedRef != "" {
+			id = mustAssessorID(ctx, c, unassessedRef)
+		}
+		o.UnassessedBy = &id
+	}
+	var view *pb.SavedView
 	if viewRef != "" {
-		// The view supplies the filter; whatever was passed explicitly wins.
 		views, err := c.ListSavedViews(ctx)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
-		v, err := findView(views.Views, viewRef)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
-		}
-		if f := v.Filter; f != nil {
-			if query == "" {
-				query = f.Search
-			}
-			if !set["s"] && !set["source"] {
-				sourceID = f.SourceId
-			}
-			if tagRef == "" {
-				tagID = f.TagId
-			}
-			if !set["sort"] && f.Sort != "" {
-				sort = f.Sort
-			}
-			if !set["unviewed"] {
-				unviewed = f.UnviewedOnly
-			}
-			if !set["since"] {
-				window = f.Since
-			}
-		}
-	}
-	if tagRef != "" {
-		var err error
-		if tagID, err = resolveTagID(ctx, c, tagRef); err != nil {
+		if view, err = findView(views.Views, viewRef); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
 	}
-
-	after, err := cutoffFromSince(window, time.Now())
+	req, err := client.ViewSearchRequest(view, o, time.Now())
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
+	req.TagExact = exact
+	req.Limit = int32(limit)
+	req.Offset = int32(offset)
+	assessorID := req.AssessorId
 
-	resp, err := c.Search(ctx, &pb.SearchRequest{
-		After:        after,
-		Query:        query,
-		SourceId:     sourceID,
-		TagId:        tagID,
-		TagExact:     exact,
-		Limit:        int32(limit),
-		Offset:       int32(offset),
-		Sort:         sort,
-		UnviewedOnly: unviewed,
-	})
+	resp, err := c.Search(ctx, req)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
@@ -957,9 +1001,23 @@ func searchCmd() {
 		return
 	}
 
+	// A SCORES column appears only when a listed item has a score.
+	showScores := false
+	for _, it := range resp.Items {
+		if formatItemScores(it, assessorID) != "" {
+			showScores = true
+			break
+		}
+	}
+
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintf(w, "ID\tPUBLISHED\tSOURCE\tTAGS\tTITLE\tLINK\n")
-	fmt.Fprintf(w, "--\t---------\t------\t----\t-----\t----\n")
+	if showScores {
+		_, _ = fmt.Fprintf(w, "ID\tPUBLISHED\tSOURCE\tTAGS\tSCORES\tTITLE\tLINK\n")
+		_, _ = fmt.Fprintf(w, "--\t---------\t------\t----\t------\t-----\t----\n")
+	} else {
+		_, _ = fmt.Fprintf(w, "ID\tPUBLISHED\tSOURCE\tTAGS\tTITLE\tLINK\n")
+		_, _ = fmt.Fprintf(w, "--\t---------\t------\t----\t-----\t----\n")
+	}
 	for _, it := range resp.Items {
 		published := "-"
 		if it.Published != nil {
@@ -972,6 +1030,15 @@ func searchCmd() {
 		tags := strings.Join(tagNames, ",")
 		if tags == "" {
 			tags = "-"
+		}
+		if showScores {
+			scores := formatItemScores(it, assessorID)
+			if scores == "" {
+				scores = "-"
+			}
+			_, _ = fmt.Fprintf(w, "%d\t%s\t%s\t%s\t%s\t%s\t%s\n",
+				it.Id, published, tui.SanitizeLine(it.SourceName), tui.SanitizeLine(tags), scores, tui.SanitizeLine(it.Title), tui.SanitizeLine(it.Link))
+			continue
 		}
 		fmt.Fprintf(w, "%d\t%s\t%s\t%s\t%s\t%s\n",
 			it.Id, published, tui.SanitizeLine(it.SourceName), tui.SanitizeLine(tags), tui.SanitizeLine(it.Title), tui.SanitizeLine(it.Link))

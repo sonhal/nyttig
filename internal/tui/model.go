@@ -9,9 +9,11 @@ import (
 	"context"
 	"fmt"
 	"os/exec"
+	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/sonhal/nyttig/internal/client"
 	pb "github.com/sonhal/nyttig/internal/proto/nyttig/v1"
@@ -26,6 +28,7 @@ type tickMsg time.Time
 type sourcesLoadedMsg struct {
 	sources    []SourceInfo
 	tags       []TagInfo
+	assessors  []AssessorInfo
 	tagColors  map[string]string
 	sourceMeta map[int64]sourceDisplay
 }
@@ -55,9 +58,28 @@ type Model struct {
 	// Whether the initial filter has been sent (StartStream will load with it).
 	streamStarted bool
 
-	// Cached source/tag metadata for the filter dropdowns.
-	sources []SourceInfo
-	tags    []TagInfo
+	// Cached source/tag/assessor metadata for the filter dropdowns.
+	sources   []SourceInfo
+	tags      []TagInfo
+	assessors []AssessorInfo
+
+	// showInfo shows the selected item's assessments (with their notes) in
+	// a line above the status bar.
+	showInfo bool
+
+	// Rating (the = key): a prompt on that line takes "<score> [note]" and
+	// rates the selected item as the assessor "me". note is the result (or a
+	// complaint) shown on the line until the next key.
+	rating   bool
+	rateText string
+	rateErr  string
+	note     string
+}
+
+// rateDoneMsg is the result of rating an item.
+type rateDoneMsg struct {
+	score float64
+	err   error
 }
 
 // NewModel creates the root TUI model with a connected gRPC client.
@@ -121,6 +143,15 @@ func (m *Model) connectAndLoad() tea.Msg {
 		}
 	}
 
+	// Assessors are optional: a daemon without them answers with an error,
+	// and the TUI then simply has none.
+	var assessors []AssessorInfo
+	if ar, err := m.client.ListAssessors(ctx); err == nil {
+		for _, a := range ar.Assessors {
+			assessors = append(assessors, AssessorInfo{ID: a.Id, Name: a.Name, Color: a.Color})
+		}
+	}
+
 	sourceMeta := make(map[int64]sourceDisplay)
 	for _, src := range srcResp.Sources {
 		display := src.Name
@@ -130,7 +161,7 @@ func (m *Model) connectAndLoad() tea.Msg {
 		sourceMeta[src.Id] = sourceDisplay{Name: display, Color: src.Color}
 	}
 
-	return sourcesLoadedMsg{sources: srcs, tags: tags, tagColors: tagColors, sourceMeta: sourceMeta}
+	return sourcesLoadedMsg{sources: srcs, tags: tags, assessors: assessors, tagColors: tagColors, sourceMeta: sourceMeta}
 }
 
 // startStream sends the initial StreamFilter and begins listening for items.
@@ -141,10 +172,12 @@ func (m *Model) startStream() tea.Cmd {
 	m.streamStarted = true
 
 	initialFilter := &pb.StreamFilter{
-		SourceId: m.filter.CurrentSourceID(),
-		TagId:    m.filter.CurrentTagID(),
-		Search:   m.filter.CurrentSearch(),
-		Sort:     m.filter.CurrentSort(),
+		SourceId:   m.filter.CurrentSourceID(),
+		TagId:      m.filter.CurrentTagID(),
+		Search:     m.filter.CurrentSearch(),
+		Sort:       m.filter.CurrentSort(),
+		AssessorId: m.filter.CurrentAssessorID(),
+		MinScore:   m.filter.CurrentMinScore(),
 	}
 
 	sub, err := m.client.StreamItems(context.Background(), initialFilter)
@@ -173,12 +206,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 		m.filter.SetWidth(msg.Width)
-		// Table height = available rows minus filter (1) and status (1).
-		tableHeight := msg.Height - 2
-		if tableHeight < 1 {
-			tableHeight = 1
-		}
-		m.table.SetSize(msg.Width, tableHeight)
+		m.layout()
 		return m, nil
 
 	// ── Keypress ────────────────────────────────────────
@@ -201,6 +229,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, m.trackVisible()
 
+	case ItemUpdateMsg:
+		// An item whose assessments changed: update it where it is, or add
+		// it in order when it now matches the filter. Never remove one.
+		if msg.Item != nil {
+			m.table.ApplyUpdate(msg.Item, msg.Matches, m.itemOrder())
+		}
+		if m.sub != nil {
+			return m, ListenStream(m.sub)
+		}
+		return m, nil
+
 	case ResetMsg:
 		m.table.SetItems(nil)
 		m.batchComplete = false
@@ -216,6 +255,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case rateDoneMsg:
+		if msg.err != nil {
+			m.note = "rate failed: " + SanitizeLine(msg.err.Error())
+		} else {
+			m.note = "rated " + formatScore(msg.score)
+		}
+		m.layout()
+		return m, nil
+
 	case StreamErrorMsg:
 		if msg.Err != nil {
 			m.status.SetConnected(false)
@@ -226,10 +274,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case FilterChangedMsg:
 		if m.sub != nil {
 			m.sub.SendFilter(&pb.StreamFilter{
-				SourceId: msg.SourceID,
-				TagId:    msg.TagID,
-				Search:   msg.Search,
-				Sort:     msg.Sort,
+				SourceId:   msg.SourceID,
+				TagId:      msg.TagID,
+				Search:     msg.Search,
+				Sort:       msg.Sort,
+				AssessorId: msg.AssessorID,
+				MinScore:   msg.MinScore,
 			})
 		}
 		return m, nil
@@ -240,6 +290,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.tags = msg.tags
 		m.filter.SetSources(msg.sources)
 		m.filter.SetTags(msg.tags)
+		m.assessors = msg.assessors
+		m.filter.SetAssessors(msg.assessors)
+		m.table.SetAssessors(msg.assessors, m.filter.CurrentAssessorID())
 		m.table.SetTagColors(msg.tagColors)
 		m.table.SetSourceMeta(msg.sourceMeta)
 		m.status.SetConnected(true)
@@ -260,6 +313,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // handleKey processes keyboard input, delegating to filter or table actions.
 func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// The rating prompt takes the keys while it is open.
+	if m.rating {
+		return m.handleRateKey(msg)
+	}
+	// A result message goes away with the next key.
+	if m.note != "" {
+		m.note = ""
+		m.layout()
+	}
+
 	// If search is active, handle text input there first.
 	if m.filter.IsSearching() {
 		switch msg.String() {
@@ -303,6 +366,28 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "o":
 		return m, m.broadcastFilterChange(m.filter.CycleSort())
 
+	case "a":
+		fc := m.filter.CycleAssessor()
+		m.table.SetAssessors(m.assessors, fc.AssessorID)
+		return m, m.broadcastFilterChange(fc)
+
+	case "m":
+		return m, m.broadcastFilterChange(m.filter.CycleMinScore())
+
+	case "i":
+		m.showInfo = !m.showInfo
+		m.layout()
+		return m, nil
+
+	case "=":
+		if m.table.SelectedItem() == nil {
+			m.note = "no item selected"
+		} else {
+			m.rating, m.rateText, m.rateErr = true, "", ""
+		}
+		m.layout()
+		return m, nil
+
 	case "r":
 		return m, m.refreshAll()
 
@@ -337,13 +422,121 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// tableHeight returns the number of visible rows in the table.
+// tableHeight returns the number of visible rows in the table: the window
+// minus the filter bar, the status bar and, when shown, the detail line.
 func (m *Model) tableHeight() int {
 	th := m.height - 2
+	if m.lineShown() {
+		th--
+	}
 	if th < 1 {
 		return 1
 	}
 	return th
+}
+
+// lineShown reports whether the line above the status bar is in use: the
+// assessments of the selected item, the rating prompt, or a result.
+func (m *Model) lineShown() bool {
+	return m.showInfo || m.rating || m.note != ""
+}
+
+// handleRateKey edits the rating prompt: Enter rates, Esc cancels.
+func (m *Model) handleRateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "esc", "ctrl+c":
+		m.rating = false
+		m.layout()
+		return m, nil
+	case "enter":
+		score, note, err := parseRateText(m.rateText)
+		if err != nil {
+			m.rateErr = err.Error()
+			return m, nil
+		}
+		item := m.table.SelectedItem()
+		m.rating = false
+		m.layout()
+		if item == nil {
+			return m, nil
+		}
+		id, cl := item.Id, m.client
+		return m, func() tea.Msg {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			_, err := cl.Rate(ctx, id, score, note)
+			return rateDoneMsg{score: score, err: err}
+		}
+	case "backspace":
+		if r := []rune(m.rateText); len(r) > 0 {
+			m.rateText = string(r[:len(r)-1])
+		}
+		m.rateErr = ""
+		return m, nil
+	}
+	if msg.Type == tea.KeySpace {
+		m.rateText += " "
+		m.rateErr = ""
+		return m, nil
+	}
+	if msg.Type == tea.KeyRunes {
+		for _, r := range msg.Runes {
+			if r >= 32 && r != 127 {
+				m.rateText += string(r)
+			}
+		}
+		m.rateErr = ""
+	}
+	return m, nil
+}
+
+// line renders the line above the status bar: the rating prompt, a result,
+// or the selected item's assessments.
+func (m *Model) line() string {
+	switch {
+	case m.rating:
+		prompt := truncateEllipsis("rate: "+SanitizeLine(m.rateText)+"█", m.width)
+		out := filterActiveSearchStyle.Render(prompt)
+		// An error follows the text when there is room for it.
+		if room := m.width - lipgloss.Width(prompt) - 2; m.rateErr != "" && room > 4 {
+			out += filterLabelStyle.Render("  " + truncateEllipsis(m.rateErr, room))
+		}
+		return out
+	case m.note != "":
+		return filterLabelStyle.Render(truncateEllipsis(m.note, m.width))
+	}
+	return m.infoLine()
+}
+
+// layout sizes the table for the current window and detail line.
+func (m *Model) layout() {
+	m.filter.SetWidth(m.width)
+	m.table.SetSize(m.width, m.tableHeight())
+	m.table.scrollToCursor()
+}
+
+// itemOrder is the order the current filter sorts the list in, for placing
+// an item that is added live.
+func (m *Model) itemOrder() itemOrder {
+	return itemOrder{
+		sort:       m.filter.CurrentSort(),
+		assessorID: m.filter.CurrentAssessorID(),
+		scope:      subtree(m.tags, m.filter.CurrentTagID()),
+	}
+}
+
+// infoLine renders the selected item's assessments on one line, "" when it
+// has none: "claude [CVE] 0.9: note | cvss 0.98".
+func (m *Model) infoLine() string {
+	item := m.table.SelectedItem()
+	if item == nil || len(item.Assessments) == 0 {
+		return filterLabelStyle.Render("no assessments")
+	}
+	names := make(map[int64]string, len(m.tags))
+	for _, t := range m.tags {
+		names[t.ID] = t.Name
+	}
+	return truncateEllipsis(strings.Join(assessmentLines(item, names), " | "), m.width)
 }
 
 // broadcastFilterChange takes a FilterChangedMsg and broadcasts it
@@ -433,5 +626,8 @@ func (m Model) View() string {
 	tableView := m.table.View()
 	statusView := m.status.View(m.width)
 
+	if m.lineShown() {
+		return filterView + "\n" + tableView + "\n" + m.line() + "\n" + statusView
+	}
 	return filterView + "\n" + tableView + "\n" + statusView
 }

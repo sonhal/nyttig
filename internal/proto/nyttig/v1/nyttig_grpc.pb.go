@@ -38,6 +38,12 @@ const (
 	Nyttig_RemoveSavedView_FullMethodName   = "/nyttig.v1.Nyttig/RemoveSavedView"
 	Nyttig_ListSavedViews_FullMethodName    = "/nyttig.v1.Nyttig/ListSavedViews"
 	Nyttig_ReorderSavedViews_FullMethodName = "/nyttig.v1.Nyttig/ReorderSavedViews"
+	Nyttig_AddAssessor_FullMethodName       = "/nyttig.v1.Nyttig/AddAssessor"
+	Nyttig_UpdateAssessor_FullMethodName    = "/nyttig.v1.Nyttig/UpdateAssessor"
+	Nyttig_RemoveAssessor_FullMethodName    = "/nyttig.v1.Nyttig/RemoveAssessor"
+	Nyttig_ListAssessors_FullMethodName     = "/nyttig.v1.Nyttig/ListAssessors"
+	Nyttig_PutAssessment_FullMethodName     = "/nyttig.v1.Nyttig/PutAssessment"
+	Nyttig_RemoveAssessment_FullMethodName  = "/nyttig.v1.Nyttig/RemoveAssessment"
 	Nyttig_StreamItems_FullMethodName       = "/nyttig.v1.Nyttig/StreamItems"
 	Nyttig_Search_FullMethodName            = "/nyttig.v1.Nyttig/Search"
 	Nyttig_MarkViewed_FullMethodName        = "/nyttig.v1.Nyttig/MarkViewed"
@@ -69,6 +75,13 @@ type NyttigClient interface {
 	RemoveSavedView(ctx context.Context, in *RemoveSavedViewRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	ListSavedViews(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*ListSavedViewsResponse, error)
 	ReorderSavedViews(ctx context.Context, in *ReorderSavedViewsRequest, opts ...grpc.CallOption) (*ListSavedViewsResponse, error)
+	// Assessors and assessments
+	AddAssessor(ctx context.Context, in *AddAssessorRequest, opts ...grpc.CallOption) (*Assessor, error)
+	UpdateAssessor(ctx context.Context, in *UpdateAssessorRequest, opts ...grpc.CallOption) (*Assessor, error)
+	RemoveAssessor(ctx context.Context, in *RemoveAssessorRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	ListAssessors(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*ListAssessorsResponse, error)
+	PutAssessment(ctx context.Context, in *PutAssessmentRequest, opts ...grpc.CallOption) (*Assessment, error)
+	RemoveAssessment(ctx context.Context, in *RemoveAssessmentRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// Core feed stream (bidirectional)
 	StreamItems(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[ClientMessage, ServerMessage], error)
 	// Full-text search
@@ -265,6 +278,66 @@ func (c *nyttigClient) ReorderSavedViews(ctx context.Context, in *ReorderSavedVi
 	return out, nil
 }
 
+func (c *nyttigClient) AddAssessor(ctx context.Context, in *AddAssessorRequest, opts ...grpc.CallOption) (*Assessor, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(Assessor)
+	err := c.cc.Invoke(ctx, Nyttig_AddAssessor_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nyttigClient) UpdateAssessor(ctx context.Context, in *UpdateAssessorRequest, opts ...grpc.CallOption) (*Assessor, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(Assessor)
+	err := c.cc.Invoke(ctx, Nyttig_UpdateAssessor_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nyttigClient) RemoveAssessor(ctx context.Context, in *RemoveAssessorRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(emptypb.Empty)
+	err := c.cc.Invoke(ctx, Nyttig_RemoveAssessor_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nyttigClient) ListAssessors(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*ListAssessorsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListAssessorsResponse)
+	err := c.cc.Invoke(ctx, Nyttig_ListAssessors_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nyttigClient) PutAssessment(ctx context.Context, in *PutAssessmentRequest, opts ...grpc.CallOption) (*Assessment, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(Assessment)
+	err := c.cc.Invoke(ctx, Nyttig_PutAssessment_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nyttigClient) RemoveAssessment(ctx context.Context, in *RemoveAssessmentRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(emptypb.Empty)
+	err := c.cc.Invoke(ctx, Nyttig_RemoveAssessment_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *nyttigClient) StreamItems(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[ClientMessage, ServerMessage], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	stream, err := c.cc.NewStream(ctx, &Nyttig_ServiceDesc.Streams[0], Nyttig_StreamItems_FullMethodName, cOpts...)
@@ -324,6 +397,13 @@ type NyttigServer interface {
 	RemoveSavedView(context.Context, *RemoveSavedViewRequest) (*emptypb.Empty, error)
 	ListSavedViews(context.Context, *emptypb.Empty) (*ListSavedViewsResponse, error)
 	ReorderSavedViews(context.Context, *ReorderSavedViewsRequest) (*ListSavedViewsResponse, error)
+	// Assessors and assessments
+	AddAssessor(context.Context, *AddAssessorRequest) (*Assessor, error)
+	UpdateAssessor(context.Context, *UpdateAssessorRequest) (*Assessor, error)
+	RemoveAssessor(context.Context, *RemoveAssessorRequest) (*emptypb.Empty, error)
+	ListAssessors(context.Context, *emptypb.Empty) (*ListAssessorsResponse, error)
+	PutAssessment(context.Context, *PutAssessmentRequest) (*Assessment, error)
+	RemoveAssessment(context.Context, *RemoveAssessmentRequest) (*emptypb.Empty, error)
 	// Core feed stream (bidirectional)
 	StreamItems(grpc.BidiStreamingServer[ClientMessage, ServerMessage]) error
 	// Full-text search
@@ -393,6 +473,24 @@ func (UnimplementedNyttigServer) ListSavedViews(context.Context, *emptypb.Empty)
 }
 func (UnimplementedNyttigServer) ReorderSavedViews(context.Context, *ReorderSavedViewsRequest) (*ListSavedViewsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ReorderSavedViews not implemented")
+}
+func (UnimplementedNyttigServer) AddAssessor(context.Context, *AddAssessorRequest) (*Assessor, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method AddAssessor not implemented")
+}
+func (UnimplementedNyttigServer) UpdateAssessor(context.Context, *UpdateAssessorRequest) (*Assessor, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UpdateAssessor not implemented")
+}
+func (UnimplementedNyttigServer) RemoveAssessor(context.Context, *RemoveAssessorRequest) (*emptypb.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RemoveAssessor not implemented")
+}
+func (UnimplementedNyttigServer) ListAssessors(context.Context, *emptypb.Empty) (*ListAssessorsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListAssessors not implemented")
+}
+func (UnimplementedNyttigServer) PutAssessment(context.Context, *PutAssessmentRequest) (*Assessment, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method PutAssessment not implemented")
+}
+func (UnimplementedNyttigServer) RemoveAssessment(context.Context, *RemoveAssessmentRequest) (*emptypb.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RemoveAssessment not implemented")
 }
 func (UnimplementedNyttigServer) StreamItems(grpc.BidiStreamingServer[ClientMessage, ServerMessage]) error {
 	return status.Errorf(codes.Unimplemented, "method StreamItems not implemented")
@@ -748,6 +846,114 @@ func _Nyttig_ReorderSavedViews_Handler(srv interface{}, ctx context.Context, dec
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Nyttig_AddAssessor_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AddAssessorRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NyttigServer).AddAssessor(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Nyttig_AddAssessor_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NyttigServer).AddAssessor(ctx, req.(*AddAssessorRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Nyttig_UpdateAssessor_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateAssessorRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NyttigServer).UpdateAssessor(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Nyttig_UpdateAssessor_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NyttigServer).UpdateAssessor(ctx, req.(*UpdateAssessorRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Nyttig_RemoveAssessor_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RemoveAssessorRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NyttigServer).RemoveAssessor(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Nyttig_RemoveAssessor_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NyttigServer).RemoveAssessor(ctx, req.(*RemoveAssessorRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Nyttig_ListAssessors_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(emptypb.Empty)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NyttigServer).ListAssessors(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Nyttig_ListAssessors_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NyttigServer).ListAssessors(ctx, req.(*emptypb.Empty))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Nyttig_PutAssessment_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PutAssessmentRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NyttigServer).PutAssessment(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Nyttig_PutAssessment_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NyttigServer).PutAssessment(ctx, req.(*PutAssessmentRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Nyttig_RemoveAssessment_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RemoveAssessmentRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NyttigServer).RemoveAssessment(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Nyttig_RemoveAssessment_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NyttigServer).RemoveAssessment(ctx, req.(*RemoveAssessmentRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _Nyttig_StreamItems_Handler(srv interface{}, stream grpc.ServerStream) error {
 	return srv.(NyttigServer).StreamItems(&grpc.GenericServerStream[ClientMessage, ServerMessage]{ServerStream: stream})
 }
@@ -869,6 +1075,30 @@ var Nyttig_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ReorderSavedViews",
 			Handler:    _Nyttig_ReorderSavedViews_Handler,
+		},
+		{
+			MethodName: "AddAssessor",
+			Handler:    _Nyttig_AddAssessor_Handler,
+		},
+		{
+			MethodName: "UpdateAssessor",
+			Handler:    _Nyttig_UpdateAssessor_Handler,
+		},
+		{
+			MethodName: "RemoveAssessor",
+			Handler:    _Nyttig_RemoveAssessor_Handler,
+		},
+		{
+			MethodName: "ListAssessors",
+			Handler:    _Nyttig_ListAssessors_Handler,
+		},
+		{
+			MethodName: "PutAssessment",
+			Handler:    _Nyttig_PutAssessment_Handler,
+		},
+		{
+			MethodName: "RemoveAssessment",
+			Handler:    _Nyttig_RemoveAssessment_Handler,
 		},
 		{
 			MethodName: "Search",

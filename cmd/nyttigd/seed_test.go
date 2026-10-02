@@ -165,3 +165,57 @@ func TestSeed_SampleConfig(t *testing.T) {
 		t.Errorf("CVE parents = %v, want %v", got, want)
 	}
 }
+
+func TestSeed_Assessors(t *testing.T) {
+	database := openSeedDB(t)
+	logger, logs := captureLogger()
+	cfg := &config.Config{Assessors: []config.Assessor{
+		{Name: "claude", Description: "importance", Color: "#112233"},
+		{Name: "cvss"},
+		{Name: ""},
+	}}
+	if err := seedFromConfig(database, cfg, logger); err != nil {
+		t.Fatal(err)
+	}
+	list, err := db.ListAssessors(database)
+	if err != nil || len(list) != 2 {
+		t.Fatalf("assessors = %v, %v", list, err)
+	}
+	if list[0].Name != "claude" || list[0].Description != "importance" || list[0].Color != "#112233" {
+		t.Errorf("claude = %+v", list[0])
+	}
+	if n := strings.Count(logs.b.String(), "level=WARN"); n != 1 {
+		t.Errorf("got %d warnings, want 1 (the empty name):\n%s", n, logs.b.String())
+	}
+
+	// Seeding again neither duplicates nor overwrites an edited assessor.
+	edited := list[0]
+	edited.Description = "edited by hand"
+	if _, err := db.UpdateAssessor(database, edited); err != nil {
+		t.Fatal(err)
+	}
+	if err := seedFromConfig(database, cfg, logger); err != nil {
+		t.Fatal(err)
+	}
+	again, _ := db.ListAssessors(database)
+	if len(again) != 2 || again[0].Description != "edited by hand" {
+		t.Errorf("after re-seed: %+v", again)
+	}
+}
+
+func TestSeed_SampleConfigAssessors(t *testing.T) {
+	cfg, err := config.Load(filepath.Join("..", "..", "sample_config.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	database := openSeedDB(t)
+	logger, _ := captureLogger()
+	if err := seedFromConfig(database, cfg, logger); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"claude", "cvss"} {
+		if a, err := db.GetAssessorByName(database, name); err != nil || a == nil {
+			t.Errorf("assessor %q not seeded: %v, %v", name, a, err)
+		}
+	}
+}

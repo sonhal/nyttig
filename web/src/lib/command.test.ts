@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { applyToFilter, commonPrefix, completeCommand, parseCommand, type Command } from './command';
 import { defaultFilter } from './filter';
-import type { SavedView, Source, Tag } from './types';
+import type { Assessor, SavedView, Source, Tag } from './types';
 
 const sources: Source[] = [
 	{ id: '1', name: 'Alpha News', abbreviation: 'ALP' },
@@ -100,7 +100,7 @@ describe('parseCommand: filter commands', () => {
 		expect(cmd('sort newest')).toEqual({ type: 'sort', sort: 'newest' });
 		expect(cmd('sor OLDEST')).toEqual({ type: 'sort', sort: 'oldest' });
 		expect(cmd('sort')).toEqual({ type: 'sort', sort: 'toggle' });
-		expect(error('sort sideways')).toBe('sort: newest or oldest, not sideways');
+		expect(error('sort sideways')).toBe('sort: newest, oldest or score, not sideways');
 	});
 
 	it('unviewed', () => {
@@ -189,7 +189,7 @@ describe('completeCommand', () => {
 
 	it('completes arguments', () => {
 		expect(completeCommand('sort o', ctx)).toEqual({ from: 5, candidates: ['oldest'] });
-		expect(completeCommand('sort ', ctx).candidates).toEqual(['newest', 'oldest']);
+		expect(completeCommand('sort ', ctx).candidates).toEqual(['newest', 'oldest', 'score']);
 		expect(completeCommand('unviewed o', ctx).candidates).toEqual(['on', 'off']);
 		expect(completeCommand('time a', ctx).candidates).toEqual(['absolute']);
 		expect(completeCommand('src ha', ctx)).toEqual({ from: 4, candidates: ['Hacker News'] });
@@ -215,5 +215,109 @@ describe('commonPrefix', () => {
 		expect(commonPrefix(['a'])).toBe('a');
 		expect(commonPrefix([])).toBe('');
 		expect(commonPrefix(['abc', 'xyz'])).toBe('');
+	});
+});
+
+describe(':rate', () => {
+	it('takes a score and an optional note', () => {
+		expect(cmd('rate 0.8')).toEqual({ type: 'rate', score: 0.8, note: '' });
+		expect(cmd('rate 1 worth a read, really')).toEqual({ type: 'rate', score: 1, note: 'worth a read, really' });
+		expect(cmd('rate .25')).toEqual({ type: 'rate', score: 0.25, note: '' });
+		expect(cmd('rate 0')).toEqual({ type: 'rate', score: 0, note: '' });
+		expect(cmd('ra 0.5 x')).toEqual({ type: 'rate', score: 0.5, note: 'x' });
+	});
+
+	it('needs a score from 0 to 1', () => {
+		expect(error('rate')).toContain('a score from 0 to 1');
+		expect(error('rate high')).toContain('not high');
+		expect(error('rate 2')).toContain('not 2');
+		expect(error('rate -1')).toContain('not -1');
+	});
+
+	it('does not take over :r (rules) or :re (refresh)', () => {
+		expect(cmd('r')).toEqual({ type: 'page', page: 'rules' });
+		expect(cmd('re')).toEqual({ type: 'refresh', source: '' });
+	});
+
+	it('does nothing to the filter', () => {
+		expect(applyToFilter({ type: 'rate', score: 1, note: '' }, defaultFilter)).toBeNull();
+	});
+});
+
+describe('assessor commands', () => {
+	const assessors: Assessor[] = [
+		{ id: '1', name: 'claude' },
+		{ id: '2', name: 'CVSS reader' },
+		{ id: '3', name: 'gpt 4' }
+	];
+	const actx = { sources, tags, views, assessors };
+	const acmd = (s: string): Command => {
+		const r = parseCommand(s, actx);
+		if (!r.ok) throw new Error(r.error);
+		return r.cmd;
+	};
+	const aerr = (s: string): string => {
+		const r = parseCommand(s, actx);
+		if (r.ok) throw new Error('parsed: ' + JSON.stringify(r.cmd));
+		return r.error;
+	};
+
+	it(':assessors is a page', () => {
+		expect(acmd('assessors')).toEqual({ type: 'page', page: 'assessors' });
+		expect(acmd('ass')).toEqual({ type: 'page', page: 'assessors' });
+		expect(aerr('assessors x')).toBe('assessors takes no argument');
+	});
+
+	it(':score picks an assessor, with an optional minimum', () => {
+		expect(acmd('score claude')).toEqual({ type: 'score', id: '1', min: null });
+		expect(acmd('sc CLAUDE 0.7')).toEqual({ type: 'score', id: '1', min: 0.7 });
+		expect(acmd('score claude >=0.7')).toEqual({ type: 'score', id: '1', min: 0.7 });
+		expect(acmd('score claude 0')).toEqual({ type: 'score', id: '1', min: 0 });
+		expect(acmd('score "CVSS reader" 0.5')).toEqual({ type: 'score', id: '2', min: 0.5 });
+		expect(acmd('score CVSS reader .5')).toEqual({ type: 'score', id: '2', min: 0.5 });
+		// The whole text is a name first.
+		expect(acmd('score gpt 4')).toEqual({ type: 'score', id: '3', min: null });
+		expect(acmd('score all')).toEqual({ type: 'score', id: '', min: null });
+		expect(aerr('score')).toBe('score: an assessor name, or all');
+		expect(aerr('score nobody')).toBe('unknown assessor: nobody');
+		expect(aerr('score nobody 0.5')).toBe('unknown assessor: nobody');
+		expect(aerr('score claude 1.5')).toContain('the minimum is a number from 0 to 1');
+	});
+
+	it(':unassessed picks the assessor whose work is open', () => {
+		expect(acmd('unassessed claude')).toEqual({ type: 'unassessed', id: '1' });
+		expect(acmd('unassessed all')).toEqual({ type: 'unassessed', id: '' });
+		expect(aerr('unassessed')).toBe('unassessed: an assessor name, or all');
+		expect(aerr('unassessed nobody')).toBe('unknown assessor: nobody');
+	});
+
+	it(':u and :un stay :unviewed', () => {
+		expect(acmd('u')).toEqual({ type: 'unviewed', value: 'toggle' });
+		expect(acmd('un on')).toEqual({ type: 'unviewed', value: true });
+		expect(acmd('unv off')).toEqual({ type: 'unviewed', value: false });
+		expect(acmd('unas claude')).toEqual({ type: 'unassessed', id: '1' });
+	});
+
+	it(':sort score', () => {
+		expect(acmd('sort score')).toEqual({ type: 'sort', sort: 'score' });
+	});
+
+	it('apply to the filter', () => {
+		const base = { ...defaultFilter, assessor: '1', minScore: 0.5, sort: 'score' as const, unassessed: '2' };
+		expect(applyToFilter({ type: 'score', id: '2', min: 0.8 }, base)).toEqual({ ...base, assessor: '2', minScore: 0.8 });
+		expect(applyToFilter({ type: 'score', id: '2', min: null }, base)).toEqual({ ...base, assessor: '2', minScore: null });
+		// "all" drops the assessor, the minimum and the score sort, not the unassessed filter.
+		expect(applyToFilter({ type: 'score', id: '', min: null }, base)).toEqual({ ...defaultFilter, unassessed: '2' });
+		expect(applyToFilter({ type: 'unassessed', id: '' }, base)).toEqual({ ...base, unassessed: '' });
+		expect(applyToFilter({ type: 'unassessed', id: '3' }, defaultFilter)).toEqual({ ...defaultFilter, unassessed: '3' });
+		expect(applyToFilter({ type: 'sort', sort: 'toggle' }, base)).toEqual({ ...base, sort: 'newest' });
+	});
+
+	it('complete assessor names', () => {
+		expect(completeCommand('score cl', actx).candidates).toEqual(['claude']);
+		expect(completeCommand('score c', actx).candidates).toEqual(['claude', 'CVSS reader']);
+		expect(completeCommand('score ', actx).candidates).toEqual(['claude', 'CVSS reader', 'gpt 4', 'all']);
+		expect(completeCommand('unassessed cv', actx).candidates).toEqual(['CVSS reader']);
+		expect(completeCommand('score c', ctx).candidates).toEqual([]);
 	});
 });

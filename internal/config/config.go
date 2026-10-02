@@ -1,8 +1,8 @@
 // Package config loads nyttigd's optional TOML configuration file.
 //
 // The config file supplies defaults for the daemon's runtime options
-// (socket, db_path, log_level) and a declarative set of sources, tags, and
-// tag rules that are seeded into the database on startup. See sample_config.toml
+// (socket, db_path, log_level) and a declarative set of sources, tags, tag
+// rules and assessors that are seeded into the database on startup. See sample_config.toml
 // for the expected format.
 package config
 
@@ -22,11 +22,12 @@ type Config struct {
 	// BlockPrivateAddresses stops feed fetches from connecting to loopback,
 	// private and link-local addresses. Turn it on when the daemon is
 	// managed through an internet-facing client such as nyttig-api.
-	BlockPrivateAddresses bool      `toml:"block_private_addresses"`
-	TLS                   TLS       `toml:"tls"`
-	Sources               []Source  `toml:"sources"`
-	Tags                  []Tag     `toml:"tags"`
-	TagRules              []TagRule `toml:"tag_rules"`
+	BlockPrivateAddresses bool       `toml:"block_private_addresses"`
+	TLS                   TLS        `toml:"tls"`
+	Sources               []Source   `toml:"sources"`
+	Tags                  []Tag      `toml:"tags"`
+	TagRules              []TagRule  `toml:"tag_rules"`
+	Assessors             []Assessor `toml:"assessors"`
 }
 
 // TLS configures mutual-TLS for the daemon's gRPC listener. When set, the
@@ -62,6 +63,15 @@ type Tag struct {
 	// Parents are the names of this tag's parent tags. They may be declared
 	// anywhere in the file; a name that is not declared is created.
 	Parents []string `toml:"parents"`
+}
+
+// Assessor is an assessor declared in the config file: a system (a model, a
+// CVE reader, you) that scores items through the API. Description says what
+// its score means. An assessor that already exists is left as it is.
+type Assessor struct {
+	Name        string `toml:"name"`
+	Description string `toml:"description"`
+	Color       string `toml:"color"`
 }
 
 // TagRule is an auto-tagging rule declared in the config file. Source is the

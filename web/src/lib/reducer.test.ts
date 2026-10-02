@@ -495,3 +495,122 @@ describe('load older with an unviewed-only filter', () => {
 		expect(markViewed(s, new Set(['1']))).toBe(s);
 	});
 });
+
+describe('update events (assessments)', () => {
+	const as = (assessor: string, score: number, tag?: string) => ({
+		id: `${assessor}${tag ?? ''}`,
+		assessor_id: assessor,
+		assessor_name: 'claude',
+		tag_id: tag,
+		score
+	});
+	const scored = (id: string, published: string, ...a: ReturnType<typeof as>[]): Item => item(id, published, { assessments: a });
+	const T = (n: number) => `2026-09-30T1${n}:00:00Z`;
+
+	it('replaces an item it shows in place, keeping its position and viewed state', () => {
+		let s = run(initialState(), snapshot(item('1', T(3)), item('2', T(2), { viewed: true }), item('3', T(1))));
+		s = reduce(s, { type: 'update', item: scored('2', T(2), as('1', 0.9)), matches: false });
+		expect(ids(s)).toEqual(['1', '2', '3']);
+		expect(s.items[1]!.assessments?.[0]?.score).toBe(0.9);
+		expect(s.items[1]!.viewed).toBe(true);
+	});
+
+	it('inserts an item that now matches, in sort order, and ignores one that does not', () => {
+		let s = run(initialState(), snapshot(item('1', T(3)), item('3', T(1))));
+		const before = s;
+		expect(reduce(s, { type: 'update', item: scored('2', T(2), as('1', 0.9)), matches: false })).toBe(before);
+		s = reduce(s, { type: 'update', item: scored('2', T(2), as('1', 0.9)), matches: true });
+		expect(ids(s)).toEqual(['1', '2', '3']);
+		expect(s.ranked).toBe(3);
+	});
+
+	it('never removes an item, whether or not it matches', () => {
+		let s = run(initialState(), snapshot(item('1', T(3)), item('2', T(2))));
+		s = reduce(s, { type: 'update', item: scored('1', T(3), as('1', 0.1)), matches: false });
+		expect(ids(s)).toEqual(['1', '2']);
+	});
+
+	it('keeps the cursor on its item when an update inserts above it', () => {
+		let s = run(initialState(), snapshot(item('1', T(3)), item('3', T(1))));
+		s = setFollow(moveCursor(s, 1), false);
+		s = reduce(s, { type: 'update', item: scored('2', T(2), as('1', 0.9)), matches: true });
+		expect(ids(s)).toEqual(['1', '2', '3']);
+		expect(s.items[s.cursor]!.id).toBe('3');
+		expect(s.pending).toBe(1);
+	});
+
+	it('during a snapshot updates the buffered item, or adds a match in order', () => {
+		let s = run(initialState(), [{ type: 'reset' }, { type: 'item', item: item('1', T(3)) }, { type: 'item', item: item('3', T(1)) }]);
+		s = reduce(s, { type: 'update', item: scored('1', T(3), as('1', 0.5)), matches: true });
+		s = reduce(s, { type: 'update', item: scored('2', T(2), as('1', 0.6)), matches: true });
+		s = reduce(s, { type: 'update', item: scored('9', T(0), as('1', 0.6)), matches: false });
+		s = reduce(s, { type: 'complete' });
+		expect(ids(s)).toEqual(['1', '2', '3']);
+		expect(s.items[0]!.assessments).toHaveLength(1);
+	});
+});
+
+describe('the score sort', () => {
+	const as = (assessor: string, score: number | undefined, tag?: string) => ({
+		id: `${assessor}${tag ?? ''}${score}`,
+		assessor_id: assessor,
+		tag_id: tag,
+		score
+	});
+	const scored = (id: string, published: string, ...a: ReturnType<typeof as>[]): Item => item(id, published, { assessments: a });
+	const T = (n: number) => `2026-09-30T1${n}:00:00Z`;
+	const score = { assessor: '1', tags: null };
+
+	it('orders by the assessor score, unscored last and newest first among themselves', () => {
+		const items = [
+			scored('lo', T(9), as('1', 0.2)),
+			scored('none-old', T(1)),
+			scored('hi', T(1), as('1', 0.9)),
+			scored('none-new', T(5)),
+			scored('other', T(9), as('2', 1)),
+			scored('note', T(8), as('1', undefined))
+		];
+		const sorted = [...items].sort((a, b) => compareItems(a, b, 'score', score));
+		expect(sorted.map((x) => x.id)).toEqual(['hi', 'lo', 'other', 'note', 'none-new', 'none-old']);
+	});
+
+	it('equal scores keep newest first', () => {
+		const a = scored('a', T(1), as('1', 0.5));
+		const b = scored('b', T(2), as('1', 0.5));
+		expect(compareItems(a, b, 'score', score)).toBeGreaterThan(0);
+	});
+
+	it('uses the scope: only in-scope scores count', () => {
+		const x = scored('x', T(1), as('1', 0.2), as('1', 0.9, '7'));
+		const y = scored('y', T(1), as('1', 0.5));
+		const inTag = { assessor: '1', tags: new Set(['4']) };
+		expect(compareItems(x, y, 'score', score)).toBeLessThan(0);
+		expect(compareItems(x, y, 'score', inTag)).toBeGreaterThan(0);
+	});
+
+	it('a new item (no assessments) goes after the scored ones, before older unscored', () => {
+		let s = initialState('score', score);
+		s = run(s, snapshot(scored('hi', T(1), as('1', 0.9)), scored('lo', T(1), as('1', 0.1)), scored('old', T(1))));
+		s = reduce(s, { type: 'item', item: item('fresh', T(5)) });
+		expect(ids(s)).toEqual(['hi', 'lo', 'fresh', 'old']);
+		expect(s.pending).toBe(0);
+	});
+
+	it('an update that starts matching is placed by its score', () => {
+		let s = initialState('score', score);
+		s = run(s, snapshot(scored('hi', T(1), as('1', 0.9)), scored('lo', T(1), as('1', 0.1))));
+		s = reduce(s, { type: 'update', item: scored('mid', T(0), as('1', 0.5)), matches: true });
+		expect(ids(s)).toEqual(['hi', 'mid', 'lo']);
+		// Better than all: at the top.
+		s = reduce(s, { type: 'update', item: scored('best', T(0), as('1', 1)), matches: true });
+		expect(ids(s)).toEqual(['best', 'hi', 'mid', 'lo']);
+	});
+
+	it('an older page follows the rows already loaded', () => {
+		let s = initialState('score', score);
+		s = run(s, snapshot(scored('a', T(1), as('1', 0.9)), scored('d', T(1), as('1', 0.2))));
+		s = beginOlder(s);
+		s = appendOlder(s, s.epoch, s.ranked, 100, [scored('b', T(1), as('1', 0.5)), scored('c', T(1))], 4);
+		expect(ids(s)).toEqual(['a', 'd', 'b', 'c']);
+	});
+});

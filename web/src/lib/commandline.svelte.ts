@@ -44,6 +44,8 @@ export interface CommandHost {
 	/** The ID of the saved view the feed has open, or "". */
 	activeView(): string;
 	follow(): void;
+	/** Rates the selected item as the assessor "me" (the feed's command). */
+	rate(score: number, note: string): void;
 }
 
 /**
@@ -70,6 +72,9 @@ export function execute(cmd: Command, host: CommandHost): void {
 		case 'follow':
 			host.follow();
 			return;
+		case 'rate':
+			host.rate(cmd.score, cmd.note);
+			return;
 		case 'refresh':
 			host.refresh(cmd.source || undefined);
 			return;
@@ -80,6 +85,10 @@ export function execute(cmd: Command, host: CommandHost): void {
 			return;
 		}
 		default: {
+			if (cmd.type === 'sort' && cmd.sort === 'score' && !host.filter().assessor) {
+				host.flash('error: sort score needs an assessor: :score <name> first');
+				return;
+			}
 			const f = applyToFilter(cmd, host.filter());
 			if (f) host.setFilter(f);
 		}
@@ -134,7 +143,8 @@ export function offFeedHost(flash: (msg: string) => void, refresh: (id?: string)
 		// The view stays open: its tab shows "*" when the filter differs.
 		setFilter: (f) => void goto('/' + viewSearch(feedViewId(), f)),
 		activeView: feedViewId,
-		follow: () => void goPage('feed')
+		follow: () => void goPage('feed'),
+		rate: () => flash('error: :rate rates the selected item in the feed')
 	};
 }
 

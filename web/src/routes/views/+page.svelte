@@ -63,10 +63,10 @@
 	}
 
 	async function save(f: ViewForm) {
-		const { sources, tags } = metadata;
+		const { sources, tags, assessors } = metadata;
 		if (panel?.kind === 'edit') {
 			const orig = panel.view;
-			const patch = viewPatchBody(orig, f, sources, tags);
+			const patch = viewPatchBody(orig, f, sources, tags, assessors);
 			if (Object.keys(patch).length > 0) {
 				await api.updateView(orig.id ?? '', patch);
 				flash(`saved ${oneLine(f.name)}`);
@@ -75,7 +75,7 @@
 			await reload();
 			selectId(orig.id);
 		} else {
-			const created = await api.addView(viewAddBody(f, sources, tags));
+			const created = await api.addView(viewAddBody(f, sources, tags, assessors));
 			panel = null;
 			flash(`added ${oneLine(created.name)}`);
 			await reload();
@@ -173,7 +173,7 @@
 	panel={panel === null ? null : panel.kind === 'delete' ? 'confirm' : 'form'}
 	{tools}
 	note={note || (metadata.error ? 'error: ' + metadata.error : '')}
-	counts={{ sources: metadata.sources.length, tags: metadata.tags.length, views: views.length }}
+	counts={{ sources: metadata.sources.length, tags: metadata.tags.length, views: views.length, assessors: metadata.assessors.length }}
 	{loaded}
 	{onaction}
 >
@@ -183,7 +183,7 @@
 		>
 		<span class="name">{oneLine(v.name)}</span>
 		<span class="query" data-testid="view-filter"
-			>{format(viewToFilter(v), metadata.sources, metadata.tags) || 'no filter'}</span
+			>{format(viewToFilter(v), metadata.sources, metadata.tags, metadata.assessors) || 'no filter'}</span
 		>
 	{/snippet}
 	{#snippet panelContent()}
@@ -193,16 +193,18 @@
 				editing={false}
 				sources={metadata.sources}
 				tags={metadata.tags}
+				assessors={metadata.assessors}
 				onsave={save}
 				oncancel={() => (panel = null)}
 			/>
 		{:else if panel?.kind === 'edit'}
 			{#key panel.view.id}
 				<ViewFormPanel
-					initial={viewForm(panel.view, metadata.sources, metadata.tags)}
+					initial={viewForm(panel.view, metadata.sources, metadata.tags, metadata.assessors)}
 					editing={true}
 					sources={metadata.sources}
 					tags={metadata.tags}
+					assessors={metadata.assessors}
 					onsave={save}
 					oncancel={() => (panel = null)}
 				/>

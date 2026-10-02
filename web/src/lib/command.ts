@@ -1,7 +1,8 @@
 // The ":" command line. Pages: ":feed", ":sources", ":tags", ":rules",
 // ":views". Filter shortcuts: ":sort", ":unviewed", ":src", ":tag". Saved
 // views: ":view <name>|all" opens one, ":save [name]" saves the current
-// filter. Also ":refresh", ":time", ":follow" and ":help". A unique prefix is enough (":sor", ":un"); a few
+// filter. Assessments: ":score <assessor>|all [min]" and ":unassessed
+// <assessor>|all" filter, ":assessors" is the management page. Also ":refresh", ":time", ":follow" and ":help". A unique prefix is enough (":sor", ":un"); a few
 // short forms are fixed so they keep the meaning they had before the
 // longer commands existed (":s" sources, ":r" rules, ":f" feed, ":t" tags,
 // ":q" feed).
@@ -9,13 +10,15 @@
 // parseCommand is pure: names are resolved against the sources and tags it
 // is given, so the result carries IDs and the caller only has to act.
 
-import { findSource, findTag } from './query';
-import type { Filter, SavedView, Sort, Source, Tag } from './types';
+import { parseScore, withAssessor } from './filter';
+import { parseRate } from './rate';
+import { findAssessor, findSource, findTag } from './query';
+import type { Assessor, Filter, SavedView, Sort, Source, Tag } from './types';
 import { findView } from './views';
 
-export type Page = 'feed' | 'sources' | 'tags' | 'rules' | 'views';
+export type Page = 'feed' | 'sources' | 'tags' | 'rules' | 'views' | 'assessors';
 
-export const PAGES: readonly Page[] = ['feed', 'sources', 'tags', 'rules', 'views'];
+export const PAGES: readonly Page[] = ['feed', 'sources', 'tags', 'rules', 'views', 'assessors'];
 
 /** The route of each page. */
 export const PAGE_PATHS: Record<Page, string> = {
@@ -23,7 +26,8 @@ export const PAGE_PATHS: Record<Page, string> = {
 	sources: '/sources',
 	tags: '/tags',
 	rules: '/rules',
-	views: '/views'
+	views: '/views',
+	assessors: '/assessors'
 };
 
 export type TimeMode = 'relative' | 'absolute';
@@ -39,6 +43,12 @@ export type Command =
 	/** id "" is all sources. */
 	| { type: 'source'; id: string }
 	| { type: 'tag'; id: string }
+	/** The assessor whose scores to show and use ("" is none, which also drops the minimum); min is a minimum score or null. */
+	| { type: 'score'; id: string; min: number | null }
+	/** Only items this assessor has not assessed ("" is off). */
+	| { type: 'unassessed'; id: string }
+	/** Rates the selected item yourself, as the assessor "me". */
+	| { type: 'rate'; score: number; note: string }
 	/** id "" is every source. */
 	| { type: 'refresh'; source: string }
 	| { type: 'time'; mode: TimeMode | 'toggle' }
@@ -50,6 +60,8 @@ export interface CommandContext {
 	tags: readonly Tag[];
 	/** The saved views; left out, there are none. */
 	views?: readonly SavedView[];
+	/** The assessors; left out, there are none. */
+	assessors?: readonly Assessor[];
 }
 
 export type CommandResult = { ok: true; cmd: Command } | { ok: false; error: string };
@@ -67,12 +79,16 @@ export const COMMANDS: readonly Spec[] = [
 	{ name: 'tags', desc: 'manage tags' },
 	{ name: 'rules', desc: 'manage tag rules' },
 	{ name: 'views', desc: 'manage saved views' },
-	{ name: 'sort', args: '[newest|oldest]', desc: 'set the sort order, or toggle it' },
+	{ name: 'assessors', desc: 'manage assessors' },
+	{ name: 'sort', args: '[newest|oldest|score]', desc: 'set the sort order (score needs an assessor), or toggle it' },
 	{ name: 'unviewed', args: '[on|off]', desc: 'show only unviewed items, or toggle it' },
 	{ name: 'src', args: '<name>|all', desc: 'filter by source (:src alone lists sources)' },
 	{ name: 'tag', args: '<name>|all', desc: 'filter by tag' },
 	{ name: 'view', args: '<name>|all', desc: 'open a saved view, or the unfiltered feed' },
 	{ name: 'save', args: '[name]', desc: 'save the filter into the active view, or as a new favorite view' },
+	{ name: 'score', args: '<assessor>|all [min]', desc: "show an assessor's scores, optionally only those of at least min" },
+	{ name: 'unassessed', args: '<assessor>|all', desc: 'only items this assessor has not assessed' },
+	{ name: 'rate', args: '<score> [note]', desc: 'rate the selected item yourself (assessor "me", score 0 to 1)' },
 	{ name: 'refresh', args: '[source]', desc: 'fetch all sources now, or one' },
 	{ name: 'time', args: '[relative|absolute]', desc: 'how times are shown, or toggle it' },
 	{ name: 'follow', desc: 'jump to the newest and follow' },
@@ -91,6 +107,8 @@ const ALIASES: Record<string, string> = {
 	r: 'rules',
 	t: 'tags',
 	ta: 'tags',
+	u: 'unviewed',
+	un: 'unviewed',
 	v: 'view',
 	h: 'help',
 	'?': 'help'
@@ -136,6 +154,7 @@ export function parseCommand(input: string, ctx: CommandContext = { sources: [],
 		case 'tags':
 		case 'rules':
 		case 'views':
+		case 'assessors':
 			return arg ? fail(`${r.name} takes no argument`) : ok({ type: 'page', page: r.name });
 		case 'view': {
 			if (!arg) return fail('view: a view name, or all');
@@ -153,8 +172,8 @@ export function parseCommand(input: string, ctx: CommandContext = { sources: [],
 			return arg ? fail('follow takes no argument') : ok({ type: 'follow' });
 		case 'sort': {
 			if (!arg) return ok({ type: 'sort', sort: 'toggle' });
-			const s = oneOf(arg, ['newest', 'oldest'] as const);
-			return s ? ok({ type: 'sort', sort: s }) : fail(`sort: newest or oldest, not ${arg}`);
+			const s = oneOf(arg, ['newest', 'oldest', 'score'] as const);
+			return s ? ok({ type: 'sort', sort: s }) : fail(`sort: newest, oldest or score, not ${arg}`);
 		}
 		case 'unviewed': {
 			if (!arg) return ok({ type: 'unviewed', value: 'toggle' });
@@ -182,6 +201,35 @@ export function parseCommand(input: string, ctx: CommandContext = { sources: [],
 			const id = findTag(ctx.tags, name, false);
 			return id === undefined ? fail(`unknown tag: ${name}`) : ok({ type: 'tag', id });
 		}
+		case 'score': {
+			if (!arg) return fail('score: an assessor name, or all');
+			const assessors = ctx.assessors ?? [];
+			const name = unquote(arg);
+			if (ALL.has(name.toLowerCase()) && findAssessor(assessors, name) === undefined) return ok({ type: 'score', id: '', min: null });
+			// The whole text is a name first ("gpt 4"); otherwise a trailing number is the minimum.
+			const whole = findAssessor(assessors, name, false);
+			if (whole !== undefined) return ok({ type: 'score', id: whole, min: null });
+			const m = /^(.*?)\s+(?:>=\s*)?(\d*\.?\d+)$/.exec(arg);
+			if (m) {
+				const id = findAssessor(assessors, unquote(m[1]!.trim()), false);
+				const min = parseScore(m[2]);
+				if (id === undefined) return fail(`unknown assessor: ${unquote(m[1]!.trim())}`);
+				return min === null ? fail(`score: the minimum is a number from 0 to 1, not ${m[2]}`) : ok({ type: 'score', id, min });
+			}
+			return fail(`unknown assessor: ${name}`);
+		}
+		case 'unassessed': {
+			if (!arg) return fail('unassessed: an assessor name, or all');
+			const assessors = ctx.assessors ?? [];
+			const name = unquote(arg);
+			if (ALL.has(name.toLowerCase()) && findAssessor(assessors, name) === undefined) return ok({ type: 'unassessed', id: '' });
+			const id = findAssessor(assessors, name, false);
+			return id === undefined ? fail(`unknown assessor: ${name}`) : ok({ type: 'unassessed', id });
+		}
+		case 'rate': {
+			const r = parseRate(arg);
+			return r.ok ? ok({ type: 'rate', score: r.score, note: r.note }) : fail(r.error);
+		}
 		case 'refresh': {
 			if (!arg) return ok({ type: 'refresh', source: '' });
 			const name = unquote(arg);
@@ -197,6 +245,10 @@ export function applyToFilter(cmd: Command, f: Filter): Filter | null {
 	switch (cmd.type) {
 		case 'sort':
 			return { ...f, sort: cmd.sort === 'toggle' ? (f.sort === 'newest' ? 'oldest' : 'newest') : cmd.sort };
+		case 'score':
+			return { ...withAssessor(f, cmd.id), minScore: cmd.id ? cmd.min : null };
+		case 'unassessed':
+			return { ...f, unassessed: cmd.id };
 		case 'unviewed':
 			return { ...f, unviewed: cmd.value === 'toggle' ? !f.unviewed : cmd.value };
 		case 'source':
@@ -242,7 +294,11 @@ export function completeCommand(input: string, ctx: CommandContext): CommandComp
 	let list: readonly string[] = [];
 	switch (r.name) {
 		case 'sort':
-			list = ['newest', 'oldest'];
+			list = ['newest', 'oldest', 'score'];
+			break;
+		case 'score':
+		case 'unassessed':
+			list = [...names(ctx.assessors ?? []), 'all'];
 			break;
 		case 'unviewed':
 			list = ['on', 'off'];
