@@ -185,6 +185,12 @@
 		.date.short {
 			display: inline;
 		}
+		/* Tags that don't fit wrap onto a second line, which the row's
+		   height hides, so a chip is shown whole or not at all. */
+		.tags {
+			flex-wrap: wrap;
+			height: 20px;
+		}
 		/* The title takes what the tags leave, and at least half the row:
 		   with a basis of 0 and that floor, the tags shrink first. */
 		.title {
