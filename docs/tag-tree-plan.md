@@ -309,7 +309,7 @@ parents = ["cyber security", "linux"]
 5. **Web.** API fields, `tagtree.ts`, form, tags page, delete-count fix,
    pickers, help text. Vitest + one Playwright e2e (create parent → filter
    shows a child's items).
-6. **Docs.** README tag section, `AGENT.md` layout notes.
+6. **Docs.** README tag section, `AGENTS.md` layout notes.
 
 After phase 1 the backend does everything (edges can be added through the
 config in phase 3). The later phases only expose it in each client.

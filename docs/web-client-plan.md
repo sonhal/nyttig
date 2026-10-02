@@ -65,7 +65,7 @@ Only changes that make the web app much better or much simpler to build.
 
 | #  | Change | Why the web app needs it |
 |----|--------|--------------------------|
-| D1 | `UpdateSourceRequest`: use proto3 `optional` on every mutable field and add `color` and `abbreviation` | The management UI must edit color and abbreviation, which the RPC cannot do today. Field presence also fixes the "enabled unset vs false" ambiguity (see AGENT.md gotchas) and lets PATCH mean "absent = unchanged". Update the `update-source` CLI to match. |
+| D1 | `UpdateSourceRequest`: use proto3 `optional` on every mutable field and add `color` and `abbreviation` | The management UI must edit color and abbreviation, which the RPC cannot do today. Field presence also fixes the "enabled unset vs false" ambiguity (see AGENTS.md gotchas) and lets PATCH mean "absent = unchanged". Update the `update-source` CLI to match. |
 | D2 | New `UpdateTag(id, optional name, optional color)` RPC | Without it, recoloring a tag means removing and re-adding it, and removal cascade-deletes its rules and item assignments. |
 | D3 | `SearchRequest`: add `sort` and `unviewed_only` | "Load older" in a log-style view pages with `Search`, which has `offset` and `total` but ignores sort and the unviewed filter. The stream alone returns only the newest 200 items. |
 | D4 | `StreamItems`: when the filter has a search query, only push items that match it (check `items_fts` by rowid) | Today pushed items skip the search filter. Without this, the browser would have to emulate FTS5 tokenization. The TUI also benefits. |
@@ -76,7 +76,7 @@ Only changes that make the web app much better or much simpler to build.
 
 Codegen was fixed first: `buf.yaml`/`buf.gen.yaml` moved to the repository
 root and use local, pinned plugins, and a CI job fails when `internal/proto`
-drifts from the proto (see AGENT.md).
+drifts from the proto (see AGENTS.md).
 
 Phase 0 also fixed three bugs found along the way:
 
@@ -523,7 +523,7 @@ and ports 80 and 443 reachable.
 
 0. **Groundwork (done):** codegen fix, D1–D8, CLI updates, system unit file
    in `deploy/systemd/` replacing the root `nyttigd.service` user unit, tests,
-   README/AGENT.md.
+   README/AGENTS.md.
 1. **Feed at TUI parity (done):** nyttig-api (API, SSE, security middleware)
    and the SvelteKit feed: desktop and mobile layouts, keymap,
    view tracking, status bar. It also brought forward from later phases:
