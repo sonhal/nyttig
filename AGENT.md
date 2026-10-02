@@ -279,8 +279,8 @@ nyttigd logs the library's version at startup (`sqlite_version` in the
 
 ### CI
 
-`.github/workflows/ci.yml` runs on pull requests, on pushes to `main` and on
-`v*` tags, on `ubuntu-latest` (the Build job in a `golang:1.26-trixie`
+`.github/workflows/ci.yml` runs on pull requests, on pushes to `main`, on
+`v*` tags and on `workflow_dispatch`, on `ubuntu-latest` (the Build job in a `golang:1.26-trixie`
 container), with the Go version taken from `go.mod`:
 
 | Job | What it checks |
@@ -291,6 +291,7 @@ container), with the Go version taken from `go.mod`:
 | Web | `pnpm install --frozen-lockfile`, svelte-check, vitest, vite build, Playwright end-to-end; uploads the app build (`nyttig-web`) |
 | Build | Builds the three binaries in Debian trixie (glibc and libsqlite3 of the servers, see `deploy/README.md`) with `-tags libsqlite3`, so nyttigd links the system SQLite; checks that with `ldd`; runs only after Lint, Test and Web pass; stamps a `v*` tag into `internal/version.Version` with `-ldflags -X` (other builds report the git pseudo-version); uploads `nyttig-linux-amd64` |
 | Vulnerability check | `govulncheck ./...` against the code paths the binaries call |
+| Tag release | Pushes to `main` only, after every other job passes: tags the commit with the version `scripts/next-version.sh` computes (see [Releases](#releases)), if any, and dispatches this workflow on the new tag to run Release |
 | Release | `v*` tags only, after every other job passes: bundles the binaries, the app build, `deploy/` and `sample_config.toml` into `nyttig-<tag>-linux-amd64.tar.gz`, adds `SHA256SUMS` and a build provenance attestation, and publishes a GitHub Release (a tag with a hyphen is a pre-release) |
 
 - golangci-lint runs with `only-new-issues: true` because the code has a
@@ -308,6 +309,32 @@ container), with the Go version taken from `go.mod`:
   release, and never to a newer one than they run: a cgo binary needs the
   glibc (and, with `-tags libsqlite3`, the libsqlite3) it was built against
   or newer.
+
+### Releases
+
+Releases are cut from `main` by CI. After a push to `main` passes every job,
+the Tag release job runs `scripts/next-version.sh`, which reads the
+[Conventional Commits](https://www.conventionalcommits.org) subjects of the
+commits since the latest stable `v*` tag and takes the largest bump:
+
+| Commit subject | Bump |
+|---|---|
+| `feat: ...` / `feat(web): ...` | minor |
+| `fix: ...`, `perf: ...` | patch |
+| `type!: ...`, or a `BREAKING CHANGE:` footer in the body | major (minor while the version is `0.x`) |
+| anything else (`docs:`, `ci:`, `chore:`, `refactor:`, a non-conventional title) | no release |
+
+PRs are squash-merged, so **the PR title is the commit subject**: give it a
+conventional prefix, or the merge doesn't release. `scripts/next-version.sh`
+prints what the current branch would release (the per-commit reasoning goes to
+stderr). Leaving `0.x` is deliberate: push `v1.0.0` by hand.
+
+- A tag pushed with `GITHUB_TOKEN` doesn't trigger workflows, so the job
+  dispatches `ci.yml` on the new tag (`workflow_dispatch` is the exception).
+  That run is a normal tag run: the whole pipeline, then Release.
+- A failed run on `main` doesn't lose a release: the next green push reads
+  every commit since the last tag. A commit already contained in a `v*` tag
+  (tagged by hand, or by a later commit's run) is skipped.
 
 ### Regenerating protobuf code
 
