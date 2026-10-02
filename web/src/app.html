@@ -7,6 +7,15 @@
 		<meta name="theme-color" content="#1E1E1E" />
 		<meta name="referrer" content="no-referrer" />
 		<link rel="icon" href="%sveltekit.assets%/favicon.svg" type="image/svg+xml" />
+		<!-- Home screen app: iOS reads the apple-* tags and the PNG icon
+		     (it ignores SVG icons); other browsers read the manifest. The
+		     status bar is translucent: the top bars pad by safe-area-inset-top. -->
+		<link rel="manifest" href="%sveltekit.assets%/manifest.webmanifest" />
+		<link rel="apple-touch-icon" href="%sveltekit.assets%/apple-touch-icon.png" />
+		<meta name="apple-mobile-web-app-capable" content="yes" />
+		<meta name="mobile-web-app-capable" content="yes" />
+		<meta name="apple-mobile-web-app-title" content="nyttig" />
+		<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 		<title>nyttig</title>
 		%sveltekit.head%
 	</head>

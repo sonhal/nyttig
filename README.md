@@ -689,6 +689,18 @@ you haven't been through. The view state is the daemon's, shared with the TUI
 and other browsers; it is sent about every 3 seconds, and what is pending when
 you close the tab is sent with a beacon.
 
+### Home screen app
+
+The app has a web app manifest and iOS home screen tags, so it runs like an
+app, without the browser's toolbars: in Safari on an iPhone, open the site,
+tap Share, then **Add to Home Screen** (Chrome and Edge offer "Install").
+It is still the live site, not an offline copy. iOS keeps a home screen
+app's data apart from Safari's and may not remember the basic auth login
+between launches, so expect to log in again now and then. Browsers fetch the manifest
+without the basic auth credentials, so the example Caddyfile leaves it and
+the icons public. The PNG icons are rendered from `web/static/icon.svg` by
+`node web/scripts/icons.mjs`.
+
 ### Security
 
 nyttig-api is meant to be reachable from the internet only through a
