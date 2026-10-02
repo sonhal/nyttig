@@ -1,8 +1,9 @@
 <!--
 	One feed row. Desktop: a single 20px line, columns in the TUI's order
 	(unviewed dot, date, source, tags, title, description, domain). Mobile:
-	two lines in 44px, title on the second line, no description. Viewed
-	(read) rows are dimmed.
+	one line in 44px (a touch target) with a short date and no description
+	or domain; the tags clip before the title gets narrower than half the
+	row. Viewed (read) rows are dimmed.
 
 	All feed text is rendered as text; colors are validated before use.
 -->
@@ -176,24 +177,20 @@
 	}
 
 	@media (max-width: 719.98px) {
-		.cells {
-			flex-wrap: wrap;
-			align-content: center;
-			row-gap: 0;
-			column-gap: 1ch;
-		}
 		.date.full,
-		.desc {
+		.desc,
+		.domain {
 			display: none;
 		}
 		.date.short {
 			display: inline;
 		}
+		/* The title takes what the tags leave, and at least half the row:
+		   with a basis of 0 and that floor, the tags shrink first. */
 		.title {
-			order: 10;
-			flex: 1 0 100%;
-			max-width: 100%;
-			padding-left: 2ch;
+			flex: 1 1 0;
+			min-width: 50%;
+			max-width: none;
 		}
 	}
 </style>

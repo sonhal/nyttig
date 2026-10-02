@@ -77,6 +77,12 @@ test.describe('feed', () => {
 		await open(page);
 		const box = await rows(page).first().boundingBox();
 		expect(box?.height).toBe(isMobile(page) ? 44 : 20);
+		// One line at every width: the title sits beside the date, not below it.
+		const first = rows(page).first();
+		const date = await first.locator('.date:visible').boundingBox();
+		const title = await first.locator('.title').boundingBox();
+		expect(title?.y).toBe(date?.y);
+		expect(title!.x).toBeGreaterThan(date!.x);
 		// No horizontal scrolling at any width.
 		const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
 		expect(overflow).toBeLessThanOrEqual(0);

@@ -249,17 +249,17 @@ visible-ID tracking simple arithmetic.
 ┌──────────────────────────────────┐
 │ [/ search…            ] [⚙] [⟳] │
 ├──────────────────────────────────┤
-│ ● 10:32 HN [linux]    kernel.org │
-│   Linux 6.18 released            │
-│   10:15 LOB [rust]       lwn.net │
-│   Rust for Linux status          │
+│ ● 10:32 HN [linux] Linux 6.18 r… │
+│   10:15 LOB [rust] Rust for Lin… │
 ├──────────────────────────────────┤
 │ ● 23 unviewed · 2m    ↑4 new    │
 └──────────────────────────────────┘
 ```
 
-- Two-line rows with a fixed 44px height, which also meets touch-target
+- Rows with a fixed 44px height, which also meets touch-target
   guidelines. The description is shown only when a row is expanded.
+  (Originally two lines with the title on the second; the feed's rows are
+  now one line like the desktop's, the management rows still wrap.)
 - Tap a row to select and expand it. The expanded row has an explicit
   "open ↗" link, so scrolling never opens links by accident.
 - `⚙` opens a bottom sheet with native `<select>`s for source, tag, sort

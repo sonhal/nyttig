@@ -690,7 +690,8 @@ the feed), `:sort [newest|oldest]`, `:unviewed [on|off]`, `:src <name>|all`,
 filter and view commands also work from the management pages, and go to the
 feed.
 
-On a phone (narrower than 720px) rows take two lines, a tap selects and
+On a phone (narrower than 720px) rows are one 44px line (time, source,
+tags, title; the tags give way to the title), a tap selects and
 expands a row (with an explicit "open ↗" link), `⚙` opens the filters
 (including the time format), `⟳` refreshes and `?` opens the help.
 
