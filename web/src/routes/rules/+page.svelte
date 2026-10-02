@@ -148,7 +148,7 @@
 <svelte:head><title>rules · nyttig</title></svelte:head>
 
 <ManageView
-	view="rules"
+	page="rules"
 	items={rules}
 	key={(r) => r.id ?? ''}
 	bind:cursor

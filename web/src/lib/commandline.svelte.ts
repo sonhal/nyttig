@@ -8,10 +8,10 @@ import {
 	commonPrefix,
 	completeCommand,
 	parseCommand,
-	VIEW_PATHS,
+	PAGE_PATHS,
 	type Command,
 	type CommandContext,
-	type View
+	type Page
 } from './command';
 import { filterFromParams, filterQuery } from './filter';
 import { History } from './history';
@@ -19,16 +19,16 @@ import { metadata } from './metadata.svelte';
 import { prefs } from './prefs.svelte';
 import type { Filter } from './types';
 
-/** The URL of a view; the feed keeps the filter it had last. */
-export function viewHref(v: View): string {
-	return v === 'feed' ? '/' + metadata.feedSearch : VIEW_PATHS[v];
+/** The URL of a page; the feed keeps the filter it had last. */
+export function pageHref(v: Page): string {
+	return v === 'feed' ? '/' + metadata.feedSearch : PAGE_PATHS[v];
 }
 
-export function goView(v: View): Promise<void> {
-	return goto(viewHref(v));
+export function goPage(v: Page): Promise<void> {
+	return goto(pageHref(v));
 }
 
-/** What a view has to provide to run commands that are about the view itself. */
+/** What a page has to provide to run commands that are about the page itself. */
 export interface CommandHost {
 	help(): void;
 	/** Shows a message in the view's status area. */
@@ -48,8 +48,8 @@ export interface CommandHost {
  */
 export function execute(cmd: Command, host: CommandHost): void {
 	switch (cmd.type) {
-		case 'view':
-			void goView(cmd.view);
+		case 'page':
+			void goPage(cmd.page);
 			return;
 		case 'help':
 			host.help();
@@ -86,7 +86,7 @@ export function offFeedHost(flash: (msg: string) => void, refresh: (id?: string)
 		refresh,
 		filter: feedFilter,
 		setFilter: (f) => void goto('/' + filterQuery(f)),
-		follow: () => void goView('feed')
+		follow: () => void goPage('feed')
 	};
 }
 

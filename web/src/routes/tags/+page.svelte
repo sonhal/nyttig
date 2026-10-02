@@ -164,7 +164,7 @@
 <svelte:head><title>tags · nyttig</title></svelte:head>
 
 <ManageView
-	view="tags"
+	page="tags"
 	items={rows}
 	key={(r) => r.key}
 	bind:cursor

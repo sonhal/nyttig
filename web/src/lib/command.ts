@@ -1,4 +1,4 @@
-// The ":" command line. Views: ":feed", ":sources", ":tags", ":rules". Filter
+// The ":" command line. Pages: ":feed", ":sources", ":tags", ":rules". Filter
 // shortcuts: ":sort", ":unviewed", ":src", ":tag". Also ":refresh", ":time",
 // ":follow" and ":help". A unique prefix is enough (":sor", ":un"); a few
 // short forms are fixed so they keep the meaning they had before the
@@ -11,12 +11,12 @@
 import { findSource, findTag } from './query';
 import type { Filter, Sort, Source, Tag } from './types';
 
-export type View = 'feed' | 'sources' | 'tags' | 'rules';
+export type Page = 'feed' | 'sources' | 'tags' | 'rules';
 
-export const VIEWS: readonly View[] = ['feed', 'sources', 'tags', 'rules'];
+export const PAGES: readonly Page[] = ['feed', 'sources', 'tags', 'rules'];
 
-/** The route of each view. */
-export const VIEW_PATHS: Record<View, string> = {
+/** The route of each page. */
+export const PAGE_PATHS: Record<Page, string> = {
 	feed: '/',
 	sources: '/sources',
 	tags: '/tags',
@@ -26,7 +26,7 @@ export const VIEW_PATHS: Record<View, string> = {
 export type TimeMode = 'relative' | 'absolute';
 
 export type Command =
-	| { type: 'view'; view: View }
+	| { type: 'page'; page: Page }
 	| { type: 'sort'; sort: Sort | 'toggle' }
 	| { type: 'unviewed'; value: boolean | 'toggle' }
 	/** id "" is all sources. */
@@ -122,7 +122,7 @@ export function parseCommand(input: string, ctx: CommandContext = { sources: [],
 		case 'sources':
 		case 'tags':
 		case 'rules':
-			return arg ? fail(`${r.name} takes no argument`) : ok({ type: 'view', view: r.name });
+			return arg ? fail(`${r.name} takes no argument`) : ok({ type: 'page', page: r.name });
 		case 'help':
 			return arg ? fail('help takes no argument') : ok({ type: 'help' });
 		case 'follow':
@@ -145,7 +145,7 @@ export function parseCommand(input: string, ctx: CommandContext = { sources: [],
 		case 'src': {
 			// Before the filter shortcut existed, ":src" was a short form of
 			// ":sources"; it still is when it has no argument.
-			if (!arg) return ok({ type: 'view', view: 'sources' });
+			if (!arg) return ok({ type: 'page', page: 'sources' });
 			const name = unquote(arg);
 			if (ALL.has(name.toLowerCase()) && findSource(ctx.sources, name) === undefined) return ok({ type: 'source', id: '' });
 			const id = findSource(ctx.sources, name, false);

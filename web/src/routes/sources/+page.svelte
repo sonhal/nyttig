@@ -209,7 +209,7 @@
 <svelte:head><title>sources · nyttig</title></svelte:head>
 
 <ManageView
-	view="sources"
+	page="sources"
 	items={sources}
 	key={(s) => s.id ?? ''}
 	bind:cursor

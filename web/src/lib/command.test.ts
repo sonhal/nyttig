@@ -25,7 +25,7 @@ const error = (s: string): string => {
 	return r.error;
 };
 
-describe('parseCommand: views', () => {
+describe('parseCommand: pages', () => {
 	it.each([
 		['sources', 'sources'],
 		[':sources', 'sources'],
@@ -44,8 +44,8 @@ describe('parseCommand: views', () => {
 		['src', 'sources'],
 		['ru', 'rules'],
 		['sou', 'sources']
-	])('%j → %s', (input, view) => {
-		expect(cmd(input)).toEqual({ type: 'view', view });
+	])('%j → %s', (input, page) => {
+		expect(cmd(input)).toEqual({ type: 'page', page });
 	});
 
 	it('takes no argument', () => {

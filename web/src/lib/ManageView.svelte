@@ -1,5 +1,5 @@
 <!--
-	The frame of the sources, tags and rules views: view tabs, a list with
+	The frame of the sources, tags and rules pages: page tabs, a list with
 	the feed's row style, the add/edit or delete panel at the bottom, and a
 	toolbar that doubles as the key legend. One global keydown listener
 	drives it through manageKeyAction(); the page gets the actions that are
@@ -11,17 +11,17 @@
 <script lang="ts" generics="T">
 	import type { Snippet } from 'svelte';
 	import { onMount, tick } from 'svelte';
-	import { VIEWS, type View } from './command';
+	import { PAGES, type Page } from './command';
 	import CommandLine from './CommandLine.svelte';
 	import * as api from './api';
-	import { CommandLine as CommandLineState, execute, goView, offFeedHost, viewHref } from './commandline.svelte';
+	import { CommandLine as CommandLineState, execute, goPage, offFeedHost, pageHref } from './commandline.svelte';
 	import Help from './Help.svelte';
 	import { manageSections } from './help';
 	import { manageKeyAction, type ManageAction, type ManageMode, type Tool } from './keymap';
 	import { metadata } from './metadata.svelte';
 
 	interface Props {
-		view: Exclude<View, 'feed'>;
+		page: Exclude<Page, 'feed'>;
 		items: T[];
 		key: (item: T) => string;
 		cursor: number;
@@ -31,7 +31,7 @@
 		/** A transient message; errors start with "error". */
 		note: string;
 		/** Counts shown in the tabs. */
-		counts?: Partial<Record<View, number>>;
+		counts?: Partial<Record<Page, number>>;
 		loaded: boolean;
 		onaction: (a: ManageAction) => void;
 		row: Snippet<[T, number]>;
@@ -40,7 +40,7 @@
 	}
 
 	let {
-		view,
+		page,
 		items,
 		key,
 		cursor = $bindable(),
@@ -57,7 +57,7 @@
 
 	const cl = new CommandLineState();
 	let helpOpen = $state(false);
-	/** A message from a command (":refresh"), shown when the view has none of its own. */
+	/** A message from a command (":refresh"), shown when the page has none of its own. */
 	let cmdNote = $state('');
 	let cmdNoteTimer: ReturnType<typeof setTimeout> | undefined;
 	const shownNote = $derived(note || cmdNote);
@@ -123,7 +123,7 @@
 	}
 
 	function rowId(item: T): string {
-		return `${view}-row-${key(item)}`;
+		return `${page}-row-${key(item)}`;
 	}
 
 	function pageRows(): number {
@@ -165,7 +165,7 @@
 			case 'closeHelp':
 				return closeHelp();
 			case 'feed':
-				return void goView('feed');
+				return void goPage('feed');
 			case 'cancel':
 			case 'confirm':
 				return onaction(a);
@@ -211,12 +211,12 @@
 <svelte:window {onkeydown} />
 
 <div class="manage">
-	<nav class="tabs" aria-label="views">
-		{#each VIEWS as v (v)}
+	<nav class="tabs" aria-label="pages">
+		{#each PAGES as v (v)}
 			<a
-				href={viewHref(v)}
-				class:current={v === view}
-				aria-current={v === view ? 'page' : undefined}
+				href={pageHref(v)}
+				class:current={v === page}
+				aria-current={v === page ? 'page' : undefined}
 				data-testid="nav-{v}"
 				>{v}{#if counts[v] !== undefined}<span class="n">{' ' + counts[v]}</span>{/if}</a
 			>
@@ -228,11 +228,11 @@
 		bind:this={list}
 		class="list"
 		role="grid"
-		aria-label={view}
+		aria-label={page}
 		aria-rowcount={items.length}
 		aria-activedescendant={selected ? rowId(selected) : undefined}
 		tabindex={0}
-		data-testid="{view}-list"
+		data-testid="{page}-list"
 	>
 		{#if items.length === 0}
 			<div class="empty">
@@ -293,7 +293,7 @@
 <CommandLine {cl} />
 
 {#if helpOpen}
-	<Help title="Keys: {view}" sections={helpSections} onclose={closeHelp} />
+	<Help title="Keys: {page}" sections={helpSections} onclose={closeHelp} />
 {/if}
 
 <style>
