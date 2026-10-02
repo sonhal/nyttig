@@ -22,6 +22,10 @@ type FilterChangedMsg struct {
 	Search       string
 	Sort         string
 	UnviewedOnly bool
+	// AssessorID selects whose scores MinScore and the "score" sort use
+	// (0 = none); MinScore is nil for no minimum.
+	AssessorID int64
+	MinScore   *float64
 }
 
 // ── Styles ────────────────────────────────────────────────────
@@ -53,6 +57,9 @@ type SourceInfo struct {
 	Abbreviation string
 }
 
+// minScoreSteps are the minimum scores the m key cycles through, after "none".
+var minScoreSteps = []float64{0.5, 0.7, 0.9}
+
 // TagInfo describes a tag shown in the dropdown.
 type TagInfo struct {
 	ID        int64
@@ -82,7 +89,14 @@ type FilterBar struct {
 
 	// Sort dropdown.
 	sortIdx int
-	sorts   []string // "newest", "oldest"
+	sorts   []string // "newest", "oldest"; "score" is added once an assessor is selected
+
+	// Assessor dropdown: a virtual "none" first. Its scores are shown first
+	// on the rows, and the minimum score and the score sort use them.
+	assessorIdx int
+	assessors   []AssessorInfo
+	// minIdx is 0 for no minimum, else 1 + an index into minScoreSteps.
+	minIdx int
 
 	width int
 }
@@ -90,7 +104,8 @@ type FilterBar struct {
 // NewFilterBar creates a FilterBar with default sort options.
 func NewFilterBar() FilterBar {
 	return FilterBar{
-		sorts: []string{"newest", "oldest"},
+		sorts:     []string{"newest", "oldest"},
+		assessors: []AssessorInfo{{ID: 0, Name: "none"}},
 	}
 }
 
@@ -111,6 +126,36 @@ func (f *FilterBar) SetTags(tags []TagInfo) {
 	f.tagBelow = tagDescendantCounts(tags)
 	if f.tagIdx >= len(f.tags) {
 		f.tagIdx = 0
+	}
+}
+
+// SetAssessors replaces the assessor list. A virtual "none" entry is always
+// first. A selected assessor that no longer exists is dropped, with the
+// minimum score and the score sort that need it.
+func (f *FilterBar) SetAssessors(assessors []AssessorInfo) {
+	selected := f.CurrentAssessorID()
+	f.assessors = append([]AssessorInfo{{ID: 0, Name: "none"}}, assessors...)
+	f.assessorIdx = 0
+	for i, a := range f.assessors {
+		if a.ID == selected && selected != 0 {
+			f.assessorIdx = i
+		}
+	}
+	if f.assessorIdx == 0 {
+		f.dropAssessor()
+	}
+}
+
+// dropAssessor clears what needs an assessor: the minimum score and the
+// score sort (back to newest).
+func (f *FilterBar) dropAssessor() {
+	f.minIdx = 0
+	if f.CurrentSort() == "score" {
+		f.sortIdx = 0
+	}
+	f.sorts = []string{"newest", "oldest"}
+	if f.sortIdx >= len(f.sorts) {
+		f.sortIdx = 0
 	}
 }
 
@@ -175,6 +220,31 @@ func (f *FilterBar) CycleTag() FilterChangedMsg {
 	return f.filterMsg()
 }
 
+// CycleAssessor advances to the next assessor ("none" after the last). With
+// no assessor the minimum score and the score sort go too.
+func (f *FilterBar) CycleAssessor() FilterChangedMsg {
+	if len(f.assessors) <= 1 {
+		return f.filterMsg()
+	}
+	f.assessorIdx = (f.assessorIdx + 1) % len(f.assessors)
+	if f.assessorIdx == 0 {
+		f.dropAssessor()
+	} else {
+		f.sorts = []string{"newest", "oldest", "score"}
+	}
+	return f.filterMsg()
+}
+
+// CycleMinScore advances the minimum score: none, 0.5, 0.7, 0.9, none. It
+// needs an assessor and does nothing without one.
+func (f *FilterBar) CycleMinScore() FilterChangedMsg {
+	if f.assessorIdx == 0 {
+		return f.filterMsg()
+	}
+	f.minIdx = (f.minIdx + 1) % (len(minScoreSteps) + 1)
+	return f.filterMsg()
+}
+
 // CycleSort advances to the next sort order.
 func (f *FilterBar) CycleSort() FilterChangedMsg {
 	if len(f.sorts) == 0 {
@@ -210,6 +280,23 @@ func (f *FilterBar) CurrentSort() string {
 	return f.sorts[f.sortIdx]
 }
 
+// CurrentAssessorID returns the selected assessor's ID (0 = none).
+func (f *FilterBar) CurrentAssessorID() int64 {
+	if f.assessorIdx <= 0 || f.assessorIdx >= len(f.assessors) {
+		return 0
+	}
+	return f.assessors[f.assessorIdx].ID
+}
+
+// CurrentMinScore returns the minimum score, nil for none (or no assessor).
+func (f *FilterBar) CurrentMinScore() *float64 {
+	if f.CurrentAssessorID() == 0 || f.minIdx <= 0 || f.minIdx > len(minScoreSteps) {
+		return nil
+	}
+	v := minScoreSteps[f.minIdx-1]
+	return &v
+}
+
 // CurrentSearch returns the current search query.
 func (f *FilterBar) CurrentSearch() string {
 	return f.search
@@ -223,6 +310,8 @@ func (f *FilterBar) filterMsg() FilterChangedMsg {
 		Search:       f.CurrentSearch(),
 		Sort:         f.CurrentSort(),
 		UnviewedOnly: false,
+		AssessorID:   f.CurrentAssessorID(),
+		MinScore:     f.CurrentMinScore(),
 	}
 }
 
@@ -266,6 +355,15 @@ func (f *FilterBar) View() string {
 	tagSeg := fmt.Sprintf("%s [%s]", filterLabelStyle.Render("tag:"),
 		filterValueStyle.Render(tagName))
 	parts = append(parts, tagSeg)
+
+	// Assessor dropdown, with its minimum score.
+	if f.assessorIdx > 0 && f.assessorIdx < len(f.assessors) {
+		name := SanitizeLine(f.assessors[f.assessorIdx].Name)
+		if min := f.CurrentMinScore(); min != nil {
+			name += " ≥" + formatScore(*min)
+		}
+		parts = append(parts, fmt.Sprintf("%s [%s]", filterLabelStyle.Render("score:"), filterValueStyle.Render(name)))
+	}
 
 	// Sort dropdown.
 	sortName := f.CurrentSort()

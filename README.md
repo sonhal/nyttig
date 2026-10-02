@@ -317,7 +317,10 @@ These are global flags accepted by every subcommand and the TUI.
 | `Esc`        | Clear search and defocus search bar.                     |
 | `s`          | Cycle source filter (all → specific source → all).       |
 | `t`          | Cycle tag filter (all → specific tag → all), parents before their children. A parent's label shows how many tags it covers: `cyber security +2`. |
-| `o`          | Toggle sort order (newest ↔ oldest).                     |
+| `o`          | Cycle the sort order (newest → oldest, and `score` once an assessor is selected). |
+| `a`          | Cycle the assessor whose scores are shown first and used by `m` and the `score` sort (none → each assessor → none); the bar shows `score: [claude]`. |
+| `m`          | With an assessor: cycle the minimum score (none → 0.5 → 0.7 → 0.9 → none). |
+| `i`          | Show or hide a line above the status bar with the selected item's assessments (assessor, tag, score, note). |
 | `r`          | Force refresh all sources immediately.                   |
 | `Enter`      | Open selected item's link in default browser.            |
 | `j` / `↓`    | Move selection down.                                     |
@@ -327,6 +330,14 @@ These are global flags accepted by every subcommand and the TUI.
 | `Ctrl+d`     | Page down (half screen).                                 |
 | `Ctrl+u`     | Page up (half screen).                                   |
 | `q` / `Ctrl+c`| Quit the TUI.                                           |
+
+Rows show one score chip per assessor that scored the item, `[claude 0.9]` in
+the assessor's color (see [Assessments](#assessments)); new and changed scores
+arrive live. An item that starts matching the filter is added in its sort
+position, and one that stops matching stays until the next filter change.
+Notes and assessor names are untrusted: control characters are stripped and
+they are shown on one line. The TUI has no "not assessed by" filter; use
+`nyttig search -unassessed-by` or the web app for that.
 
 ### View tracking
 

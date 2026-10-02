@@ -1,6 +1,6 @@
 # Assessments plan: scores and notes from external assessors
 
-Status: **phases 1–6 implemented, not yet merged** (database layer, proto and RPCs, live updates, CLI and config, HTTP API, web app).
+Status: **phases 1–7 implemented, not yet merged** (database layer, proto and RPCs, live updates, CLI and config, HTTP API, web app, TUI).
 
 Other systems can attach a judgement to a news item: an optional **score**
 from 0.0 to 1.0, an optional **note**, and the **assessor** that made it.
@@ -537,6 +537,16 @@ govulncheck can't reach vuln.go.dev from the sandbox, so leave it to CI.
 
 ## Deviations from this plan
 
+- **Phase 7, no detail view.** The TUI has no detail view for the plan's
+  "notes in the detail view", so `i` toggles a line above the status bar with
+  the selected item's assessments and notes. The table loses a row while it
+  is shown.
+- **Phase 7, filter bar.** `a` cycles the assessor, `m` the minimum score
+  (none, 0.5, 0.7, 0.9) and `o` gains `score` while an assessor is selected.
+  There is no "not assessed by" in the TUI.
+- **Phase 7, assessors load once.** The TUI reads the assessors at startup
+  with the sources and tags (and tolerates a daemon without the RPC); it does
+  not reload them on a timer.
 - **Phase 6, the mobile filter sheet.** It gets `score` and `unassessed`
   selects (when assessors exist) and a `score` sort option once an assessor is
   chosen; a minimum score is typed in the query bar. The desktop filter bar

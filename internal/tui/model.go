@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"os/exec"
+	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -26,6 +27,7 @@ type tickMsg time.Time
 type sourcesLoadedMsg struct {
 	sources    []SourceInfo
 	tags       []TagInfo
+	assessors  []AssessorInfo
 	tagColors  map[string]string
 	sourceMeta map[int64]sourceDisplay
 }
@@ -55,9 +57,14 @@ type Model struct {
 	// Whether the initial filter has been sent (StartStream will load with it).
 	streamStarted bool
 
-	// Cached source/tag metadata for the filter dropdowns.
-	sources []SourceInfo
-	tags    []TagInfo
+	// Cached source/tag/assessor metadata for the filter dropdowns.
+	sources   []SourceInfo
+	tags      []TagInfo
+	assessors []AssessorInfo
+
+	// showInfo shows the selected item's assessments (with their notes) in
+	// a line above the status bar.
+	showInfo bool
 }
 
 // NewModel creates the root TUI model with a connected gRPC client.
@@ -121,6 +128,15 @@ func (m *Model) connectAndLoad() tea.Msg {
 		}
 	}
 
+	// Assessors are optional: a daemon without them answers with an error,
+	// and the TUI then simply has none.
+	var assessors []AssessorInfo
+	if ar, err := m.client.ListAssessors(ctx); err == nil {
+		for _, a := range ar.Assessors {
+			assessors = append(assessors, AssessorInfo{ID: a.Id, Name: a.Name, Color: a.Color})
+		}
+	}
+
 	sourceMeta := make(map[int64]sourceDisplay)
 	for _, src := range srcResp.Sources {
 		display := src.Name
@@ -130,7 +146,7 @@ func (m *Model) connectAndLoad() tea.Msg {
 		sourceMeta[src.Id] = sourceDisplay{Name: display, Color: src.Color}
 	}
 
-	return sourcesLoadedMsg{sources: srcs, tags: tags, tagColors: tagColors, sourceMeta: sourceMeta}
+	return sourcesLoadedMsg{sources: srcs, tags: tags, assessors: assessors, tagColors: tagColors, sourceMeta: sourceMeta}
 }
 
 // startStream sends the initial StreamFilter and begins listening for items.
@@ -141,10 +157,12 @@ func (m *Model) startStream() tea.Cmd {
 	m.streamStarted = true
 
 	initialFilter := &pb.StreamFilter{
-		SourceId: m.filter.CurrentSourceID(),
-		TagId:    m.filter.CurrentTagID(),
-		Search:   m.filter.CurrentSearch(),
-		Sort:     m.filter.CurrentSort(),
+		SourceId:   m.filter.CurrentSourceID(),
+		TagId:      m.filter.CurrentTagID(),
+		Search:     m.filter.CurrentSearch(),
+		Sort:       m.filter.CurrentSort(),
+		AssessorId: m.filter.CurrentAssessorID(),
+		MinScore:   m.filter.CurrentMinScore(),
 	}
 
 	sub, err := m.client.StreamItems(context.Background(), initialFilter)
@@ -173,12 +191,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 		m.filter.SetWidth(msg.Width)
-		// Table height = available rows minus filter (1) and status (1).
-		tableHeight := msg.Height - 2
-		if tableHeight < 1 {
-			tableHeight = 1
-		}
-		m.table.SetSize(msg.Width, tableHeight)
+		m.layout()
 		return m, nil
 
 	// ── Keypress ────────────────────────────────────────
@@ -202,7 +215,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.trackVisible()
 
 	case ItemUpdateMsg:
-		// Keep reading; the table does not show assessments yet.
+		// An item whose assessments changed: update it where it is, or add
+		// it in order when it now matches the filter. Never remove one.
+		if msg.Item != nil {
+			m.table.ApplyUpdate(msg.Item, msg.Matches, m.itemOrder())
+		}
 		if m.sub != nil {
 			return m, ListenStream(m.sub)
 		}
@@ -233,10 +250,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case FilterChangedMsg:
 		if m.sub != nil {
 			m.sub.SendFilter(&pb.StreamFilter{
-				SourceId: msg.SourceID,
-				TagId:    msg.TagID,
-				Search:   msg.Search,
-				Sort:     msg.Sort,
+				SourceId:   msg.SourceID,
+				TagId:      msg.TagID,
+				Search:     msg.Search,
+				Sort:       msg.Sort,
+				AssessorId: msg.AssessorID,
+				MinScore:   msg.MinScore,
 			})
 		}
 		return m, nil
@@ -247,6 +266,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.tags = msg.tags
 		m.filter.SetSources(msg.sources)
 		m.filter.SetTags(msg.tags)
+		m.assessors = msg.assessors
+		m.filter.SetAssessors(msg.assessors)
+		m.table.SetAssessors(msg.assessors, m.filter.CurrentAssessorID())
 		m.table.SetTagColors(msg.tagColors)
 		m.table.SetSourceMeta(msg.sourceMeta)
 		m.status.SetConnected(true)
@@ -310,6 +332,19 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "o":
 		return m, m.broadcastFilterChange(m.filter.CycleSort())
 
+	case "a":
+		fc := m.filter.CycleAssessor()
+		m.table.SetAssessors(m.assessors, fc.AssessorID)
+		return m, m.broadcastFilterChange(fc)
+
+	case "m":
+		return m, m.broadcastFilterChange(m.filter.CycleMinScore())
+
+	case "i":
+		m.showInfo = !m.showInfo
+		m.layout()
+		return m, nil
+
 	case "r":
 		return m, m.refreshAll()
 
@@ -344,13 +379,48 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// tableHeight returns the number of visible rows in the table.
+// tableHeight returns the number of visible rows in the table: the window
+// minus the filter bar, the status bar and, when shown, the detail line.
 func (m *Model) tableHeight() int {
 	th := m.height - 2
+	if m.showInfo {
+		th--
+	}
 	if th < 1 {
 		return 1
 	}
 	return th
+}
+
+// layout sizes the table for the current window and detail line.
+func (m *Model) layout() {
+	m.filter.SetWidth(m.width)
+	m.table.SetSize(m.width, m.tableHeight())
+	m.table.scrollToCursor()
+}
+
+// itemOrder is the order the current filter sorts the list in, for placing
+// an item that is added live.
+func (m *Model) itemOrder() itemOrder {
+	return itemOrder{
+		sort:       m.filter.CurrentSort(),
+		assessorID: m.filter.CurrentAssessorID(),
+		scope:      subtree(m.tags, m.filter.CurrentTagID()),
+	}
+}
+
+// infoLine renders the selected item's assessments on one line, "" when it
+// has none: "claude [CVE] 0.9: note | cvss 0.98".
+func (m *Model) infoLine() string {
+	item := m.table.SelectedItem()
+	if item == nil || len(item.Assessments) == 0 {
+		return filterLabelStyle.Render("no assessments")
+	}
+	names := make(map[int64]string, len(m.tags))
+	for _, t := range m.tags {
+		names[t.ID] = t.Name
+	}
+	return truncateEllipsis(strings.Join(assessmentLines(item, names), " | "), m.width)
 }
 
 // broadcastFilterChange takes a FilterChangedMsg and broadcasts it
@@ -440,5 +510,8 @@ func (m Model) View() string {
 	tableView := m.table.View()
 	statusView := m.status.View(m.width)
 
+	if m.showInfo {
+		return filterView + "\n" + tableView + "\n" + m.infoLine() + "\n" + statusView
+	}
 	return filterView + "\n" + tableView + "\n" + statusView
 }

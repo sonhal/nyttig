@@ -134,7 +134,9 @@ internal/proto/nyttig/v1/   GENERATED Go from the proto (do not hand-edit)
 internal/config/            TOML config loading + ~ expansion
 internal/client/            gRPC client wrapper + StreamSub helper used by the TUI
 internal/mtls/              Mutual-TLS credential loading shared by daemon and client
-internal/tui/               Bubble Tea Model, filter bar, table, status bar, view tracking
+internal/tui/               Bubble Tea Model, filter bar, table, status bar, view tracking;
+                            assess.go: score chips, the score order for live inserts, the
+                            detail line
 internal/api/               nyttig-api's HTTP API: routing (server.go), JSON handlers (api.go),
                             source/tag/rule management (manage.go), assessors and
                             assessments (assessments.go), SSE bridge (stream.go),
@@ -304,6 +306,13 @@ which phases are done and whether they are merged; keep it current.
   fields shared by `SearchRequest`, `StreamFilter` and `ViewFilter`
   (`validateAssessmentFilter`); an unknown item, assessor or tag is
   `NotFound`. A score is `optional double` on the wire so 0 differs from none.
+- **TUI assessments.** The filter bar cycles the assessor (`a`) and the
+  minimum score (`m`); the score sort exists only while an assessor is
+  selected, and dropping the assessor drops the minimum and the sort
+  (`dropAssessor`). `item_update` becomes `ItemUpdateMsg`; `Table.ApplyUpdate`
+  replaces a shown item in place, inserts a matching one in `itemOrder` and
+  never removes one. `itemOrder` and `scoreOf` (`assess.go`) mirror the
+  daemon's order and scope rules; keep them in step with `db.ListItems`.
 - **Tagging** is rule-based only (no manual tagging). Rules are regex over
   `title`/`description`/`both`, global or per-source, evaluated by `priority`.
 - **View tracking** is K9s-style: the TUI marks items viewed as they scroll

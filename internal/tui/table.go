@@ -69,6 +69,11 @@ type Table struct {
 
 	// sourceMeta maps source_id to display info (abbreviation or name, plus color).
 	sourceMeta map[int64]sourceDisplay
+
+	// assessors maps assessor_id to its current name and color for the score
+	// chips; selectedAssessor's chip comes first.
+	assessors        map[int64]AssessorInfo
+	selectedAssessor int64
 }
 
 // NewTable creates a Table with the given dimensions.
@@ -129,6 +134,51 @@ func (t *Table) SetSize(width, height int) {
 // SetTagColors sets the color lookup for tag chip rendering.
 func (t *Table) SetTagColors(colors map[string]string) {
 	t.tagColors = colors
+}
+
+// SetAssessors sets the assessor lookup for score chip rendering.
+func (t *Table) SetAssessors(list []AssessorInfo, selected int64) {
+	t.assessors = make(map[int64]AssessorInfo, len(list))
+	for _, a := range list {
+		t.assessors[a.ID] = a
+	}
+	t.selectedAssessor = selected
+}
+
+// ApplyUpdate applies an item whose assessments changed. An item the table
+// shows is replaced where it is (and keeps a viewed mark the daemon has not
+// heard of yet). One it does not show is inserted in order, but only when
+// the daemon says it matches the filter. Nothing is ever removed: a reset
+// resyncs.
+func (t *Table) ApplyUpdate(item *pb.Item, matches bool, order itemOrder) {
+	for i, cur := range t.items {
+		if cur.Id == item.Id {
+			item.Viewed = item.Viewed || cur.Viewed
+			t.items[i] = item
+			return
+		}
+	}
+	if !matches {
+		return
+	}
+	at := len(t.items)
+	for i, cur := range t.items {
+		if order.before(item, cur) {
+			at = i
+			break
+		}
+	}
+	t.items = append(t.items, nil)
+	copy(t.items[at+1:], t.items[at:])
+	t.items[at] = item
+	// Keep the selection on the same item.
+	if len(t.items) > 1 && at <= t.cursor {
+		t.cursor++
+	}
+	if at < t.offset {
+		t.offset++
+	}
+	t.scrollToCursor()
 }
 
 // SetSourceMeta sets the source metadata lookup for source chip rendering.
@@ -255,8 +305,14 @@ func (t *Table) renderRow(item *pb.Item, selected bool) string {
 	// 3. Source chip.
 	sourceCol := t.renderSourceChip(item.SourceId)
 
-	// 4. Tags.
+	// 4. Tags, then the assessors' scores.
 	tagsCol := t.renderTags(item.Tags)
+	if scores := t.renderScores(item); scores != "" {
+		if tagsCol != "" {
+			tagsCol += " "
+		}
+		tagsCol += scores
+	}
 
 	// 5. Title + description + domain.
 	// viewed(2) + space(1) + date(11) + space(1) + source(variable) + space(1) + tags(variable) + space(1) + ...
@@ -346,6 +402,29 @@ func (t *Table) renderTags(tags []*pb.Tag) string {
 	parts := make([]string, len(tags))
 	for i, tag := range tags {
 		parts[i] = t.renderTagChip(tag)
+	}
+	return strings.Join(parts, " ")
+}
+
+// renderScores formats one chip per assessor that scored the item, e.g.
+// "[claude 0.9]", in the assessor's color. Names are untrusted text.
+func (t *Table) renderScores(item *pb.Item) string {
+	chips := scoreChips(item, t.selectedAssessor)
+	if len(chips) == 0 {
+		return ""
+	}
+	parts := make([]string, len(chips))
+	for i, c := range chips {
+		name := c.name
+		color := ""
+		if a, ok := t.assessors[c.assessorID]; ok {
+			name, color = a.Name, a.Color
+		}
+		label := SanitizeLine(name) + " " + formatScore(c.score)
+		if color != "" {
+			label = lipgloss.NewStyle().Foreground(lipgloss.Color(color)).Render(label)
+		}
+		parts[i] = tagBracketStyle.Render("[") + label + tagBracketStyle.Render("]")
 	}
 	return strings.Join(parts, " ")
 }
