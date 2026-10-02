@@ -3,6 +3,7 @@
 	import { onMount } from 'svelte';
 	import type { TimeMode } from './command';
 	import { oneLine } from './sanitize';
+	import { treeOrder } from './tagtree';
 	import type { Filter, Source, Tag } from './types';
 
 	interface Props {
@@ -16,6 +17,9 @@
 	}
 
 	let { filter, sources, tags, timeMode, onchange, ontime, onclose }: Props = $props();
+
+	// Tree order, children indented (non-breaking spaces survive in <option>).
+	const tagRows = $derived(treeOrder(tags));
 
 	let first: HTMLSelectElement | undefined = $state();
 	onMount(() => first?.focus());
@@ -41,8 +45,8 @@
 		<span>tag</span>
 		<select value={filter.tag} onchange={(e) => set('tag', e.currentTarget.value)}>
 			<option value="">all</option>
-			{#each tags as t (t.id)}
-				<option value={t.id}>{oneLine(t.name)}</option>
+			{#each tagRows as r (r.key)}
+				<option value={r.tag.id}>{'\u00a0\u00a0'.repeat(r.depth)}{oneLine(r.tag.name)}</option>
 			{/each}
 		</select>
 	</label>

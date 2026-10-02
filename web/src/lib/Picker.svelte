@@ -61,7 +61,7 @@
 				onpointerdown={(e) => e.preventDefault()}
 				onclick={() => onpick(m.item.id)}
 			>
-				<span class="label" style:color={safeColor(m.item.color)}
+				<span class="label" style:color={safeColor(m.item.color)} style:padding-left="{(m.item.depth ?? 0) * 2}ch"
 					>{#each segmentsAt(oneLine(m.item.label), m.at) as s, j (j)}{#if s.match}<mark>{s.text}</mark
 							>{:else}{s.text}{/if}{/each}</span
 				>

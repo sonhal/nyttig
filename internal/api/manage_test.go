@@ -1,7 +1,9 @@
 package api
 
 import (
+	"encoding/json"
 	"net/http"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -115,10 +117,31 @@ func TestTags(t *testing.T) {
 		{`{"color":"#123456"}`, &pb.UpdateTagRequest{Id: 3, Color: ptr("#123456")}},
 		{`{"name":"golang"}`, &pb.UpdateTagRequest{Id: 3, Name: ptr("golang")}},
 		{`{"color":""}`, &pb.UpdateTagRequest{Id: 3, Color: ptr("")}},
+		{`{"parent_ids":["1","2"]}`, &pb.UpdateTagRequest{Id: 3, Parents: &pb.TagParents{Ids: []int64{1, 2}}}},
+		{`{"parent_ids":[]}`, &pb.UpdateTagRequest{Id: 3, Parents: &pb.TagParents{}}},
 	} {
 		rec := th.do("PATCH", "/api/tags/3", tc.body, nil)
 		if rec.Code != http.StatusOK || !proto.Equal(fc.lastReq, tc.want) {
 			t.Errorf("%s: %d, UpdateTagRequest = %v, want %v", tc.body, rec.Code, fc.lastReq, tc.want)
+		}
+	}
+
+	rec = th.do("POST", "/api/tags", `{"name":"CVE","parent_ids":["4","7"]}`, nil)
+	if want := (&pb.AddTagRequest{Name: "CVE", ParentIds: []int64{4, 7}}); rec.Code != http.StatusCreated || !proto.Equal(fc.lastReq, want) {
+		t.Errorf("add tag with parents: %d, AddTagRequest = %v, want %v", rec.Code, fc.lastReq, want)
+	}
+	var created struct {
+		ParentIDs []string `json:"parent_ids"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil || !reflect.DeepEqual(created.ParentIDs, []string{"4", "7"}) {
+		t.Errorf("created tag parent_ids = %v (%v): %s", created.ParentIDs, err, rec.Body)
+	}
+	for _, body := range []string{
+		`{"parent_ids":"4"}`, `{"parent_ids":[4]}`, `{"parent_ids":["x"]}`, `{"parent_ids":["0"]}`,
+		`{"parent_ids":["-1"]}`, `{"parent_ids":null}`,
+	} {
+		if rec := th.do("PATCH", "/api/tags/3", body, nil); rec.Code != http.StatusBadRequest {
+			t.Errorf("PATCH %s: %d, want 400", body, rec.Code)
 		}
 	}
 

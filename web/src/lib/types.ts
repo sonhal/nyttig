@@ -6,6 +6,8 @@ export interface Tag {
 	id?: string;
 	name?: string;
 	color?: string;
+	/** Direct parents; absent for a top-level tag. */
+	parent_ids?: string[];
 }
 
 export interface Item {

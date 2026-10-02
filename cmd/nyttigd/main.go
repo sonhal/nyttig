@@ -9,6 +9,7 @@ package main
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"flag"
 	"fmt"
 	"log/slog"
@@ -16,6 +17,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"slices"
 	"sync"
 	"syscall"
 	"time"
@@ -471,6 +473,9 @@ func seedFromConfig(database *sql.DB, cfg *config.Config, logger *slog.Logger) e
 		tagIDByName[ct.Name] = id
 		logger.Info("seeded tag from config", "name", ct.Name)
 	}
+	if err := seedTagParents(database, cfg, tagIDByName, logger); err != nil {
+		return err
+	}
 
 	// ── Tag rules ──
 	existingRules, err := db.ListTagRules(database, nil)
@@ -530,6 +535,62 @@ func seedFromConfig(database *sql.DB, cfg *config.Config, logger *slog.Logger) e
 		logger.Info("seeded tag rule from config", "tag", cr.Tag, "pattern", cr.Pattern)
 	}
 
+	return nil
+}
+
+// seedTagParents is the second pass over [[tags]]: it adds the parent edges
+// once every declared tag exists, so a parent may be declared after its
+// child. Like the rest of seeding it only adds: edges already in the database
+// stay, and none is removed, so a parent set in the UI survives a restart. A
+// parent that is not declared is created; an edge that would make a cycle is
+// skipped with a warning.
+func seedTagParents(database *sql.DB, cfg *config.Config, tagIDByName map[string]int64, logger *slog.Logger) error {
+	edges, err := db.ListTagEdges(database)
+	if err != nil {
+		return fmt.Errorf("list tag edges: %w", err)
+	}
+	parentsOf := make(map[int64][]int64)
+	for _, e := range edges {
+		parentsOf[e.ChildID] = append(parentsOf[e.ChildID], e.ParentID)
+	}
+
+	for _, ct := range cfg.Tags {
+		childID, ok := tagIDByName[ct.Name]
+		if !ok {
+			continue // an empty name, skipped above
+		}
+		for _, pname := range ct.Parents {
+			if pname == "" {
+				continue
+			}
+			parentID, ok := tagIDByName[pname]
+			if !ok {
+				id, err := db.InsertTag(database, pname, nil)
+				if err != nil {
+					return fmt.Errorf("insert parent tag %q of %q: %w", pname, ct.Name, err)
+				}
+				parentID = id
+				tagIDByName[pname] = id
+				logger.Info("seeded tag from config", "name", pname)
+			}
+			if slices.Contains(parentsOf[childID], parentID) {
+				continue
+			}
+			next := append(slices.Clone(parentsOf[childID]), parentID)
+			err := db.SetTagParents(database, childID, next)
+			var cyc *db.ErrTagCycle
+			if errors.As(err, &cyc) {
+				logger.Warn("skipping config tag parent that would make a cycle",
+					"tag", ct.Name, "parent", pname, "error", err)
+				continue
+			}
+			if err != nil {
+				return fmt.Errorf("set parent %q of tag %q: %w", pname, ct.Name, err)
+			}
+			parentsOf[childID] = next
+			logger.Info("seeded tag parent from config", "tag", ct.Name, "parent", pname)
+		}
+	}
 	return nil
 }
 

@@ -36,7 +36,8 @@ type Item struct {
 // ItemFilter defines criteria for listing items.
 type ItemFilter struct {
 	SourceID     int64  // 0 = all sources
-	TagID        int64  // 0 = all tags
+	TagID        int64  // 0 = all tags; matches the tag or any tag below it
+	TagExact     bool   // match TagID only, not its descendants
 	Search       string // FTS5 query, empty = no filter
 	Sort         string // "newest" (default) or "oldest"
 	Limit        int    // default: 100
@@ -153,7 +154,12 @@ func ListItems(db *sql.DB, filter ItemFilter) ([]*Item, int, error) {
 		args = append(args, filter.SourceID)
 	}
 	if filter.TagID > 0 {
-		conditions = append(conditions, `i.id IN (SELECT item_id FROM item_tags WHERE tag_id = ?)`)
+		if filter.TagExact {
+			conditions = append(conditions, `i.id IN (SELECT item_id FROM item_tags WHERE tag_id = ?)`)
+		} else {
+			// IN dedups: an item tagged with two tags of the subtree is listed once.
+			conditions = append(conditions, `i.id IN (SELECT item_id FROM item_tags WHERE tag_id IN (`+SubtreeSQL+`))`)
+		}
 		args = append(args, filter.TagID)
 	}
 	if filter.UnviewedOnly {

@@ -8,6 +8,8 @@ export interface PickOption {
 	id: string;
 	label: string;
 	color?: string;
+	/** Indentation level, for tags in a tree. */
+	depth?: number;
 }
 
 export type PickKind = 'source' | 'tag';

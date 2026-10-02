@@ -283,7 +283,8 @@ type Tag struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            int64                  `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
 	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
-	Color         string                 `protobuf:"bytes,3,opt,name=color,proto3" json:"color,omitempty"` // hex color, e.g. "#FF6B35"
+	Color         string                 `protobuf:"bytes,3,opt,name=color,proto3" json:"color,omitempty"`                                  // hex color, e.g. "#FF6B35"
+	ParentIds     []int64                `protobuf:"varint,4,rep,packed,name=parent_ids,json=parentIds,proto3" json:"parent_ids,omitempty"` // direct parents; empty = top-level
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -337,6 +338,13 @@ func (x *Tag) GetColor() string {
 		return x.Color
 	}
 	return ""
+}
+
+func (x *Tag) GetParentIds() []int64 {
+	if x != nil {
+		return x.ParentIds
+	}
+	return nil
 }
 
 type TagRule struct {
@@ -762,6 +770,7 @@ type AddTagRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	Color         string                 `protobuf:"bytes,2,opt,name=color,proto3" json:"color,omitempty"`
+	ParentIds     []int64                `protobuf:"varint,3,rep,packed,name=parent_ids,json=parentIds,proto3" json:"parent_ids,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -810,20 +819,76 @@ func (x *AddTagRequest) GetColor() string {
 	return ""
 }
 
+func (x *AddTagRequest) GetParentIds() []int64 {
+	if x != nil {
+		return x.ParentIds
+	}
+	return nil
+}
+
+// TagParents wraps a parent set to give it presence: a repeated field cannot
+// be optional in proto3, and UpdateTagRequest needs "unset" (unchanged) to
+// differ from "set to empty" (make top-level).
+type TagParents struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Ids           []int64                `protobuf:"varint,1,rep,packed,name=ids,proto3" json:"ids,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TagParents) Reset() {
+	*x = TagParents{}
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TagParents) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TagParents) ProtoMessage() {}
+
+func (x *TagParents) ProtoReflect() protoreflect.Message {
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TagParents.ProtoReflect.Descriptor instead.
+func (*TagParents) Descriptor() ([]byte, []int) {
+	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *TagParents) GetIds() []int64 {
+	if x != nil {
+		return x.Ids
+	}
+	return nil
+}
+
 // UpdateTagRequest patches a tag. Unset fields are left unchanged; setting
-// color to an empty string clears it.
+// color to an empty string clears it. A set parents replaces the whole
+// parent set.
 type UpdateTagRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            int64                  `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
 	Name          *string                `protobuf:"bytes,2,opt,name=name,proto3,oneof" json:"name,omitempty"`
 	Color         *string                `protobuf:"bytes,3,opt,name=color,proto3,oneof" json:"color,omitempty"`
+	Parents       *TagParents            `protobuf:"bytes,4,opt,name=parents,proto3,oneof" json:"parents,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *UpdateTagRequest) Reset() {
 	*x = UpdateTagRequest{}
-	mi := &file_nyttig_v1_nyttig_proto_msgTypes[10]
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -835,7 +900,7 @@ func (x *UpdateTagRequest) String() string {
 func (*UpdateTagRequest) ProtoMessage() {}
 
 func (x *UpdateTagRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nyttig_v1_nyttig_proto_msgTypes[10]
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -848,7 +913,7 @@ func (x *UpdateTagRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateTagRequest.ProtoReflect.Descriptor instead.
 func (*UpdateTagRequest) Descriptor() ([]byte, []int) {
-	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{10}
+	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *UpdateTagRequest) GetId() int64 {
@@ -872,6 +937,13 @@ func (x *UpdateTagRequest) GetColor() string {
 	return ""
 }
 
+func (x *UpdateTagRequest) GetParents() *TagParents {
+	if x != nil {
+		return x.Parents
+	}
+	return nil
+}
+
 type RemoveTagRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            int64                  `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -881,7 +953,7 @@ type RemoveTagRequest struct {
 
 func (x *RemoveTagRequest) Reset() {
 	*x = RemoveTagRequest{}
-	mi := &file_nyttig_v1_nyttig_proto_msgTypes[11]
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -893,7 +965,7 @@ func (x *RemoveTagRequest) String() string {
 func (*RemoveTagRequest) ProtoMessage() {}
 
 func (x *RemoveTagRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nyttig_v1_nyttig_proto_msgTypes[11]
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -906,7 +978,7 @@ func (x *RemoveTagRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemoveTagRequest.ProtoReflect.Descriptor instead.
 func (*RemoveTagRequest) Descriptor() ([]byte, []int) {
-	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{11}
+	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *RemoveTagRequest) GetId() int64 {
@@ -925,7 +997,7 @@ type ListTagsResponse struct {
 
 func (x *ListTagsResponse) Reset() {
 	*x = ListTagsResponse{}
-	mi := &file_nyttig_v1_nyttig_proto_msgTypes[12]
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -937,7 +1009,7 @@ func (x *ListTagsResponse) String() string {
 func (*ListTagsResponse) ProtoMessage() {}
 
 func (x *ListTagsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_nyttig_v1_nyttig_proto_msgTypes[12]
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -950,7 +1022,7 @@ func (x *ListTagsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListTagsResponse.ProtoReflect.Descriptor instead.
 func (*ListTagsResponse) Descriptor() ([]byte, []int) {
-	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{12}
+	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *ListTagsResponse) GetTags() []*Tag {
@@ -973,7 +1045,7 @@ type AddTagRuleRequest struct {
 
 func (x *AddTagRuleRequest) Reset() {
 	*x = AddTagRuleRequest{}
-	mi := &file_nyttig_v1_nyttig_proto_msgTypes[13]
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -985,7 +1057,7 @@ func (x *AddTagRuleRequest) String() string {
 func (*AddTagRuleRequest) ProtoMessage() {}
 
 func (x *AddTagRuleRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nyttig_v1_nyttig_proto_msgTypes[13]
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -998,7 +1070,7 @@ func (x *AddTagRuleRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AddTagRuleRequest.ProtoReflect.Descriptor instead.
 func (*AddTagRuleRequest) Descriptor() ([]byte, []int) {
-	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{13}
+	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *AddTagRuleRequest) GetSourceId() int64 {
@@ -1045,7 +1117,7 @@ type RemoveTagRuleRequest struct {
 
 func (x *RemoveTagRuleRequest) Reset() {
 	*x = RemoveTagRuleRequest{}
-	mi := &file_nyttig_v1_nyttig_proto_msgTypes[14]
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1057,7 +1129,7 @@ func (x *RemoveTagRuleRequest) String() string {
 func (*RemoveTagRuleRequest) ProtoMessage() {}
 
 func (x *RemoveTagRuleRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nyttig_v1_nyttig_proto_msgTypes[14]
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1070,7 +1142,7 @@ func (x *RemoveTagRuleRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemoveTagRuleRequest.ProtoReflect.Descriptor instead.
 func (*RemoveTagRuleRequest) Descriptor() ([]byte, []int) {
-	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{14}
+	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *RemoveTagRuleRequest) GetId() int64 {
@@ -1089,7 +1161,7 @@ type ListTagRulesResponse struct {
 
 func (x *ListTagRulesResponse) Reset() {
 	*x = ListTagRulesResponse{}
-	mi := &file_nyttig_v1_nyttig_proto_msgTypes[15]
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1101,7 +1173,7 @@ func (x *ListTagRulesResponse) String() string {
 func (*ListTagRulesResponse) ProtoMessage() {}
 
 func (x *ListTagRulesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_nyttig_v1_nyttig_proto_msgTypes[15]
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1114,7 +1186,7 @@ func (x *ListTagRulesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListTagRulesResponse.ProtoReflect.Descriptor instead.
 func (*ListTagRulesResponse) Descriptor() ([]byte, []int) {
-	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{15}
+	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *ListTagRulesResponse) GetRules() []*TagRule {
@@ -1138,7 +1210,7 @@ type TestTagRuleRequest struct {
 
 func (x *TestTagRuleRequest) Reset() {
 	*x = TestTagRuleRequest{}
-	mi := &file_nyttig_v1_nyttig_proto_msgTypes[16]
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1150,7 +1222,7 @@ func (x *TestTagRuleRequest) String() string {
 func (*TestTagRuleRequest) ProtoMessage() {}
 
 func (x *TestTagRuleRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nyttig_v1_nyttig_proto_msgTypes[16]
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1163,7 +1235,7 @@ func (x *TestTagRuleRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TestTagRuleRequest.ProtoReflect.Descriptor instead.
 func (*TestTagRuleRequest) Descriptor() ([]byte, []int) {
-	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{16}
+	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *TestTagRuleRequest) GetSourceId() int64 {
@@ -1204,7 +1276,7 @@ type TestTagRuleResponse struct {
 
 func (x *TestTagRuleResponse) Reset() {
 	*x = TestTagRuleResponse{}
-	mi := &file_nyttig_v1_nyttig_proto_msgTypes[17]
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1216,7 +1288,7 @@ func (x *TestTagRuleResponse) String() string {
 func (*TestTagRuleResponse) ProtoMessage() {}
 
 func (x *TestTagRuleResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_nyttig_v1_nyttig_proto_msgTypes[17]
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1229,7 +1301,7 @@ func (x *TestTagRuleResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TestTagRuleResponse.ProtoReflect.Descriptor instead.
 func (*TestTagRuleResponse) Descriptor() ([]byte, []int) {
-	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{17}
+	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *TestTagRuleResponse) GetItems() []*Item {
@@ -1250,18 +1322,19 @@ type SearchRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Query         string                 `protobuf:"bytes,1,opt,name=query,proto3" json:"query,omitempty"`
 	SourceId      int64                  `protobuf:"varint,2,opt,name=source_id,json=sourceId,proto3" json:"source_id,omitempty"` // 0 = all sources
-	TagId         int64                  `protobuf:"varint,3,opt,name=tag_id,json=tagId,proto3" json:"tag_id,omitempty"`          // 0 = all tags
+	TagId         int64                  `protobuf:"varint,3,opt,name=tag_id,json=tagId,proto3" json:"tag_id,omitempty"`          // 0 = all tags; matches the tag or any tag below it
 	Limit         int32                  `protobuf:"varint,4,opt,name=limit,proto3" json:"limit,omitempty"`                       // default: 100
 	Offset        int32                  `protobuf:"varint,5,opt,name=offset,proto3" json:"offset,omitempty"`                     // default: 0
 	Sort          string                 `protobuf:"bytes,6,opt,name=sort,proto3" json:"sort,omitempty"`                          // newest, oldest; default newest
 	UnviewedOnly  bool                   `protobuf:"varint,7,opt,name=unviewed_only,json=unviewedOnly,proto3" json:"unviewed_only,omitempty"`
+	TagExact      bool                   `protobuf:"varint,8,opt,name=tag_exact,json=tagExact,proto3" json:"tag_exact,omitempty"` // match tag_id only, not its descendants
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *SearchRequest) Reset() {
 	*x = SearchRequest{}
-	mi := &file_nyttig_v1_nyttig_proto_msgTypes[18]
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1273,7 +1346,7 @@ func (x *SearchRequest) String() string {
 func (*SearchRequest) ProtoMessage() {}
 
 func (x *SearchRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nyttig_v1_nyttig_proto_msgTypes[18]
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1286,7 +1359,7 @@ func (x *SearchRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SearchRequest.ProtoReflect.Descriptor instead.
 func (*SearchRequest) Descriptor() ([]byte, []int) {
-	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{18}
+	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *SearchRequest) GetQuery() string {
@@ -1338,6 +1411,13 @@ func (x *SearchRequest) GetUnviewedOnly() bool {
 	return false
 }
 
+func (x *SearchRequest) GetTagExact() bool {
+	if x != nil {
+		return x.TagExact
+	}
+	return false
+}
+
 type SearchResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Items         []*Item                `protobuf:"bytes,1,rep,name=items,proto3" json:"items,omitempty"`
@@ -1348,7 +1428,7 @@ type SearchResponse struct {
 
 func (x *SearchResponse) Reset() {
 	*x = SearchResponse{}
-	mi := &file_nyttig_v1_nyttig_proto_msgTypes[19]
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1360,7 +1440,7 @@ func (x *SearchResponse) String() string {
 func (*SearchResponse) ProtoMessage() {}
 
 func (x *SearchResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_nyttig_v1_nyttig_proto_msgTypes[19]
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1373,7 +1453,7 @@ func (x *SearchResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SearchResponse.ProtoReflect.Descriptor instead.
 func (*SearchResponse) Descriptor() ([]byte, []int) {
-	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{19}
+	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *SearchResponse) GetItems() []*Item {
@@ -1399,7 +1479,7 @@ type MarkViewedRequest struct {
 
 func (x *MarkViewedRequest) Reset() {
 	*x = MarkViewedRequest{}
-	mi := &file_nyttig_v1_nyttig_proto_msgTypes[20]
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1411,7 +1491,7 @@ func (x *MarkViewedRequest) String() string {
 func (*MarkViewedRequest) ProtoMessage() {}
 
 func (x *MarkViewedRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nyttig_v1_nyttig_proto_msgTypes[20]
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1424,7 +1504,7 @@ func (x *MarkViewedRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MarkViewedRequest.ProtoReflect.Descriptor instead.
 func (*MarkViewedRequest) Descriptor() ([]byte, []int) {
-	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{20}
+	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *MarkViewedRequest) GetItemIds() []int64 {
@@ -1446,7 +1526,7 @@ type ClientMessage struct {
 
 func (x *ClientMessage) Reset() {
 	*x = ClientMessage{}
-	mi := &file_nyttig_v1_nyttig_proto_msgTypes[21]
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1458,7 +1538,7 @@ func (x *ClientMessage) String() string {
 func (*ClientMessage) ProtoMessage() {}
 
 func (x *ClientMessage) ProtoReflect() protoreflect.Message {
-	mi := &file_nyttig_v1_nyttig_proto_msgTypes[21]
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1471,7 +1551,7 @@ func (x *ClientMessage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ClientMessage.ProtoReflect.Descriptor instead.
 func (*ClientMessage) Descriptor() ([]byte, []int) {
-	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{21}
+	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *ClientMessage) GetMsg() isClientMessage_Msg {
@@ -1503,7 +1583,7 @@ func (*ClientMessage_Filter) isClientMessage_Msg() {}
 type StreamFilter struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	SourceId      int64                  `protobuf:"varint,1,opt,name=source_id,json=sourceId,proto3" json:"source_id,omitempty"` // 0 = all
-	TagId         int64                  `protobuf:"varint,2,opt,name=tag_id,json=tagId,proto3" json:"tag_id,omitempty"`          // 0 = all
+	TagId         int64                  `protobuf:"varint,2,opt,name=tag_id,json=tagId,proto3" json:"tag_id,omitempty"`          // 0 = all; matches the tag or any tag below it
 	Search        string                 `protobuf:"bytes,3,opt,name=search,proto3" json:"search,omitempty"`                      // FTS5 query string, empty = no filter
 	Sort          string                 `protobuf:"bytes,4,opt,name=sort,proto3" json:"sort,omitempty"`                          // newest, oldest; default newest
 	Limit         int32                  `protobuf:"varint,5,opt,name=limit,proto3" json:"limit,omitempty"`
@@ -1514,7 +1594,7 @@ type StreamFilter struct {
 
 func (x *StreamFilter) Reset() {
 	*x = StreamFilter{}
-	mi := &file_nyttig_v1_nyttig_proto_msgTypes[22]
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1526,7 +1606,7 @@ func (x *StreamFilter) String() string {
 func (*StreamFilter) ProtoMessage() {}
 
 func (x *StreamFilter) ProtoReflect() protoreflect.Message {
-	mi := &file_nyttig_v1_nyttig_proto_msgTypes[22]
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1539,7 +1619,7 @@ func (x *StreamFilter) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StreamFilter.ProtoReflect.Descriptor instead.
 func (*StreamFilter) Descriptor() ([]byte, []int) {
-	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{22}
+	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *StreamFilter) GetSourceId() int64 {
@@ -1598,7 +1678,7 @@ type ServerMessage struct {
 
 func (x *ServerMessage) Reset() {
 	*x = ServerMessage{}
-	mi := &file_nyttig_v1_nyttig_proto_msgTypes[23]
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1610,7 +1690,7 @@ func (x *ServerMessage) String() string {
 func (*ServerMessage) ProtoMessage() {}
 
 func (x *ServerMessage) ProtoReflect() protoreflect.Message {
-	mi := &file_nyttig_v1_nyttig_proto_msgTypes[23]
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1623,7 +1703,7 @@ func (x *ServerMessage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ServerMessage.ProtoReflect.Descriptor instead.
 func (*ServerMessage) Descriptor() ([]byte, []int) {
-	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{23}
+	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *ServerMessage) GetMsg() isServerMessage_Msg {
@@ -1690,7 +1770,7 @@ type Reset struct {
 
 func (x *Reset) Reset() {
 	*x = Reset{}
-	mi := &file_nyttig_v1_nyttig_proto_msgTypes[24]
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1702,7 +1782,7 @@ func (x *Reset) String() string {
 func (*Reset) ProtoMessage() {}
 
 func (x *Reset) ProtoReflect() protoreflect.Message {
-	mi := &file_nyttig_v1_nyttig_proto_msgTypes[24]
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1715,7 +1795,7 @@ func (x *Reset) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Reset.ProtoReflect.Descriptor instead.
 func (*Reset) Descriptor() ([]byte, []int) {
-	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{24}
+	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{25}
 }
 
 type Complete struct {
@@ -1726,7 +1806,7 @@ type Complete struct {
 
 func (x *Complete) Reset() {
 	*x = Complete{}
-	mi := &file_nyttig_v1_nyttig_proto_msgTypes[25]
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1738,7 +1818,7 @@ func (x *Complete) String() string {
 func (*Complete) ProtoMessage() {}
 
 func (x *Complete) ProtoReflect() protoreflect.Message {
-	mi := &file_nyttig_v1_nyttig_proto_msgTypes[25]
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1751,7 +1831,7 @@ func (x *Complete) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Complete.ProtoReflect.Descriptor instead.
 func (*Complete) Descriptor() ([]byte, []int) {
-	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{25}
+	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{26}
 }
 
 var File_nyttig_v1_nyttig_proto protoreflect.FileDescriptor
@@ -1791,11 +1871,13 @@ const file_nyttig_v1_nyttig_proto_rawDesc = "" +
 	"fetched_at\x18\n" +
 	" \x01(\v2\x1a.google.protobuf.TimestampR\tfetchedAt\x12\"\n" +
 	"\x04tags\x18\v \x03(\v2\x0e.nyttig.v1.TagR\x04tags\x12\x16\n" +
-	"\x06viewed\x18\f \x01(\bR\x06viewed\"?\n" +
+	"\x06viewed\x18\f \x01(\bR\x06viewed\"^\n" +
 	"\x03Tag\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\x03R\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x14\n" +
-	"\x05color\x18\x03 \x01(\tR\x05color\"\xb4\x01\n" +
+	"\x05color\x18\x03 \x01(\tR\x05color\x12\x1d\n" +
+	"\n" +
+	"parent_ids\x18\x04 \x03(\x03R\tparentIds\"\xb4\x01\n" +
 	"\aTagRule\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\x03R\x02id\x12\x1b\n" +
 	"\tsource_id\x18\x02 \x01(\x03R\bsourceId\x12\x15\n" +
@@ -1836,16 +1918,24 @@ const file_nyttig_v1_nyttig_proto_rawDesc = "" +
 	"\x13ListSourcesResponse\x12+\n" +
 	"\asources\x18\x01 \x03(\v2\x11.nyttig.v1.SourceR\asources\"3\n" +
 	"\x14RefreshSourceRequest\x12\x1b\n" +
-	"\tsource_id\x18\x01 \x01(\x03R\bsourceId\"9\n" +
+	"\tsource_id\x18\x01 \x01(\x03R\bsourceId\"X\n" +
 	"\rAddTagRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x14\n" +
-	"\x05color\x18\x02 \x01(\tR\x05color\"i\n" +
+	"\x05color\x18\x02 \x01(\tR\x05color\x12\x1d\n" +
+	"\n" +
+	"parent_ids\x18\x03 \x03(\x03R\tparentIds\"\x1e\n" +
+	"\n" +
+	"TagParents\x12\x10\n" +
+	"\x03ids\x18\x01 \x03(\x03R\x03ids\"\xab\x01\n" +
 	"\x10UpdateTagRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\x03R\x02id\x12\x17\n" +
 	"\x04name\x18\x02 \x01(\tH\x00R\x04name\x88\x01\x01\x12\x19\n" +
-	"\x05color\x18\x03 \x01(\tH\x01R\x05color\x88\x01\x01B\a\n" +
+	"\x05color\x18\x03 \x01(\tH\x01R\x05color\x88\x01\x01\x124\n" +
+	"\aparents\x18\x04 \x01(\v2\x15.nyttig.v1.TagParentsH\x02R\aparents\x88\x01\x01B\a\n" +
 	"\x05_nameB\b\n" +
-	"\x06_color\"\"\n" +
+	"\x06_colorB\n" +
+	"\n" +
+	"\b_parents\"\"\n" +
 	"\x10RemoveTagRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\x03R\x02id\"6\n" +
 	"\x10ListTagsResponse\x12\"\n" +
@@ -1867,7 +1957,7 @@ const file_nyttig_v1_nyttig_proto_rawDesc = "" +
 	"\x05limit\x18\x04 \x01(\x05R\x05limit\"V\n" +
 	"\x13TestTagRuleResponse\x12%\n" +
 	"\x05items\x18\x01 \x03(\v2\x0f.nyttig.v1.ItemR\x05items\x12\x18\n" +
-	"\ascanned\x18\x02 \x01(\x05R\ascanned\"\xc0\x01\n" +
+	"\ascanned\x18\x02 \x01(\x05R\ascanned\"\xdd\x01\n" +
 	"\rSearchRequest\x12\x14\n" +
 	"\x05query\x18\x01 \x01(\tR\x05query\x12\x1b\n" +
 	"\tsource_id\x18\x02 \x01(\x03R\bsourceId\x12\x15\n" +
@@ -1875,7 +1965,8 @@ const file_nyttig_v1_nyttig_proto_rawDesc = "" +
 	"\x05limit\x18\x04 \x01(\x05R\x05limit\x12\x16\n" +
 	"\x06offset\x18\x05 \x01(\x05R\x06offset\x12\x12\n" +
 	"\x04sort\x18\x06 \x01(\tR\x04sort\x12#\n" +
-	"\runviewed_only\x18\a \x01(\bR\funviewedOnly\"M\n" +
+	"\runviewed_only\x18\a \x01(\bR\funviewedOnly\x12\x1b\n" +
+	"\ttag_exact\x18\b \x01(\bR\btagExact\"M\n" +
 	"\x0eSearchResponse\x12%\n" +
 	"\x05items\x18\x01 \x03(\v2\x0f.nyttig.v1.ItemR\x05items\x12\x14\n" +
 	"\x05total\x18\x02 \x01(\x05R\x05total\".\n" +
@@ -1931,7 +2022,7 @@ func file_nyttig_v1_nyttig_proto_rawDescGZIP() []byte {
 	return file_nyttig_v1_nyttig_proto_rawDescData
 }
 
-var file_nyttig_v1_nyttig_proto_msgTypes = make([]protoimpl.MessageInfo, 26)
+var file_nyttig_v1_nyttig_proto_msgTypes = make([]protoimpl.MessageInfo, 27)
 var file_nyttig_v1_nyttig_proto_goTypes = []any{
 	(*Source)(nil),                // 0: nyttig.v1.Source
 	(*Item)(nil),                  // 1: nyttig.v1.Item
@@ -1943,77 +2034,79 @@ var file_nyttig_v1_nyttig_proto_goTypes = []any{
 	(*ListSourcesResponse)(nil),   // 7: nyttig.v1.ListSourcesResponse
 	(*RefreshSourceRequest)(nil),  // 8: nyttig.v1.RefreshSourceRequest
 	(*AddTagRequest)(nil),         // 9: nyttig.v1.AddTagRequest
-	(*UpdateTagRequest)(nil),      // 10: nyttig.v1.UpdateTagRequest
-	(*RemoveTagRequest)(nil),      // 11: nyttig.v1.RemoveTagRequest
-	(*ListTagsResponse)(nil),      // 12: nyttig.v1.ListTagsResponse
-	(*AddTagRuleRequest)(nil),     // 13: nyttig.v1.AddTagRuleRequest
-	(*RemoveTagRuleRequest)(nil),  // 14: nyttig.v1.RemoveTagRuleRequest
-	(*ListTagRulesResponse)(nil),  // 15: nyttig.v1.ListTagRulesResponse
-	(*TestTagRuleRequest)(nil),    // 16: nyttig.v1.TestTagRuleRequest
-	(*TestTagRuleResponse)(nil),   // 17: nyttig.v1.TestTagRuleResponse
-	(*SearchRequest)(nil),         // 18: nyttig.v1.SearchRequest
-	(*SearchResponse)(nil),        // 19: nyttig.v1.SearchResponse
-	(*MarkViewedRequest)(nil),     // 20: nyttig.v1.MarkViewedRequest
-	(*ClientMessage)(nil),         // 21: nyttig.v1.ClientMessage
-	(*StreamFilter)(nil),          // 22: nyttig.v1.StreamFilter
-	(*ServerMessage)(nil),         // 23: nyttig.v1.ServerMessage
-	(*Reset)(nil),                 // 24: nyttig.v1.Reset
-	(*Complete)(nil),              // 25: nyttig.v1.Complete
-	(*timestamppb.Timestamp)(nil), // 26: google.protobuf.Timestamp
-	(*emptypb.Empty)(nil),         // 27: google.protobuf.Empty
+	(*TagParents)(nil),            // 10: nyttig.v1.TagParents
+	(*UpdateTagRequest)(nil),      // 11: nyttig.v1.UpdateTagRequest
+	(*RemoveTagRequest)(nil),      // 12: nyttig.v1.RemoveTagRequest
+	(*ListTagsResponse)(nil),      // 13: nyttig.v1.ListTagsResponse
+	(*AddTagRuleRequest)(nil),     // 14: nyttig.v1.AddTagRuleRequest
+	(*RemoveTagRuleRequest)(nil),  // 15: nyttig.v1.RemoveTagRuleRequest
+	(*ListTagRulesResponse)(nil),  // 16: nyttig.v1.ListTagRulesResponse
+	(*TestTagRuleRequest)(nil),    // 17: nyttig.v1.TestTagRuleRequest
+	(*TestTagRuleResponse)(nil),   // 18: nyttig.v1.TestTagRuleResponse
+	(*SearchRequest)(nil),         // 19: nyttig.v1.SearchRequest
+	(*SearchResponse)(nil),        // 20: nyttig.v1.SearchResponse
+	(*MarkViewedRequest)(nil),     // 21: nyttig.v1.MarkViewedRequest
+	(*ClientMessage)(nil),         // 22: nyttig.v1.ClientMessage
+	(*StreamFilter)(nil),          // 23: nyttig.v1.StreamFilter
+	(*ServerMessage)(nil),         // 24: nyttig.v1.ServerMessage
+	(*Reset)(nil),                 // 25: nyttig.v1.Reset
+	(*Complete)(nil),              // 26: nyttig.v1.Complete
+	(*timestamppb.Timestamp)(nil), // 27: google.protobuf.Timestamp
+	(*emptypb.Empty)(nil),         // 28: google.protobuf.Empty
 }
 var file_nyttig_v1_nyttig_proto_depIdxs = []int32{
-	26, // 0: nyttig.v1.Source.created_at:type_name -> google.protobuf.Timestamp
-	26, // 1: nyttig.v1.Source.last_fetch:type_name -> google.protobuf.Timestamp
-	26, // 2: nyttig.v1.Item.published:type_name -> google.protobuf.Timestamp
-	26, // 3: nyttig.v1.Item.fetched_at:type_name -> google.protobuf.Timestamp
+	27, // 0: nyttig.v1.Source.created_at:type_name -> google.protobuf.Timestamp
+	27, // 1: nyttig.v1.Source.last_fetch:type_name -> google.protobuf.Timestamp
+	27, // 2: nyttig.v1.Item.published:type_name -> google.protobuf.Timestamp
+	27, // 3: nyttig.v1.Item.fetched_at:type_name -> google.protobuf.Timestamp
 	2,  // 4: nyttig.v1.Item.tags:type_name -> nyttig.v1.Tag
 	0,  // 5: nyttig.v1.ListSourcesResponse.sources:type_name -> nyttig.v1.Source
-	2,  // 6: nyttig.v1.ListTagsResponse.tags:type_name -> nyttig.v1.Tag
-	3,  // 7: nyttig.v1.ListTagRulesResponse.rules:type_name -> nyttig.v1.TagRule
-	1,  // 8: nyttig.v1.TestTagRuleResponse.items:type_name -> nyttig.v1.Item
-	1,  // 9: nyttig.v1.SearchResponse.items:type_name -> nyttig.v1.Item
-	22, // 10: nyttig.v1.ClientMessage.filter:type_name -> nyttig.v1.StreamFilter
-	1,  // 11: nyttig.v1.ServerMessage.item:type_name -> nyttig.v1.Item
-	24, // 12: nyttig.v1.ServerMessage.reset:type_name -> nyttig.v1.Reset
-	25, // 13: nyttig.v1.ServerMessage.complete:type_name -> nyttig.v1.Complete
-	4,  // 14: nyttig.v1.Nyttig.AddSource:input_type -> nyttig.v1.AddSourceRequest
-	5,  // 15: nyttig.v1.Nyttig.RemoveSource:input_type -> nyttig.v1.RemoveSourceRequest
-	6,  // 16: nyttig.v1.Nyttig.UpdateSource:input_type -> nyttig.v1.UpdateSourceRequest
-	27, // 17: nyttig.v1.Nyttig.ListSources:input_type -> google.protobuf.Empty
-	8,  // 18: nyttig.v1.Nyttig.RefreshSource:input_type -> nyttig.v1.RefreshSourceRequest
-	9,  // 19: nyttig.v1.Nyttig.AddTag:input_type -> nyttig.v1.AddTagRequest
-	10, // 20: nyttig.v1.Nyttig.UpdateTag:input_type -> nyttig.v1.UpdateTagRequest
-	11, // 21: nyttig.v1.Nyttig.RemoveTag:input_type -> nyttig.v1.RemoveTagRequest
-	27, // 22: nyttig.v1.Nyttig.ListTags:input_type -> google.protobuf.Empty
-	13, // 23: nyttig.v1.Nyttig.AddTagRule:input_type -> nyttig.v1.AddTagRuleRequest
-	14, // 24: nyttig.v1.Nyttig.RemoveTagRule:input_type -> nyttig.v1.RemoveTagRuleRequest
-	27, // 25: nyttig.v1.Nyttig.ListTagRules:input_type -> google.protobuf.Empty
-	16, // 26: nyttig.v1.Nyttig.TestTagRule:input_type -> nyttig.v1.TestTagRuleRequest
-	21, // 27: nyttig.v1.Nyttig.StreamItems:input_type -> nyttig.v1.ClientMessage
-	18, // 28: nyttig.v1.Nyttig.Search:input_type -> nyttig.v1.SearchRequest
-	20, // 29: nyttig.v1.Nyttig.MarkViewed:input_type -> nyttig.v1.MarkViewedRequest
-	0,  // 30: nyttig.v1.Nyttig.AddSource:output_type -> nyttig.v1.Source
-	27, // 31: nyttig.v1.Nyttig.RemoveSource:output_type -> google.protobuf.Empty
-	0,  // 32: nyttig.v1.Nyttig.UpdateSource:output_type -> nyttig.v1.Source
-	7,  // 33: nyttig.v1.Nyttig.ListSources:output_type -> nyttig.v1.ListSourcesResponse
-	27, // 34: nyttig.v1.Nyttig.RefreshSource:output_type -> google.protobuf.Empty
-	2,  // 35: nyttig.v1.Nyttig.AddTag:output_type -> nyttig.v1.Tag
-	2,  // 36: nyttig.v1.Nyttig.UpdateTag:output_type -> nyttig.v1.Tag
-	27, // 37: nyttig.v1.Nyttig.RemoveTag:output_type -> google.protobuf.Empty
-	12, // 38: nyttig.v1.Nyttig.ListTags:output_type -> nyttig.v1.ListTagsResponse
-	3,  // 39: nyttig.v1.Nyttig.AddTagRule:output_type -> nyttig.v1.TagRule
-	27, // 40: nyttig.v1.Nyttig.RemoveTagRule:output_type -> google.protobuf.Empty
-	15, // 41: nyttig.v1.Nyttig.ListTagRules:output_type -> nyttig.v1.ListTagRulesResponse
-	17, // 42: nyttig.v1.Nyttig.TestTagRule:output_type -> nyttig.v1.TestTagRuleResponse
-	23, // 43: nyttig.v1.Nyttig.StreamItems:output_type -> nyttig.v1.ServerMessage
-	19, // 44: nyttig.v1.Nyttig.Search:output_type -> nyttig.v1.SearchResponse
-	27, // 45: nyttig.v1.Nyttig.MarkViewed:output_type -> google.protobuf.Empty
-	30, // [30:46] is the sub-list for method output_type
-	14, // [14:30] is the sub-list for method input_type
-	14, // [14:14] is the sub-list for extension type_name
-	14, // [14:14] is the sub-list for extension extendee
-	0,  // [0:14] is the sub-list for field type_name
+	10, // 6: nyttig.v1.UpdateTagRequest.parents:type_name -> nyttig.v1.TagParents
+	2,  // 7: nyttig.v1.ListTagsResponse.tags:type_name -> nyttig.v1.Tag
+	3,  // 8: nyttig.v1.ListTagRulesResponse.rules:type_name -> nyttig.v1.TagRule
+	1,  // 9: nyttig.v1.TestTagRuleResponse.items:type_name -> nyttig.v1.Item
+	1,  // 10: nyttig.v1.SearchResponse.items:type_name -> nyttig.v1.Item
+	23, // 11: nyttig.v1.ClientMessage.filter:type_name -> nyttig.v1.StreamFilter
+	1,  // 12: nyttig.v1.ServerMessage.item:type_name -> nyttig.v1.Item
+	25, // 13: nyttig.v1.ServerMessage.reset:type_name -> nyttig.v1.Reset
+	26, // 14: nyttig.v1.ServerMessage.complete:type_name -> nyttig.v1.Complete
+	4,  // 15: nyttig.v1.Nyttig.AddSource:input_type -> nyttig.v1.AddSourceRequest
+	5,  // 16: nyttig.v1.Nyttig.RemoveSource:input_type -> nyttig.v1.RemoveSourceRequest
+	6,  // 17: nyttig.v1.Nyttig.UpdateSource:input_type -> nyttig.v1.UpdateSourceRequest
+	28, // 18: nyttig.v1.Nyttig.ListSources:input_type -> google.protobuf.Empty
+	8,  // 19: nyttig.v1.Nyttig.RefreshSource:input_type -> nyttig.v1.RefreshSourceRequest
+	9,  // 20: nyttig.v1.Nyttig.AddTag:input_type -> nyttig.v1.AddTagRequest
+	11, // 21: nyttig.v1.Nyttig.UpdateTag:input_type -> nyttig.v1.UpdateTagRequest
+	12, // 22: nyttig.v1.Nyttig.RemoveTag:input_type -> nyttig.v1.RemoveTagRequest
+	28, // 23: nyttig.v1.Nyttig.ListTags:input_type -> google.protobuf.Empty
+	14, // 24: nyttig.v1.Nyttig.AddTagRule:input_type -> nyttig.v1.AddTagRuleRequest
+	15, // 25: nyttig.v1.Nyttig.RemoveTagRule:input_type -> nyttig.v1.RemoveTagRuleRequest
+	28, // 26: nyttig.v1.Nyttig.ListTagRules:input_type -> google.protobuf.Empty
+	17, // 27: nyttig.v1.Nyttig.TestTagRule:input_type -> nyttig.v1.TestTagRuleRequest
+	22, // 28: nyttig.v1.Nyttig.StreamItems:input_type -> nyttig.v1.ClientMessage
+	19, // 29: nyttig.v1.Nyttig.Search:input_type -> nyttig.v1.SearchRequest
+	21, // 30: nyttig.v1.Nyttig.MarkViewed:input_type -> nyttig.v1.MarkViewedRequest
+	0,  // 31: nyttig.v1.Nyttig.AddSource:output_type -> nyttig.v1.Source
+	28, // 32: nyttig.v1.Nyttig.RemoveSource:output_type -> google.protobuf.Empty
+	0,  // 33: nyttig.v1.Nyttig.UpdateSource:output_type -> nyttig.v1.Source
+	7,  // 34: nyttig.v1.Nyttig.ListSources:output_type -> nyttig.v1.ListSourcesResponse
+	28, // 35: nyttig.v1.Nyttig.RefreshSource:output_type -> google.protobuf.Empty
+	2,  // 36: nyttig.v1.Nyttig.AddTag:output_type -> nyttig.v1.Tag
+	2,  // 37: nyttig.v1.Nyttig.UpdateTag:output_type -> nyttig.v1.Tag
+	28, // 38: nyttig.v1.Nyttig.RemoveTag:output_type -> google.protobuf.Empty
+	13, // 39: nyttig.v1.Nyttig.ListTags:output_type -> nyttig.v1.ListTagsResponse
+	3,  // 40: nyttig.v1.Nyttig.AddTagRule:output_type -> nyttig.v1.TagRule
+	28, // 41: nyttig.v1.Nyttig.RemoveTagRule:output_type -> google.protobuf.Empty
+	16, // 42: nyttig.v1.Nyttig.ListTagRules:output_type -> nyttig.v1.ListTagRulesResponse
+	18, // 43: nyttig.v1.Nyttig.TestTagRule:output_type -> nyttig.v1.TestTagRuleResponse
+	24, // 44: nyttig.v1.Nyttig.StreamItems:output_type -> nyttig.v1.ServerMessage
+	20, // 45: nyttig.v1.Nyttig.Search:output_type -> nyttig.v1.SearchResponse
+	28, // 46: nyttig.v1.Nyttig.MarkViewed:output_type -> google.protobuf.Empty
+	31, // [31:47] is the sub-list for method output_type
+	15, // [15:31] is the sub-list for method input_type
+	15, // [15:15] is the sub-list for extension type_name
+	15, // [15:15] is the sub-list for extension extendee
+	0,  // [0:15] is the sub-list for field type_name
 }
 
 func init() { file_nyttig_v1_nyttig_proto_init() }
@@ -2022,11 +2115,11 @@ func file_nyttig_v1_nyttig_proto_init() {
 		return
 	}
 	file_nyttig_v1_nyttig_proto_msgTypes[6].OneofWrappers = []any{}
-	file_nyttig_v1_nyttig_proto_msgTypes[10].OneofWrappers = []any{}
-	file_nyttig_v1_nyttig_proto_msgTypes[21].OneofWrappers = []any{
+	file_nyttig_v1_nyttig_proto_msgTypes[11].OneofWrappers = []any{}
+	file_nyttig_v1_nyttig_proto_msgTypes[22].OneofWrappers = []any{
 		(*ClientMessage_Filter)(nil),
 	}
-	file_nyttig_v1_nyttig_proto_msgTypes[23].OneofWrappers = []any{
+	file_nyttig_v1_nyttig_proto_msgTypes[24].OneofWrappers = []any{
 		(*ServerMessage_Item)(nil),
 		(*ServerMessage_Reset_)(nil),
 		(*ServerMessage_Complete)(nil),
@@ -2037,7 +2130,7 @@ func file_nyttig_v1_nyttig_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_nyttig_v1_nyttig_proto_rawDesc), len(file_nyttig_v1_nyttig_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   26,
+			NumMessages:   27,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

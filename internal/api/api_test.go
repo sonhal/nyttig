@@ -151,13 +151,20 @@ func TestItems(t *testing.T) {
 		t.Errorf("unsafe link passed through: %s", body)
 	}
 
+	if rec := th.do("GET", "/api/items?tag=4&tag_exact=1", "", nil); rec.Code != 200 || !fc.lastSrch.TagExact || fc.lastSrch.TagId != 4 {
+		t.Errorf("tag_exact: %d, SearchRequest = %v", rec.Code, fc.lastSrch)
+	}
+	if rec := th.do("GET", "/api/items?tag=4", "", nil); rec.Code != 200 || fc.lastSrch.TagExact {
+		t.Errorf("tag without tag_exact: %d, SearchRequest = %v", rec.Code, fc.lastSrch)
+	}
+
 	// Defaults.
 	if rec := th.do("GET", "/api/items", "", nil); rec.Code != 200 || fc.lastSrch.Limit != 100 || fc.lastSrch.Offset != 0 {
 		t.Errorf("defaults: %d limit=%d offset=%d", rec.Code, fc.lastSrch.Limit, fc.lastSrch.Offset)
 	}
 
 	for _, q := range []string{
-		"source=-1", "tag=x", "sort=random", "unviewed=maybe", "limit=0", "limit=501", "offset=-1",
+		"source=-1", "tag=x", "tag_exact=maybe", "sort=random", "unviewed=maybe", "limit=0", "limit=501", "offset=-1",
 		"q=" + strings.Repeat("a", maxQueryLen+1),
 	} {
 		if rec := th.do("GET", "/api/items?"+q, "", nil); rec.Code != http.StatusBadRequest {

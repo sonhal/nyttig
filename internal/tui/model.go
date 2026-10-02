@@ -115,7 +115,7 @@ func (m *Model) connectAndLoad() tea.Msg {
 	tags := make([]TagInfo, 0, len(tagResp.Tags))
 	tagColors := make(map[string]string)
 	for _, tag := range tagResp.Tags {
-		tags = append(tags, TagInfo{ID: tag.Id, Name: tag.Name, Color: tag.Color})
+		tags = append(tags, TagInfo{ID: tag.Id, Name: tag.Name, Color: tag.Color, ParentIDs: tag.ParentIds})
 		if tag.Color != "" {
 			tagColors[tag.Name] = tag.Color
 		}

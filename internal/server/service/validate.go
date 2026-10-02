@@ -19,6 +19,7 @@ const (
 	maxTagNameLen      = 64
 	maxURLLen          = 2048
 	maxPatternLen      = 1024
+	maxTagParents      = 16
 
 	// minRefreshSec keeps a source from being polled more than once a minute.
 	minRefreshSec = 60
@@ -102,6 +103,26 @@ func validateAbbreviation(abbr string) error {
 		return nil
 	}
 	return validateName("abbreviation", abbr, maxAbbreviationLen)
+}
+
+// validateParentIDs checks a tag's parent set: positive IDs, no duplicates,
+// at most maxTagParents. Whether the tags exist, and whether the edges make
+// a cycle, is the db layer's check.
+func validateParentIDs(ids []int64) error {
+	if len(ids) > maxTagParents {
+		return fmt.Errorf("a tag can have at most %d parents, got %d", maxTagParents, len(ids))
+	}
+	seen := make(map[int64]bool, len(ids))
+	for _, id := range ids {
+		if id <= 0 {
+			return fmt.Errorf("parent ids must be positive, got %d", id)
+		}
+		if seen[id] {
+			return fmt.Errorf("duplicate parent id %d", id)
+		}
+		seen[id] = true
+	}
+	return nil
 }
 
 // validateField accepts the tag-rule match fields.

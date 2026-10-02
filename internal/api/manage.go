@@ -173,6 +173,29 @@ func (b jsonBody) id(field string) (int64, error) {
 	return n, nil
 }
 
+// idList returns an array of ID strings and whether the field is present.
+// Each element is validated like id, and must be positive: "0" is no tag.
+func (b jsonBody) idList(field string) ([]int64, bool, error) {
+	v, ok := b[field]
+	if !ok {
+		return nil, false, nil
+	}
+	bad := fmt.Errorf("%w: %s must be an array of ID strings such as [\"12\"]", errBody, field)
+	var raw []string
+	if err := json.Unmarshal(v, &raw); err != nil {
+		return nil, true, bad
+	}
+	ids := make([]int64, len(raw))
+	for i, s := range raw {
+		n, err := strconv.ParseInt(s, 10, 64)
+		if err != nil || n <= 0 {
+			return nil, true, bad
+		}
+		ids[i] = n
+	}
+	return ids, true, nil
+}
+
 // pathID parses the {id} path segment, which must be a positive integer.
 func pathID(w http.ResponseWriter, r *http.Request) (int64, bool) {
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
@@ -299,7 +322,7 @@ func (a *handlers) removeSource(w http.ResponseWriter, r *http.Request) {
 
 // ── Tags ──────────────────────────────────────────────────────
 
-var tagFields = []string{"name", "color"}
+var tagFields = []string{"name", "color", "parent_ids"}
 
 func (a *handlers) addTag(w http.ResponseWriter, r *http.Request) {
 	b, ok := readBody(w, r, tagFields...)
@@ -308,13 +331,14 @@ func (a *handlers) addTag(w http.ResponseWriter, r *http.Request) {
 	}
 	name, err1 := b.str("name")
 	color, err2 := b.str("color")
-	if err := firstErr(err1, err2); err != nil {
+	parents, _, err3 := b.idList("parent_ids")
+	if err := firstErr(err1, err2, err3); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	ctx, cancel := a.rpcContext(r)
 	defer cancel()
-	tag, err := a.client.AddTag(ctx, &pb.AddTagRequest{Name: valueOr(name, ""), Color: valueOr(color, "")})
+	tag, err := a.client.AddTag(ctx, &pb.AddTagRequest{Name: valueOr(name, ""), Color: valueOr(color, ""), ParentIds: parents})
 	if err != nil {
 		writeRPCError(w, err)
 		return
@@ -323,8 +347,9 @@ func (a *handlers) addTag(w http.ResponseWriter, r *http.Request) {
 	writeProtoStatus(w, http.StatusCreated, tag)
 }
 
-// updateTag renames and/or recolors a tag in place, keeping its rules and
-// item assignments. Absent fields are unchanged; color "" clears it.
+// updateTag renames, recolors and/or re-parents a tag in place, keeping its
+// rules and item assignments. Absent fields are unchanged; color "" clears
+// it; parent_ids replaces the parents, and [] makes the tag top-level.
 func (a *handlers) updateTag(w http.ResponseWriter, r *http.Request) {
 	id, ok := pathID(w, r)
 	if !ok {
@@ -338,9 +363,13 @@ func (a *handlers) updateTag(w http.ResponseWriter, r *http.Request) {
 	var err1, err2 error
 	req.Name, err1 = b.str("name")
 	req.Color, err2 = b.str("color")
-	if err := firstErr(err1, err2); err != nil {
+	parents, present, err3 := b.idList("parent_ids")
+	if err := firstErr(err1, err2, err3); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
+	}
+	if present {
+		req.Parents = &pb.TagParents{Ids: parents}
 	}
 	ctx, cancel := a.rpcContext(r)
 	defer cancel()

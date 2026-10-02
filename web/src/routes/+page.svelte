@@ -28,6 +28,7 @@
 	import { metadata } from '$lib/metadata.svelte';
 	import { Picker } from '$lib/picker.svelte';
 	import { prefs } from '$lib/prefs.svelte';
+	import { treeOrder } from '$lib/tagtree';
 	import { applyCompletion, complete, format, parse, type Candidate } from '$lib/query';
 	import { markViewed, moveCursor, setFollow } from '$lib/reducer';
 	import { oneLine, safeLink } from '$lib/sanitize';
@@ -48,6 +49,8 @@
 	// Shared with the management views, which reload them after changes.
 	const sources = $derived(metadata.sources);
 	const tags = $derived(metadata.tags);
+	// Tree order, each tag once: the order of the t key and the T picker.
+	const treeTags = $derived(treeOrder(tags));
 	let unviewedTotal: number | null = $state(null);
 	let now = $state(Date.now());
 	let note = $state('');
@@ -294,10 +297,13 @@
 	}
 
 	function openPicker(kind: 'source' | 'tag') {
-		const entries = kind === 'source' ? sources : tags;
+		const entries =
+			kind === 'source'
+				? sources.map((x) => ({ x, depth: 0 }))
+				: treeTags.map((r) => ({ x: r.tag, depth: r.depth }));
 		picker.start(kind, [
 			{ id: '', label: 'all' },
-			...entries.flatMap((x) => (x.id ? [{ id: x.id, label: oneLine(x.name), color: x.color }] : []))
+			...entries.flatMap(({ x, depth }) => (x.id ? [{ id: x.id, label: oneLine(x.name), color: x.color, depth }] : []))
 		]);
 	}
 
@@ -359,7 +365,7 @@
 			case 'cycleSource':
 				return setFilter({ ...filter, source: cycleID(ids(sources), filter.source) });
 			case 'cycleTag':
-				return setFilter({ ...filter, tag: cycleID(ids(tags), filter.tag) });
+				return setFilter({ ...filter, tag: cycleID(ids(treeTags.map((r) => r.tag)), filter.tag) });
 			case 'pickSource':
 				return openPicker('source');
 			case 'pickTag':

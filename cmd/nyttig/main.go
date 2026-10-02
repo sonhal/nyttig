@@ -8,6 +8,7 @@
 //	nyttig list-sources                          # list all sources
 //	nyttig remove-source -i 1                    # remove source by ID
 //	nyttig add-tag -n "rust" -c "#FF6B35"        # create a tag
+//	nyttig add-tag -n CVE -parent "cyber security"   # create a tag under a parent
 //	nyttig list-tags                             # list all tags
 //	nyttig add-tag-rule -tag rust -p '(?i)\brust\b'  # auto-tag matching items
 //	nyttig list-tag-rules                        # list all tag rules
@@ -388,18 +389,20 @@ func addTagCmd() {
 	registerClientFlags(flags)
 
 	var (
-		name  string
-		color string
+		name    string
+		color   string
+		parents stringList
 	)
 
 	flags.StringVar(&name, "n", "", "Tag name (required)")
 	flags.StringVar(&name, "name", "", "Tag name (required)")
 	flags.StringVar(&color, "c", "", "Tag color (hex, e.g. '#FF6B35')")
 	flags.StringVar(&color, "color", "", "Tag color (hex, e.g. '#FF6B35')")
+	flags.Var(&parents, "parent", "Parent tag, name or ID (repeatable)")
 
 	args := os.Args[2:]
 	if len(args) == 0 || args[0] == "--help" {
-		fmt.Fprintf(os.Stderr, "Usage: nyttig add-tag -n <name> [-c <color>]\n\n")
+		fmt.Fprintf(os.Stderr, "Usage: nyttig add-tag -n <name> [-c <color>] [-parent <name|id>]...\n\n")
 		flags.PrintDefaults()
 		os.Exit(0)
 	}
@@ -414,9 +417,15 @@ func addTagCmd() {
 	defer c.Close()
 
 	ctx := context.Background()
+	parentIDs, err := resolveTagIDs(ctx, c, parents)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
 	tag, err := c.AddTag(ctx, &pb.AddTagRequest{
-		Name:  name,
-		Color: color,
+		Name:      name,
+		Color:     color,
+		ParentIds: parentIDs,
 	})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
@@ -453,12 +462,16 @@ func listTagsCmd() {
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 	fmt.Fprintf(w, "ID\tNAME\tCOLOR\n")
 	fmt.Fprintf(w, "--\t----\t-----\n")
-	for _, tag := range resp.Tags {
-		color := tag.Color
+	for _, row := range tagTreeRows(resp.Tags) {
+		color := row.Tag.Color
 		if color == "" {
 			color = "-"
 		}
-		fmt.Fprintf(w, "%d\t%s\t%s\n", tag.Id, tag.Name, color)
+		name := strings.Repeat("  ", row.Depth) + row.Tag.Name
+		if len(row.AlsoUnder) > 0 {
+			name += " (also under: " + strings.Join(row.AlsoUnder, ", ") + ")"
+		}
+		_, _ = fmt.Fprintf(w, "%d\t%s\t%s\n", row.Tag.Id, name, color)
 	}
 	w.Flush()
 }
@@ -494,7 +507,7 @@ func removeTagCmd() {
 		os.Exit(1)
 	}
 
-	fmt.Printf("Tag %d removed (with its rules and item assignments).\n", id)
+	fmt.Printf("Tag %d removed (with its rules and item assignments; its child tags are kept).\n", id)
 }
 
 // updateTagCmd handles the "update-tag" subcommand.
@@ -503,9 +516,11 @@ func updateTagCmd() {
 	registerClientFlags(flags)
 
 	var (
-		id    int64
-		name  string
-		color string
+		id        int64
+		name      string
+		color     string
+		parents   stringList
+		noParents bool
 	)
 
 	flags.Int64Var(&id, "i", 0, "Tag ID to update (required)")
@@ -514,10 +529,12 @@ func updateTagCmd() {
 	flags.StringVar(&name, "name", "", "New tag name")
 	flags.StringVar(&color, "c", "", "New tag color (hex, e.g. '#FF6B35'); '' clears it")
 	flags.StringVar(&color, "color", "", "New tag color (hex, e.g. '#FF6B35'); '' clears it")
+	flags.Var(&parents, "parent", "Parent tag, name or ID (repeatable); replaces the tag's parents")
+	flags.BoolVar(&noParents, "no-parents", false, "Make the tag top-level (remove all its parents)")
 
 	args := os.Args[2:]
 	if len(args) == 0 || args[0] == "--help" {
-		fmt.Fprintf(os.Stderr, "Usage: nyttig update-tag -i <id> [-n <name>] [-c <color>]\n\n")
+		fmt.Fprintf(os.Stderr, "Usage: nyttig update-tag -i <id> [-n <name>] [-c <color>] [-parent <name|id>]... [-no-parents]\n\n")
 		fmt.Fprintf(os.Stderr, "Keeps the tag's rules and item assignments.\n\n")
 		flags.PrintDefaults()
 		os.Exit(0)
@@ -527,6 +544,11 @@ func updateTagCmd() {
 
 	if id == 0 {
 		fmt.Fprintf(os.Stderr, "Error: --id (-i) is required\n")
+		os.Exit(1)
+	}
+
+	if noParents && len(parents) > 0 {
+		fmt.Fprintf(os.Stderr, "Error: -parent and -no-parents cannot be used together\n")
 		os.Exit(1)
 	}
 
@@ -540,6 +562,15 @@ func updateTagCmd() {
 
 	c := newClient()
 	defer func() { _ = c.Close() }()
+
+	if noParents || len(parents) > 0 {
+		parentIDs, err := resolveTagIDs(context.Background(), c, parents)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+		req.Parents = &pb.TagParents{Ids: parentIDs}
+	}
 
 	tag, err := c.UpdateTag(context.Background(), req)
 	if err != nil {
@@ -571,6 +602,25 @@ func resolveTagID(ctx context.Context, c *client.Client, ref string) (int64, err
 	}
 	return 0, fmt.Errorf("tag %q not found (create it with 'nyttig add-tag -n %s')", ref, ref)
 }
+
+// resolveTagIDs resolves several tag references, as resolveTagID does.
+func resolveTagIDs(ctx context.Context, c *client.Client, refs []string) ([]int64, error) {
+	var ids []int64
+	for _, ref := range refs {
+		id, err := resolveTagID(ctx, c, ref)
+		if err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, nil
+}
+
+// stringList is a repeatable string flag.
+type stringList []string
+
+func (l *stringList) String() string     { return strings.Join(*l, ",") }
+func (l *stringList) Set(v string) error { *l = append(*l, v); return nil }
 
 // addTagRuleCmd handles the "add-tag-rule" subcommand.
 func addTagRuleCmd() {
@@ -778,13 +828,15 @@ func searchCmd() {
 		offset   int
 		sort     string
 		unviewed bool
+		exact    bool
 	)
 
 	flags.StringVar(&query, "q", "", "Full-text search query (or pass it as trailing arguments)")
 	flags.StringVar(&query, "query", "", "Full-text search query (or pass it as trailing arguments)")
 	flags.Int64Var(&sourceID, "s", 0, "Only items from this source ID")
 	flags.Int64Var(&sourceID, "source", 0, "Only items from this source ID")
-	flags.StringVar(&tagRef, "tag", "", "Only items with this tag (name or ID)")
+	flags.StringVar(&tagRef, "tag", "", "Only items with this tag or a tag below it (name or ID)")
+	flags.BoolVar(&exact, "exact", false, "With -tag: only items with exactly this tag, not its child tags")
 	flags.IntVar(&limit, "l", 20, "Maximum number of results")
 	flags.IntVar(&limit, "limit", 20, "Maximum number of results")
 	flags.IntVar(&offset, "offset", 0, "Skip this many results (for paging)")
@@ -824,6 +876,7 @@ func searchCmd() {
 		Query:        query,
 		SourceId:     sourceID,
 		TagId:        tagID,
+		TagExact:     exact,
 		Limit:        int32(limit),
 		Offset:       int32(offset),
 		Sort:         sort,

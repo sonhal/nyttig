@@ -95,6 +95,20 @@ color = "#336791"
 name = "linux"
 color = "#FCC624"
 
+# Tags can have parents: "cyber security" also shows CVE and linux security
+# items, and "linux" also shows linux security items.
+[[tags]]
+name = "cyber security"
+color = "#D7263D"
+
+[[tags]]
+name = "CVE"
+parents = ["cyber security"]
+
+[[tags]]
+name = "linux security"
+parents = ["cyber security", "linux"]
+
 [[tag_rules]]
 tag = "rust"
 pattern = "(?i)\\brust\\b"
@@ -113,6 +127,16 @@ field = "both"
 [[tag_rules]]
 tag = "linux"
 pattern = "(?i)\\blinux\\b"
+field = "both"
+
+[[tag_rules]]
+tag = "CVE"
+pattern = "(?i)\\bCVE-\\d{4}-\\d{4,}\\b"
+field = "both"
+
+[[tag_rules]]
+tag = "linux security"
+pattern = "(?i)\\blinux\\b.*\\b(vulnerabilit|exploit|privilege escalation)"
 field = "both"
 ```
 
@@ -206,6 +230,7 @@ clients such as nyttig-api; `socket` must then be a Unix socket path.
 |---------|----------|---------|-------------------------------------------|
 | `name`  | yes      | —       | Tag name (unique)                         |
 | `color` | no       | —       | Hex color for TUI chip, e.g. `"#FF6B35"`  |
+| `parents` | no     | —       | Names of parent tags (see [Tag tree](#tag-tree)); may be declared later in the file, an unknown name is created |
 
 ### `[[tag_rules]]`
 
@@ -253,7 +278,7 @@ These are global flags accepted by every subcommand and the TUI.
 | `/`          | Focus search bar. Type to filter with FTS5 search.       |
 | `Esc`        | Clear search and defocus search bar.                     |
 | `s`          | Cycle source filter (all → specific source → all).       |
-| `t`          | Cycle tag filter (all → specific tag → all).             |
+| `t`          | Cycle tag filter (all → specific tag → all), parents before their children. A parent's label shows how many tags it covers: `cyber security +2`. |
 | `o`          | Toggle sort order (newest ↔ oldest).                     |
 | `r`          | Force refresh all sources immediately.                   |
 | `Enter`      | Open selected item's link in default browser.            |
@@ -296,15 +321,15 @@ nyttig list-sources
 nyttig update-source   -id <source_id> [-n <name>] [-u <url>] [-t rss|atom] [-r refresh_sec]
                        [-enable|-disable] [-color <hex>] [-abbreviation <short>]
 nyttig remove-source   -id <source_id>
-nyttig add-tag         -n <name> [-c <hex_color>]
-nyttig list-tags
-nyttig update-tag      -id <tag_id> [-n <name>] [-c <hex_color>]   # keeps rules and item assignments
+nyttig add-tag         -n <name> [-c <hex_color>] [-parent <name|id>]...
+nyttig list-tags                         # a tree: child tags are indented under their parents
+nyttig update-tag      -id <tag_id> [-n <name>] [-c <hex_color>] [-parent <name|id>]... [-no-parents]   # keeps rules and item assignments
 nyttig remove-tag      -id <tag_id>      # also removes the tag's rules and item assignments
 nyttig add-tag-rule    -tag <name|id> -p <regex> [-f title|description|both] [-s source_id] [-priority N]
 nyttig test-tag-rule   -p <regex> [-f title|description|both] [-s source_id] [-l limit]   # dry run
 nyttig list-tag-rules
 nyttig remove-tag-rule -id <rule_id>
-nyttig search          [-tag <name|id>] [-s source_id] [-l limit] [-offset N] [-sort newest|oldest] [-unviewed] [query...]
+nyttig search          [-tag <name|id>] [-s source_id] [-l limit] [-offset N] [-sort newest|oldest] [-unviewed] [-exact] [query...]
 nyttig refresh         [-id <source_id>]   # omit -id to refresh all
 ```
 
@@ -368,6 +393,28 @@ Tags are applied automatically via regex rules evaluated when items are fetched:
 - **Field scoping**: Rules can match against `title`, `description`, or `both`.
 
 Tags are purely rule-based in v1. No manual tagging UI.
+
+### Tag tree
+
+A tag can have parent tags, several if you like (`add-tag -parent`,
+`update-tag -parent ... | -no-parents`, or `parents` in `[[tags]]`). Filtering
+by a tag shows items tagged with it **or any tag below it**: with `cyber
+security` above `CVE` and `linux security`, `-tag "cyber security"` lists
+items tagged with any of the three, and `-tag CVE` only CVE items. `search
+-exact` matches the tag alone. Item chips show only the tags a rule assigned.
+The daemon rejects a parent that would make a cycle. Deleting a tag keeps its
+children; one with no other parent becomes top-level. Config seeding only adds
+parents and never removes them, so a parent set in the UI survives a restart.
+
+How it works: the parent edges live in the `tag_parents` table, and a filter
+expands the tag to its subtree when it runs (a recursive query), so a change
+to the tree applies at once, to old items too. `item_tags` still records only
+what a rule matched. The stream filter and `GET /api/items` (`tag=ID`) include
+child tags; `tag_exact=1` on `/api/items` and `search -exact` match the tag
+alone. In the web app the tags view is a tree, the tag form has a parents
+list, and the pickers list tags parents first. Filtering by a parent does not
+resend history to a stream that is already open when a child is attached
+later; the next filter change or reload does.
 
 ## Deduplication
 
@@ -568,7 +615,7 @@ the keymap, so it is always current.
 | `?`                | Help: all keys, the query syntax and the commands  |
 
 **Query bar.** `kernel tag:rust src:"Hacker News" is:unviewed sort:oldest`:
-`tag:`, `src:` (a name or abbreviation, any case), `is:unviewed` and
+`tag:` (also matches child tags), `src:` (a name or abbreviation, any case), `is:unviewed` and
 `sort:newest|oldest` set the filter; every other word is the full-text
 search. Names with spaces are quoted. Names are completed as you type
 (`Tab` accepts, `↑`/`↓` choose; on a phone tap a suggestion), and an
@@ -621,9 +668,13 @@ select it.
   (last fetch plus the interval) and the last fetch error in red. The
   interval is typed like `30m`, `1h` or `1h30m` (1 minute to 7 days).
   Deleting a source deletes its items and its source-specific rules.
-- **Tags** are renamed and recolored in place, which keeps their rules
-  and item assignments; the feed shows the new name and color. Deleting a
-  tag deletes its rules and removes it from every item.
+- **Tags** are renamed, recolored and re-parented in place, which keeps
+  their rules and item assignments; the feed shows the new name and color.
+  The list is a tree: a tag with several parents shows under each, the
+  repeats dimmed. Deleting a tag deletes its rules and removes it from
+  every item (the confirmation counts the tag's own assignments, not the
+  items it shows through its children); its child tags are kept, and those
+  with no other parent become top-level.
 - **Rules** show a live preview while you type the pattern: the daemon
   runs it (Go RE2 syntax, e.g. `(?i)` for case-insensitive) against the
   most recent 500 items and lists the matches. A rule only tags items
@@ -715,6 +766,7 @@ as `sqlite_version`, and the daemon refuses to start if that library lacks FTS5.
 | `tags`        | User-defined tags with optional color             |
 | `tag_rules`   | Regex rules for automatic tagging                 |
 | `item_tags`   | Many-to-many join between items and tags          |
+| `tag_parents` | Tag tree: (child, parent) edges, a tag can have several parents |
 | `view_state`  | Per-item view tracking (row exists = viewed)      |
 | `items_fts`   | FTS5 virtual table for full-text search           |
 
@@ -724,7 +776,8 @@ newest-first ordering sorts that column as text. Two indexes serve the hot
 queries: `idx_items_published` on `items(published DESC, fetched_at DESC)`
 matches the feed's sort order, and `idx_item_tags_tag_id` on
 `item_tags(tag_id)` serves tag filters. (`UNIQUE(source_id, guid)` already
-indexes `source_id`.)
+indexes `source_id`.) `tag_parents(child_id, parent_id)` holds the tag tree;
+`idx_tag_parents_parent_id` serves the subtree query a tag filter runs.
 
 Removing a source, tag or tag rule that does not exist fails with gRPC
 `NotFound`, which nyttig-api returns as HTTP 404.

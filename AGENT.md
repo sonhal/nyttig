@@ -52,7 +52,7 @@ cmd/nyttig-api/main.go      nyttig-api entrypoint: flags, listen-address guard, 
 web/                        The SvelteKit app (pnpm); "pnpm build" writes a Node server to web/build/
 web/src/lib/                Pure modules (reducer, keymap, filter, query, command, highlight,
                             fuzzy, history, help, sanitize, viewed, forms, latest, meta,
-                            format) with Vitest tests next to them, plus the Svelte
+                            format, tagtree) with Vitest tests next to them, plus the Svelte
                             components; metadata.svelte.ts holds the sources and tags every
                             view shares, prefs.svelte.ts the time format (localStorage)
 web/src/routes/             / is the feed; sources/, tags/ and rules/ are the management views
@@ -77,6 +77,7 @@ deploy/systemd/             Hardened system units; nyttigd runs as a dedicated `
 deploy/README.md            VPS guide: sizing, build for Debian, mTLS for the TUI, backups, upgrades
 deploy/Caddyfile            Example reverse proxy (TLS, basic auth, /api/* vs the app)
 docs/web-client-plan.md     Plan for the nyttig-api browser client (phases and decisions)
+docs/tag-tree-plan.md       Plan for parent tags (the tag tree): decisions and phases
 ```
 
 ## Architecture notes (read before changing server code)
@@ -139,6 +140,23 @@ docs/web-client-plan.md     Plan for the nyttig-api browser client (phases and d
 - **Search** input is wrapped by `ftsQuote` (`db/items.go`) so it is matched as
   a phrase and FTS5 query syntax in user input is neutralized. Don't pass user
   input to `MATCH` unquoted.
+- **Tag tree.** A tag can have several parents (`tag_parents`, a DAG;
+  `Tag.parent_ids`). It applies **when querying**: `ListItems` expands a tag
+  filter to the tag and its descendants with the recursive `db.SubtreeSQL`
+  (`ItemFilter.TagExact` / `SearchRequest.tag_exact` turn that off), and the
+  Hub's `itemMatchesFilter` does the same walk over an in-memory snapshot of
+  the edges (`service/tagtree.go`, rebuilt after every tag change; the
+  daemon's seeding runs before `service.New`, which loads it). The two paths
+  must agree: `TestItemMatchesFilter_AgreesWithListItems` compares them.
+  `item_tags`, the tagger and item chips are unchanged: a row still means
+  "a rule matched this item". Cycles are rejected in `db.SetTagParents`
+  (check and write in one transaction, typed `ErrTagCycle`, mapped to
+  `InvalidArgument`); the CTE uses `UNION` so it ends even if one got in.
+  `UpdateTagRequest.parents` is a `TagParents` wrapper for field presence
+  (unset = unchanged, empty = top-level). Config seeding adds parent edges
+  in a second pass and never removes any. Any count of "items with this tag"
+  that describes what a delete removes (the web confirmation) must use
+  `tag_exact`.
 - **Tagging** is rule-based only (no manual tagging). Rules are regex over
   `title`/`description`/`both`, global or per-source, evaluated by `priority`.
 - **View tracking** is K9s-style: the TUI marks items viewed as they scroll
@@ -411,8 +429,9 @@ pattern for new update RPCs rather than treating zero values as "unset".
 
 - The repo README warns the project is LLM-generated; treat existing code as the
   spec and verify behavior with tests rather than assuming intent.
-- Changing a tag's name or color must go through `UpdateTag`. `RemoveTag`
-  cascade-deletes the tag's rules and item assignments.
+- Changing a tag's name, color or parents must go through `UpdateTag`.
+  `RemoveTag` cascade-deletes the tag's rules, item assignments and parent
+  edges (its children are kept and, with no other parent, become top-level).
 - Two migration directories exist (`migrations/` and
   `internal/server/db/migrations/`); the DB applies the embedded set under
   `internal/server/db/migrations/`. Keep them in sync if you add migrations.

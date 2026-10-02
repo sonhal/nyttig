@@ -61,6 +61,22 @@ color = "#336791"
 name = "linux"
 color = "#FCC624"
 
+# A tag can have parents (several, even). Filtering by "cyber security" also
+# shows items tagged "CVE" or "linux security"; filtering by "linux" also shows
+# "linux security". Parents may be declared anywhere in the file, and a name
+# that is not declared is created. Any tag can have its own rules.
+[[tags]]
+name = "cyber security"
+color = "#D7263D"
+
+[[tags]]
+name = "CVE"
+parents = ["cyber security"]
+
+[[tags]]
+name = "linux security"
+parents = ["cyber security", "linux"]
+
 [[tag_rules]]
 tag = "rust"
 pattern = "(?i)\\brust\\b"
@@ -81,3 +97,13 @@ tag = "linux"
 pattern = "(?i)\\blinux\\b"
 field = "both"
 
+
+[[tag_rules]]
+tag = "CVE"
+pattern = "(?i)\\bCVE-\\d{4}-\\d{4,}\\b"
+field = "both"
+
+[[tag_rules]]
+tag = "linux security"
+pattern = "(?i)\\blinux\\b.*\\b(vulnerabilit|exploit|privilege escalation)"
+field = "both"
