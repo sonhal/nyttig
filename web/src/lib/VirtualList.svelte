@@ -166,6 +166,9 @@
 		if (next !== scrollTop) {
 			el.scrollTop = next;
 			scrollTop = el.scrollTop;
+			// At once, not in the effect: if items change in the same tick
+			// (a row marked viewed), anchoring would scroll back to the old anchor.
+			updateAnchor();
 		}
 	}
 
@@ -174,6 +177,7 @@
 		if (!el) return;
 		el.scrollTop = 0;
 		scrollTop = 0;
+		updateAnchor();
 	}
 
 	/** Number of rows that fit in the viewport. */

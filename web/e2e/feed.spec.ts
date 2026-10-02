@@ -11,9 +11,11 @@ const rows = (page: Page) => page.locator('[role=row]');
 const row = (page: Page, title: string) => rows(page).filter({ hasText: title });
 const selected = (page: Page) => page.locator('[role=row][aria-selected=true]');
 
+let pushed = 0;
+
 /** Adds an item to a feed, refreshes, and returns its title. */
 async function pushItem(page: Page, feed = 'alpha'): Promise<string> {
-	const title = `Live ${test.info().project.name} ${Date.now()}`;
+	const title = `Live ${test.info().project.name} ${Date.now()}-${++pushed}`;
 	const add = await page.request.post(`${FEEDS_URL}/add?feed=${feed}&title=${encodeURIComponent(title)}`);
 	expect(add.ok()).toBeTruthy();
 	return title;
@@ -132,16 +134,53 @@ test.describe('feed', () => {
 		await expect(rows(page).first()).toContainText(title);
 	});
 
-	test('rows on screen are marked viewed in batches', async ({ page }) => {
-		const title = await pushItem(page, 'beta');
+	test('rows the cursor goes through are read, dimmed and sent in batches', async ({ page }) => {
+		const first = await pushItem(page, 'beta');
+		const second = await pushItem(page, 'beta');
 		await refreshAll(page);
-		await expect.poll(() => unviewedIds(page)).toContain(title);
+		await expect.poll(() => unviewedIds(page)).toEqual(expect.arrayContaining([first, second]));
 		await open(page);
-		const r = row(page, title);
-		await expect(r).toBeVisible();
-		// Sent within the ~3s batch interval, then the dot goes away.
-		await expect(r.locator('.dot')).toHaveText('', { timeout: 8000 });
-		await expect.poll(() => unviewedIds(page)).not.toContain(title);
+		const r1 = row(page, first);
+		const r2 = row(page, second);
+		await expect(r1).toBeVisible();
+		await expect(r2).toBeVisible();
+		// On screen is not read: well past a batch, both are still unviewed.
+		await page.waitForTimeout(4000);
+		await expect(r1).not.toHaveClass(/\bviewed\b/);
+		expect(await unviewedIds(page)).toEqual(expect.arrayContaining([first, second]));
+
+		// Selecting a row reads it: dimmed at once, sent with the next batch.
+		await r1.click();
+		await expect(r1).toHaveClass(/\bviewed\b/);
+		await expect(r1.locator('.dot')).toHaveText('');
+		await expect(r1.locator('.cells')).toHaveCSS('opacity', '0.75');
+		await expect.poll(() => unviewedIds(page), { timeout: 8000 }).not.toContain(first);
+		// The other row is untouched.
+		await expect(r2).not.toHaveClass(/\bviewed\b/);
+		expect(await unviewedIds(page)).toContain(second);
+	});
+
+	test('stepping with j/k reads the row stepped off and the row stepped on', async ({ page }) => {
+		test.skip(isMobile(page), 'keyboard');
+		// The two newest rows; they can share a second, so either order.
+		const titles = [await pushItem(page, 'beta'), await pushItem(page, 'beta')];
+		await refreshAll(page);
+		await expect.poll(() => unviewedIds(page)).toEqual(expect.arrayContaining(titles));
+		await open(page);
+		const top = rows(page).nth(0);
+		const next = rows(page).nth(1);
+		await expect(top).toContainText(/Live /);
+		await expect(next).toContainText(/Live /);
+		// The page opens on the first row without reading it.
+		await expect(selected(page)).toHaveAttribute('data-id', (await top.getAttribute('data-id'))!);
+		await expect(top).not.toHaveClass(/\bviewed\b/);
+		await expect(next).not.toHaveClass(/\bviewed\b/);
+		await page.keyboard.press('j');
+		await expect(top).toHaveClass(/\bviewed\b/);
+		await expect(next).toHaveAttribute('aria-selected', 'true');
+		await expect(next).toHaveClass(/\bviewed\b/);
+		await expect.poll(() => unviewedIds(page), { timeout: 8000 }).not.toContain(titles[0]);
+		await expect.poll(() => unviewedIds(page)).not.toContain(titles[1]);
 	});
 
 	test('pending views are sent when the page goes away', async ({ page }) => {
@@ -154,7 +193,11 @@ test.describe('feed', () => {
 		// report requests an unloading page makes, so check the result.)
 		await page.clock.install();
 		await open(page);
-		await expect(row(page, title)).toBeVisible();
+		const r = row(page, title);
+		await expect(r).toBeVisible();
+		// Selecting it reads it.
+		await r.click();
+		await expect(r).toHaveClass(/\bviewed\b/);
 		await page.goto('about:blank');
 		await expect.poll(() => unviewedIds(page)).not.toContain(title);
 	});

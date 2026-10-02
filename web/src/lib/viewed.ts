@@ -1,7 +1,7 @@
-// View tracking, K9s-style like the TUI: rows that are on screen count as
-// viewed. IDs are collected as they scroll past and sent in batches about
-// every 3 seconds; whatever is pending when the page goes away is sent with
-// a beacon, which the browser delivers even while the page unloads.
+// View tracking: the feed reports the rows the cursor goes through as
+// viewed (read), and this sends them to the daemon in batches about every 3
+// seconds; whatever is pending when the page goes away is sent with a
+// beacon, which the browser delivers even while the page unloads.
 
 export const FLUSH_INTERVAL_MS = 3000;
 
