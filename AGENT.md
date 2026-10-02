@@ -2,6 +2,9 @@
 
 Guidance for AI coding agents working in the **nyttig** repository.
 
+**Every PR title must follow [Commits and pull requests](#commits-and-pull-requests).**
+The title becomes the commit on `main`, and CI cuts releases from it.
+
 ## What this project is
 
 Nyttig is a news aggregator with a developer-oriented terminal UI. It follows the
@@ -32,6 +35,100 @@ via a **bidirectional gRPC stream**.
 - Logging: `slog` with JSON output to stderr
 - Web client: **SvelteKit 2 + Svelte 5** (runes, TypeScript strict) on
   `@sveltejs/adapter-node`; **pnpm**, Vitest, Playwright
+
+## Commits and pull requests
+
+PRs are squash-merged: **the PR title becomes the one commit on `main`**, and
+the Tag release job reads only that subject line to decide whether to cut a
+release (see [Releases](#releases)). The commits on your branch and the PR body
+don't count. A title without a valid prefix releases nothing, even if the PR
+ships a feature. #19 (tag hierarchy) and #21 (home screen app) both shipped
+features under plain titles and didn't release.
+
+### The title format
+
+```
+<type>(<scope>)<!>: <summary> (#<PR>)    # GitHub adds the (#<PR>) suffix
+```
+
+**Type**: what the change means to someone running nyttig. It sets the release:
+
+| Type | Use for | Release |
+|---|---|---|
+| `feat` | New behavior a user can see or use: a CLI subcommand or flag, a TUI or web feature, a config key, an API endpoint or field | minor |
+| `fix` | Wrong behavior made right: a bug, crash, data race, security hole | patch |
+| `perf` | Same behavior, measurably faster or smaller | patch |
+| `refactor` | Code restructured, no behavior change | none |
+| `test` | Tests only | none |
+| `docs` | README, AGENT.md, deploy guide, comments | none |
+| `build` | Go modules, pnpm, build tags, Dependabot bumps (`build(deps):`) | none |
+| `ci` | `.github/`, `scripts/next-version.sh` | none |
+| `chore` | Anything else that ships no change to users | none |
+
+**Scope** (optional, recommended): the part of nyttig that changes, as one
+lowercase word. Use the package or area name: `db`, `fetcher`, `tagger`,
+`scheduler`, `service`, `config`, `cli`, `tui`, `api`, `web`, `proto`,
+`mtls`, `deploy`. Leave the scope out when the change spans several areas,
+like a feature built across the stack.
+
+**`!`**: add it after the type or scope (`feat(config)!:`) for a breaking
+change, and explain the migration in a `BREAKING CHANGE: ...` paragraph in the
+PR body. Here, breaking means an existing setup stops working after the
+upgrade:
+- a config key renamed or removed (`config.Load` rejects unknown keys)
+- a CLI subcommand or flag renamed or removed
+- an `/api/*` endpoint or JSON field removed or changed incompatibly
+- a proto field renumbered or removed, or its type changed
+- a migration that can't be reversed or needs manual steps
+
+While the version is `0.x`, a breaking change bumps the minor version, the same
+as `feat`. Mark it anyway; the `!` is what tells users to read the notes.
+
+**Summary**: what changes for the user, not how you built it.
+- Imperative mood, lowercase after the colon, no trailing period: `add`, `fix`,
+  `show`, not `Added`, `Fixes`, `Showing`.
+- At most about 72 characters, prefix included. Release notes and `git log
+  --oneline` list titles, so they must read on their own.
+- Name the behavior: `fix(fetcher): decode ISO-8859-1 feeds`, not
+  `fix(fetcher): use charset.NewReaderLabel`.
+- One change per title. If the title needs "and", or a list after a
+  semicolon, the PR probably needs splitting. If it can't be split, title it
+  by the change that matters most to users.
+
+### Choosing the type for a mixed PR
+
+Pick the type of the most significant change: a breaking change beats `feat`,
+`feat` beats `fix`, `fix` beats `perf`, and any of those beats the
+no-release types. The docs and tests that come with a feature don't change
+its type. Check two things:
+- A user-visible feature is `feat` even when most of the diff is a refactor.
+  Don't hide it under `refactor:` or `chore:`, or it won't release.
+- Internal-only work (a new helper, a test fixture, a CI job) is never `feat`.
+
+### Examples
+
+| Instead of | Write |
+|---|---|
+| `Add tag hierarchy support with parent-child relationships` | `feat: add parent tags, so filtering by a tag includes its children` |
+| `Add home screen app support with web manifest and icons` | `feat(web): install the web client as a home screen app` |
+| `Use upstream go-sqlite3 with the system SQLite in releases; fix six review findings` | split it: `build: link the system SQLite in release builds`, then a `fix(...)` PR per finding |
+| `Skip golangci-lint on release tag runs` | `ci: skip golangci-lint on release tag runs` |
+| `Ignore TypeScript major bumps in Dependabot` | `build(deps): ignore TypeScript major bumps` |
+| `feat(fetcher): Added timeout.` | `fix(fetcher): time out stalled feed requests` |
+| `fix(config): rename refresh_sec to refresh` | `feat(config)!: rename refresh_sec to refresh`, with a `BREAKING CHANGE:` paragraph |
+
+### When to check the title
+
+- **When you open the PR.** Some tools fill the title in from the branch or the
+  first commit. Replace it with one written to these rules.
+- **When the PR's scope changes.** If review turns a `fix` into a feature, or
+  a feature into a refactor, retitle the PR before it merges.
+- **Branch commits.** Write commit subjects to the same format. They only
+  show up in the squash body, but they make the history readable and help you
+  write the title.
+
+Commits pushed straight to `main` (rare; prefer a PR) follow the same rules,
+since the job reads them the same way.
 
 ## Repository layout
 
@@ -342,8 +439,9 @@ commits since the latest stable `v*` tag and takes the largest bump:
 | `type!: ...`, or a `BREAKING CHANGE:` footer in the body | major (minor while the version is `0.x`) |
 | anything else (`docs:`, `ci:`, `chore:`, `refactor:`, a non-conventional title) | no release |
 
-PRs are squash-merged, so **the PR title is the commit subject**: give it a
-conventional prefix, or the merge doesn't release. `scripts/next-version.sh`
+PRs are squash-merged, so **the PR title is the commit subject**; see
+[Commits and pull requests](#commits-and-pull-requests) for how to write one.
+`scripts/next-version.sh`
 prints what the current branch would release (the per-commit reasoning goes to
 stderr). Leaving `0.x` is deliberate: push `v1.0.0` by hand.
 
