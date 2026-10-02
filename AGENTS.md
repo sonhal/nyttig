@@ -167,6 +167,7 @@ deploy/README.md            VPS guide: sizing, build for Debian, mTLS for the TU
 deploy/Caddyfile            Example reverse proxy (TLS, basic auth, /api/* vs the app)
 docs/web-client-plan.md     Plan for the nyttig-api browser client (phases and decisions)
 docs/tag-tree-plan.md       Plan for parent tags (the tag tree): decisions and phases
+docs/saved-views-plan.md    Plan for saved views (named filters, feed tabs): decisions and phases
 CLAUDE.md                   `@AGENTS.md`: makes Claude Code load this file
 ```
 
