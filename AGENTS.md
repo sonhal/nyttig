@@ -193,6 +193,12 @@ which phases are done and whether they are merged; keep it current.
   for slow subscribers (64-buffered channel). `StreamItems` re-filters pushed
   items per-subscriber against the current `StreamFilter`, including the
   search query (checked against `items_fts` with `db.ItemMatchesSearch`).
+  `Hub.PushUpdate` sends an item whose assessments changed (`PutAssessment`
+  and `RemoveAssessment` build the full item and call it) as `item_update`
+  to every subscriber, flagged with `update_matches` (the subscriber's
+  `itemMatchesFilter`, including `assessmentsMatch` for `min_score` and
+  `unassessed_by`); clients update an item they show, insert a matching one
+  they don't, and never remove one live.
   `Hub.Close` ends every active and later `StreamItems` call with
   `codes.Unavailable`; the daemon calls it before `GracefulStop`, which would
   otherwise wait out its timeout for streams that only end when the client

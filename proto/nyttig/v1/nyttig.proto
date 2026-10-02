@@ -330,6 +330,10 @@ message ServerMessage {
         Complete complete = 3;
         Item     item_update = 4;  // an item whose assessments changed, with all of them
     }
+    // Only with item_update: whether the item matches the stream's current
+    // filter. A client replaces an item_update it shows, and inserts one it
+    // does not show only when this is true. It never removes an item.
+    bool update_matches = 5;
 }
 
 message Reset {}

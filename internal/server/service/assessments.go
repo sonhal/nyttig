@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"log/slog"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -178,7 +179,19 @@ func (s *Service) PutAssessment(ctx context.Context, req *pb.PutAssessmentReques
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "put assessment: %v", err)
 	}
+	s.pushItemUpdate(req.ItemId)
 	return dbAssessmentToProto(stored), nil
+}
+
+// pushItemUpdate sends the item, with all its assessments, to the stream
+// subscribers. The write has already succeeded, so a failure is only logged.
+func (s *Service) pushItemUpdate(itemID int64) {
+	item, err := db.GetItem(s.db, itemID)
+	if err != nil || item == nil {
+		slog.Warn("push assessment update", "item_id", itemID, "error", err)
+		return
+	}
+	s.hub.PushUpdate(ItemToProto(item))
 }
 
 // RemoveAssessment deletes the assessment with that key. An unknown one is
@@ -194,6 +207,7 @@ func (s *Service) RemoveAssessment(ctx context.Context, req *pb.RemoveAssessment
 	if !deleted {
 		return nil, status.Errorf(codes.NotFound, "assessment not found")
 	}
+	s.pushItemUpdate(req.ItemId)
 	return &emptypb.Empty{}, nil
 }
 

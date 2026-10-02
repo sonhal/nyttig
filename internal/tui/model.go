@@ -201,6 +201,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, m.trackVisible()
 
+	case ItemUpdateMsg:
+		// Keep reading; the table does not show assessments yet.
+		if m.sub != nil {
+			return m, ListenStream(m.sub)
+		}
+		return m, nil
+
 	case ResetMsg:
 		m.table.SetItems(nil)
 		m.batchComplete = false

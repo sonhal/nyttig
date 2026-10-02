@@ -987,6 +987,21 @@ func (h *Hub) Push(item *pb.Item) {
 	}
 }
 
+// PushUpdate broadcasts an item whose assessments changed, with all of them.
+// Like Push it never blocks and drops the message for a slow subscriber.
+// Each subscriber's StreamItems decides whether the item matches its filter.
+func (h *Hub) PushUpdate(item *pb.Item) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for s := range h.subs {
+		select {
+		case s.sendCh <- &pb.ServerMessage{Msg: &pb.ServerMessage_ItemUpdate{ItemUpdate: item}}:
+		default:
+			// Buffer full; this subscriber stays stale until its next reset.
+		}
+	}
+}
+
 // StreamItems implements the bidirectional streaming RPC.
 //
 // Protocol:
@@ -1087,6 +1102,18 @@ func (s *Service) StreamItems(stream pb.Nyttig_StreamItemsServer) error {
 					return err
 				}
 			}
+			// An updated item is always sent: the client may be showing it
+			// even if it no longer matches (it is never removed live). The
+			// flag tells it whether to insert an item it does not show.
+			if item := itemMsg.GetItemUpdate(); item != nil {
+				out := &pb.ServerMessage{
+					Msg:           itemMsg.Msg,
+					UpdateMatches: s.itemMatchesFilter(item, filter),
+				}
+				if err := stream.Send(out); err != nil {
+					return err
+				}
+			}
 
 		case err := <-recvErrCh:
 			if err == io.EOF {
@@ -1179,6 +1206,9 @@ func (s *Service) itemMatchesFilter(item *pb.Item, filter *pb.StreamFilter) bool
 	if filter.UnviewedOnly && item.Viewed {
 		return false
 	}
+	if !s.assessmentsMatch(item, filter.AssessorId, filter.MinScore, filter.UnassessedBy, filter.TagId, false) {
+		return false
+	}
 	if filter.Search != "" {
 		// Ask FTS5 itself, so pushed items match exactly like the initial
 		// batch does and clients never have to emulate FTS tokenization.
@@ -1190,6 +1220,46 @@ func (s *Service) itemMatchesFilter(item *pb.Item, filter *pb.StreamFilter) bool
 		return ok
 	}
 	return true
+}
+
+// assessmentsMatch applies the assessment filters to an item in memory, the
+// twin of the SQL in db.ListItems. An assessment is in scope when there is no
+// filter tag, it has no tag (a whole-item assessment), or its tag is in the
+// filter tag's subtree (the tag itself when exact).
+func (s *Service) assessmentsMatch(item *pb.Item, assessorID int64, minScore *float64, unassessedBy, tagID int64, exact bool) bool {
+	if minScore == nil && unassessedBy == 0 {
+		return true
+	}
+	var subtree map[int64]bool
+	if tagID != 0 && !exact {
+		subtree = s.tagGraph.Load().subtree(tagID)
+	}
+	inScope := func(a *pb.Assessment) bool {
+		switch {
+		case tagID == 0, a.TagId == 0:
+			return true
+		case exact:
+			return a.TagId == tagID
+		default:
+			return subtree[a.TagId]
+		}
+	}
+	scored, assessed := false, false
+	for _, a := range item.Assessments {
+		if !inScope(a) {
+			continue
+		}
+		if a.AssessorId == unassessedBy && unassessedBy != 0 {
+			assessed = true
+		}
+		if minScore != nil && a.AssessorId == assessorID && a.Score != nil && *a.Score >= *minScore {
+			scored = true
+		}
+	}
+	if minScore != nil && !scored {
+		return false
+	}
+	return !assessed
 }
 
 // ── Conversion helpers ─────────────────────────────────────────────────────

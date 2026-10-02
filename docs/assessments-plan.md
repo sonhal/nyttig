@@ -1,6 +1,6 @@
 # Assessments plan: scores and notes from external assessors
 
-Status: **phases 1–2 implemented, not yet merged** (database layer, proto and RPCs).
+Status: **phases 1–3 implemented, not yet merged** (database layer, proto and RPCs, live updates).
 
 Other systems can attach a judgement to a news item: an optional **score**
 from 0.0 to 1.0, an optional **note**, and the **assessor** that made it.
@@ -536,4 +536,19 @@ govulncheck can't reach vuln.go.dev from the sandbox, so leave it to CI.
 
 ## Deviations from this plan
 
-None yet.
+- **Phase 3, `ServerMessage.update_matches`.** The plan has the server send
+  `item_update` both when the updated item matches the stream's filter and
+  when it does not, and has the client insert it only in the first case. The
+  client can't evaluate a filter itself (FTS, the tag tree), so the message
+  needs a flag: `ServerMessage` gains `bool update_matches = 5`, set only
+  with `item_update`. Clients replace an item they show, insert one they
+  don't show only when it is true, and never remove.
+- **Phase 3, TUI.** `ListenStream` gets an `ItemUpdateMsg` and the model
+  keeps reading on it, so a pushed update doesn't stall the TUI's stream
+  before phase 7 renders assessments.
+- **Phase 3, tag_exact.** `StreamFilter` has no `tag_exact`, so the Hub always
+  walks the subtree. The agreement test calls `assessmentsMatch` with
+  `exact` set to cover `ItemFilter.TagExact`.
+- **Phase 2, StreamItems.** The initial batch (`sendFilteredItems`) already
+  honours the new filter fields and validates them in phase 2, so the
+  stream's first batch is correct before phase 3 teaches the live path.

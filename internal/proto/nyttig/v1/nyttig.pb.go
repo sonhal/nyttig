@@ -2707,7 +2707,11 @@ type ServerMessage struct {
 	//	*ServerMessage_Reset_
 	//	*ServerMessage_Complete
 	//	*ServerMessage_ItemUpdate
-	Msg           isServerMessage_Msg `protobuf_oneof:"msg"`
+	Msg isServerMessage_Msg `protobuf_oneof:"msg"`
+	// Only with item_update: whether the item matches the stream's current
+	// filter. A client replaces an item_update it shows, and inserts one it
+	// does not show only when this is true. It never removes an item.
+	UpdateMatches bool `protobuf:"varint,5,opt,name=update_matches,json=updateMatches,proto3" json:"update_matches,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2783,6 +2787,13 @@ func (x *ServerMessage) GetItemUpdate() *Item {
 		}
 	}
 	return nil
+}
+
+func (x *ServerMessage) GetUpdateMatches() bool {
+	if x != nil {
+		return x.UpdateMatches
+	}
+	return false
 }
 
 type isServerMessage_Msg interface {
@@ -3131,13 +3142,14 @@ const file_nyttig_v1_nyttig_proto_rawDesc = "" +
 	"\tmin_score\x18\b \x01(\x01H\x00R\bminScore\x88\x01\x01\x12#\n" +
 	"\runassessed_by\x18\t \x01(\x03R\funassessedByB\f\n" +
 	"\n" +
-	"_min_score\"\xce\x01\n" +
+	"_min_score\"\xf5\x01\n" +
 	"\rServerMessage\x12%\n" +
 	"\x04item\x18\x01 \x01(\v2\x0f.nyttig.v1.ItemH\x00R\x04item\x12(\n" +
 	"\x05reset\x18\x02 \x01(\v2\x10.nyttig.v1.ResetH\x00R\x05reset\x121\n" +
 	"\bcomplete\x18\x03 \x01(\v2\x13.nyttig.v1.CompleteH\x00R\bcomplete\x122\n" +
 	"\vitem_update\x18\x04 \x01(\v2\x0f.nyttig.v1.ItemH\x00R\n" +
-	"itemUpdateB\x05\n" +
+	"itemUpdate\x12%\n" +
+	"\x0eupdate_matches\x18\x05 \x01(\bR\rupdateMatchesB\x05\n" +
 	"\x03msg\"\a\n" +
 	"\x05Reset\"\n" +
 	"\n" +
