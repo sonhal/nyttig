@@ -1,6 +1,6 @@
 # Tag tree plan: parent tags
 
-Status: **draft plan**, not started.
+Status: **in progress**. Phase 1 (schema + db layer) done.
 
 Tags can have parent tags. Filtering by a parent shows items tagged with the
 parent **or any tag below it**. Example:
