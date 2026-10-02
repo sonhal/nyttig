@@ -2,6 +2,7 @@ package service
 
 import (
 	"fmt"
+	"math"
 	"net/url"
 	"regexp"
 	"strings"
@@ -26,6 +27,10 @@ const (
 	maxViewNameLen     = 64
 	maxViewSearchLen   = 500
 	maxSavedViews      = 100
+
+	maxAssessorNameLen = 64
+	maxAssessorDescLen = 500
+	maxNoteBytes       = 4096
 
 	// minRefreshSec keeps a source from being polled more than once a minute.
 	minRefreshSec = 60
@@ -193,10 +198,11 @@ func validateViewFilter(f *pb.ViewFilter) error {
 	if f == nil {
 		return nil
 	}
-	switch f.Sort {
-	case "", "newest", "oldest":
-	default:
-		return fmt.Errorf("sort must be newest or oldest, got %q", f.Sort)
+	if err := validateSort(f.Sort); err != nil {
+		return err
+	}
+	if err := validateAssessmentFilter(f.AssessorId, f.MinScore, f.UnassessedBy, f.Sort); err != nil {
+		return err
 	}
 	if utf8.RuneCountInString(f.Search) > maxViewSearchLen {
 		return fmt.Errorf("search must be at most %d characters", maxViewSearchLen)
@@ -209,6 +215,74 @@ func validateViewFilter(f *pb.ViewFilter) error {
 	}
 	if f.TagId < 0 {
 		return fmt.Errorf("tag_id must not be negative, got %d", f.TagId)
+	}
+	return nil
+}
+
+// validateSort accepts the sort orders a filter can ask for.
+func validateSort(sort string) error {
+	switch sort {
+	case "", "newest", "oldest", "score":
+		return nil
+	default:
+		return fmt.Errorf("sort must be newest, oldest or score, got %q", sort)
+	}
+}
+
+// validateScore requires a finite number from 0 to 1. NaN is rejected
+// explicitly: every comparison with it is false, so a range check alone
+// would let it through.
+func validateScore(field string, s float64) error {
+	if math.IsNaN(s) || math.IsInf(s, 0) {
+		return fmt.Errorf("%s must be a number from 0 to 1", field)
+	}
+	if s < 0 || s > 1 {
+		return fmt.Errorf("%s must be between 0 and 1, got %v", field, s)
+	}
+	return nil
+}
+
+// validateNote accepts valid UTF-8 of at most maxNoteBytes bytes.
+func validateNote(note string) error {
+	if !utf8.ValidString(note) {
+		return fmt.Errorf("note must be valid UTF-8")
+	}
+	if len(note) > maxNoteBytes {
+		return fmt.Errorf("note must be at most %d bytes", maxNoteBytes)
+	}
+	return nil
+}
+
+// validateAssessorDescription accepts an empty string or at most
+// maxAssessorDescLen characters without control characters.
+func validateAssessorDescription(desc string) error {
+	if utf8.RuneCountInString(desc) > maxAssessorDescLen {
+		return fmt.Errorf("description must be at most %d characters", maxAssessorDescLen)
+	}
+	if strings.IndexFunc(desc, unicode.IsControl) >= 0 {
+		return fmt.Errorf("description must not contain control characters")
+	}
+	return nil
+}
+
+// validateAssessmentFilter checks the assessment fields shared by SearchRequest,
+// StreamFilter and ViewFilter: ids not negative, min_score a valid score, and
+// an assessor named whenever min_score or the score sort needs one. Whether
+// the assessor exists is only checked for saved views.
+func validateAssessmentFilter(assessorID int64, minScore *float64, unassessedBy int64, sort string) error {
+	if assessorID < 0 {
+		return fmt.Errorf("assessor_id must not be negative, got %d", assessorID)
+	}
+	if unassessedBy < 0 {
+		return fmt.Errorf("unassessed_by must not be negative, got %d", unassessedBy)
+	}
+	if minScore != nil {
+		if err := validateScore("min_score", *minScore); err != nil {
+			return err
+		}
+	}
+	if (minScore != nil || sort == "score") && assessorID == 0 {
+		return fmt.Errorf("min_score and sort score need an assessor_id")
 	}
 	return nil
 }

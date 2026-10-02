@@ -420,6 +420,75 @@ func (c *Client) ReorderSavedViews(ctx context.Context, ids []int64) (*pb.ListSa
 	return client.ReorderSavedViews(ctx, &pb.ReorderSavedViewsRequest{Ids: ids})
 }
 
+// AddAssessor registers an assessor.
+func (c *Client) AddAssessor(ctx context.Context, req *pb.AddAssessorRequest) (*pb.Assessor, error) {
+	if err := c.ensureConn(ctx); err != nil {
+		return nil, err
+	}
+	c.mu.RLock()
+	client := c.grpc
+	c.mu.RUnlock()
+	return client.AddAssessor(ctx, req)
+}
+
+// UpdateAssessor changes an assessor; unset fields are unchanged.
+func (c *Client) UpdateAssessor(ctx context.Context, req *pb.UpdateAssessorRequest) (*pb.Assessor, error) {
+	if err := c.ensureConn(ctx); err != nil {
+		return nil, err
+	}
+	c.mu.RLock()
+	client := c.grpc
+	c.mu.RUnlock()
+	return client.UpdateAssessor(ctx, req)
+}
+
+// RemoveAssessor deletes an assessor and its assessments.
+func (c *Client) RemoveAssessor(ctx context.Context, id int64) error {
+	if err := c.ensureConn(ctx); err != nil {
+		return err
+	}
+	c.mu.RLock()
+	client := c.grpc
+	c.mu.RUnlock()
+	_, err := client.RemoveAssessor(ctx, &pb.RemoveAssessorRequest{Id: id})
+	return err
+}
+
+// ListAssessors returns every assessor ordered by name.
+func (c *Client) ListAssessors(ctx context.Context) (*pb.ListAssessorsResponse, error) {
+	if err := c.ensureConn(ctx); err != nil {
+		return nil, err
+	}
+	c.mu.RLock()
+	client := c.grpc
+	c.mu.RUnlock()
+	return client.ListAssessors(ctx, &emptypb.Empty{})
+}
+
+// PutAssessment stores an assessment, replacing the one with the same
+// (item, assessor, tag).
+func (c *Client) PutAssessment(ctx context.Context, req *pb.PutAssessmentRequest) (*pb.Assessment, error) {
+	if err := c.ensureConn(ctx); err != nil {
+		return nil, err
+	}
+	c.mu.RLock()
+	client := c.grpc
+	c.mu.RUnlock()
+	return client.PutAssessment(ctx, req)
+}
+
+// RemoveAssessment deletes the assessment with that key.
+func (c *Client) RemoveAssessment(ctx context.Context, req *pb.RemoveAssessmentRequest) error {
+	if err := c.ensureConn(ctx); err != nil {
+		return err
+	}
+	c.mu.RLock()
+	client := c.grpc
+	c.mu.RUnlock()
+	_, err := client.RemoveAssessment(ctx, req)
+	return err
+}
+
 // AddTagRule creates a new tag rule (regex pattern).
 func (c *Client) AddTagRule(ctx context.Context, req *pb.AddTagRuleRequest) (*pb.TagRule, error) {
 	if err := c.ensureConn(ctx); err != nil {

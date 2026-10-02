@@ -402,9 +402,12 @@ clients get the same checks:
 | Refresh interval| 60 seconds to 7 days (default 3600)                         |
 | Colors          | `#RRGGBB`, or empty for none                                |
 | Names           | Non-empty (a `bluesky` source may omit its name), no control characters; sources ≤ 200, tags ≤ 64, abbreviations ≤ 16 characters |
+| Assessor        | Name ≤ 64 characters, description ≤ 500 characters without control characters, optional `#RRGGBB` color |
+| Score           | A number from 0 to 1 (NaN and infinities are rejected); `min_score` follows the same rule and, like `sort: score`, needs an assessor |
+| Note            | Valid UTF-8, at most 4096 bytes; an assessment needs a score or a note |
 | Tag rule pattern| Valid Go (RE2) regex, at most 1024 bytes; `field` is `title`, `description` or `both` |
 
-A duplicate source URL or tag name is rejected with `AlreadyExists`. Sources,
+A duplicate source URL, tag name or assessor name is rejected with `AlreadyExists`. Sources,
 tags and rules from the config file are seeded directly and are not checked.
 
 ## Fetching and SSRF
@@ -866,6 +869,8 @@ as `sqlite_version`, and the daemon refuses to start if that library lacks FTS5.
 | `tag_parents` | Tag tree: (child, parent) edges, a tag can have several parents |
 | `view_state`  | Per-item view tracking (row exists = viewed)      |
 | `saved_views` | Saved views: named filters, favorites and their order |
+| `assessors`   | Systems that score items (name, what the score means, color) |
+| `assessments` | One assessor's score (0 to 1) and/or note on an item, optionally for one tag |
 | `items_fts`   | FTS5 virtual table for full-text search           |
 
 Item dates (`items.published`) are stored in UTC with whole seconds

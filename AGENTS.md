@@ -291,6 +291,11 @@ which phases are done and whether they are merged; keep it current.
   Deleting an assessor deletes its assessments; saved views that use it keep
   existing (migration 7's trigger clears `min_score` and a `score` sort, the
   foreign keys clear the ids). Notes and assessor names are untrusted text.
+  The service (`service/assessments.go`) validates scores (NaN and ±Inf
+  explicitly, since every comparison with NaN is false), notes and the filter
+  fields shared by `SearchRequest`, `StreamFilter` and `ViewFilter`
+  (`validateAssessmentFilter`); an unknown item, assessor or tag is
+  `NotFound`. A score is `optional double` on the wire so 0 differs from none.
 - **Tagging** is rule-based only (no manual tagging). Rules are regex over
   `title`/`description`/`both`, global or per-source, evaluated by `priority`.
 - **View tracking** is K9s-style: the TUI marks items viewed as they scroll

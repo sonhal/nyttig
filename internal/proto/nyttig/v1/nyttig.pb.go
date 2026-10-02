@@ -161,6 +161,7 @@ type Item struct {
 	FetchedAt     *timestamppb.Timestamp `protobuf:"bytes,10,opt,name=fetched_at,json=fetchedAt,proto3" json:"fetched_at,omitempty"`
 	Tags          []*Tag                 `protobuf:"bytes,11,rep,name=tags,proto3" json:"tags,omitempty"`
 	Viewed        bool                   `protobuf:"varint,12,opt,name=viewed,proto3" json:"viewed,omitempty"`
+	Assessments   []*Assessment          `protobuf:"bytes,13,rep,name=assessments,proto3" json:"assessments,omitempty"` // every assessor's, by assessor name
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -279,6 +280,13 @@ func (x *Item) GetViewed() bool {
 	return false
 }
 
+func (x *Item) GetAssessments() []*Assessment {
+	if x != nil {
+		return x.Assessments
+	}
+	return nil
+}
+
 type Tag struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            int64                  `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -347,6 +355,187 @@ func (x *Tag) GetParentIds() []int64 {
 	return nil
 }
 
+// Assessor is a registered system (a model, a CVE reader, you) that writes
+// assessments. description says what its score means.
+type Assessor struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            int64                  `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	Description   string                 `protobuf:"bytes,3,opt,name=description,proto3" json:"description,omitempty"`
+	Color         string                 `protobuf:"bytes,4,opt,name=color,proto3" json:"color,omitempty"` // hex color, e.g. "#FF6B35"
+	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Assessor) Reset() {
+	*x = Assessor{}
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Assessor) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Assessor) ProtoMessage() {}
+
+func (x *Assessor) ProtoReflect() protoreflect.Message {
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Assessor.ProtoReflect.Descriptor instead.
+func (*Assessor) Descriptor() ([]byte, []int) {
+	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *Assessor) GetId() int64 {
+	if x != nil {
+		return x.Id
+	}
+	return 0
+}
+
+func (x *Assessor) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *Assessor) GetDescription() string {
+	if x != nil {
+		return x.Description
+	}
+	return ""
+}
+
+func (x *Assessor) GetColor() string {
+	if x != nil {
+		return x.Color
+	}
+	return ""
+}
+
+func (x *Assessor) GetCreatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return nil
+}
+
+// Assessment is one assessor's judgement on an item: an optional score from
+// 0 to 1 and an optional note, for one tag or for the item as a whole.
+// Notes are untrusted text.
+type Assessment struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            int64                  `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+	ItemId        int64                  `protobuf:"varint,2,opt,name=item_id,json=itemId,proto3" json:"item_id,omitempty"`
+	AssessorId    int64                  `protobuf:"varint,3,opt,name=assessor_id,json=assessorId,proto3" json:"assessor_id,omitempty"`
+	AssessorName  string                 `protobuf:"bytes,4,opt,name=assessor_name,json=assessorName,proto3" json:"assessor_name,omitempty"`
+	TagId         int64                  `protobuf:"varint,5,opt,name=tag_id,json=tagId,proto3" json:"tag_id,omitempty"` // 0 = the item as a whole
+	Score         *float64               `protobuf:"fixed64,6,opt,name=score,proto3,oneof" json:"score,omitempty"`       // unset = no score (0 is a score)
+	Note          string                 `protobuf:"bytes,7,opt,name=note,proto3" json:"note,omitempty"`
+	UpdatedAt     *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Assessment) Reset() {
+	*x = Assessment{}
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Assessment) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Assessment) ProtoMessage() {}
+
+func (x *Assessment) ProtoReflect() protoreflect.Message {
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Assessment.ProtoReflect.Descriptor instead.
+func (*Assessment) Descriptor() ([]byte, []int) {
+	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *Assessment) GetId() int64 {
+	if x != nil {
+		return x.Id
+	}
+	return 0
+}
+
+func (x *Assessment) GetItemId() int64 {
+	if x != nil {
+		return x.ItemId
+	}
+	return 0
+}
+
+func (x *Assessment) GetAssessorId() int64 {
+	if x != nil {
+		return x.AssessorId
+	}
+	return 0
+}
+
+func (x *Assessment) GetAssessorName() string {
+	if x != nil {
+		return x.AssessorName
+	}
+	return ""
+}
+
+func (x *Assessment) GetTagId() int64 {
+	if x != nil {
+		return x.TagId
+	}
+	return 0
+}
+
+func (x *Assessment) GetScore() float64 {
+	if x != nil && x.Score != nil {
+		return *x.Score
+	}
+	return 0
+}
+
+func (x *Assessment) GetNote() string {
+	if x != nil {
+		return x.Note
+	}
+	return ""
+}
+
+func (x *Assessment) GetUpdatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.UpdatedAt
+	}
+	return nil
+}
+
 type TagRule struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            int64                  `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -362,7 +551,7 @@ type TagRule struct {
 
 func (x *TagRule) Reset() {
 	*x = TagRule{}
-	mi := &file_nyttig_v1_nyttig_proto_msgTypes[3]
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -374,7 +563,7 @@ func (x *TagRule) String() string {
 func (*TagRule) ProtoMessage() {}
 
 func (x *TagRule) ProtoReflect() protoreflect.Message {
-	mi := &file_nyttig_v1_nyttig_proto_msgTypes[3]
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -387,7 +576,7 @@ func (x *TagRule) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TagRule.ProtoReflect.Descriptor instead.
 func (*TagRule) Descriptor() ([]byte, []int) {
-	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{3}
+	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *TagRule) GetId() int64 {
@@ -454,7 +643,7 @@ type AddSourceRequest struct {
 
 func (x *AddSourceRequest) Reset() {
 	*x = AddSourceRequest{}
-	mi := &file_nyttig_v1_nyttig_proto_msgTypes[4]
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -466,7 +655,7 @@ func (x *AddSourceRequest) String() string {
 func (*AddSourceRequest) ProtoMessage() {}
 
 func (x *AddSourceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nyttig_v1_nyttig_proto_msgTypes[4]
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -479,7 +668,7 @@ func (x *AddSourceRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AddSourceRequest.ProtoReflect.Descriptor instead.
 func (*AddSourceRequest) Descriptor() ([]byte, []int) {
-	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{4}
+	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *AddSourceRequest) GetName() string {
@@ -540,7 +729,7 @@ type RemoveSourceRequest struct {
 
 func (x *RemoveSourceRequest) Reset() {
 	*x = RemoveSourceRequest{}
-	mi := &file_nyttig_v1_nyttig_proto_msgTypes[5]
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -552,7 +741,7 @@ func (x *RemoveSourceRequest) String() string {
 func (*RemoveSourceRequest) ProtoMessage() {}
 
 func (x *RemoveSourceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nyttig_v1_nyttig_proto_msgTypes[5]
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -565,7 +754,7 @@ func (x *RemoveSourceRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemoveSourceRequest.ProtoReflect.Descriptor instead.
 func (*RemoveSourceRequest) Descriptor() ([]byte, []int) {
-	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{5}
+	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *RemoveSourceRequest) GetId() int64 {
@@ -594,7 +783,7 @@ type UpdateSourceRequest struct {
 
 func (x *UpdateSourceRequest) Reset() {
 	*x = UpdateSourceRequest{}
-	mi := &file_nyttig_v1_nyttig_proto_msgTypes[6]
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -606,7 +795,7 @@ func (x *UpdateSourceRequest) String() string {
 func (*UpdateSourceRequest) ProtoMessage() {}
 
 func (x *UpdateSourceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nyttig_v1_nyttig_proto_msgTypes[6]
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -619,7 +808,7 @@ func (x *UpdateSourceRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateSourceRequest.ProtoReflect.Descriptor instead.
 func (*UpdateSourceRequest) Descriptor() ([]byte, []int) {
-	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{6}
+	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *UpdateSourceRequest) GetId() int64 {
@@ -687,7 +876,7 @@ type ListSourcesResponse struct {
 
 func (x *ListSourcesResponse) Reset() {
 	*x = ListSourcesResponse{}
-	mi := &file_nyttig_v1_nyttig_proto_msgTypes[7]
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -699,7 +888,7 @@ func (x *ListSourcesResponse) String() string {
 func (*ListSourcesResponse) ProtoMessage() {}
 
 func (x *ListSourcesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_nyttig_v1_nyttig_proto_msgTypes[7]
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -712,7 +901,7 @@ func (x *ListSourcesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListSourcesResponse.ProtoReflect.Descriptor instead.
 func (*ListSourcesResponse) Descriptor() ([]byte, []int) {
-	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{7}
+	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *ListSourcesResponse) GetSources() []*Source {
@@ -731,7 +920,7 @@ type RefreshSourceRequest struct {
 
 func (x *RefreshSourceRequest) Reset() {
 	*x = RefreshSourceRequest{}
-	mi := &file_nyttig_v1_nyttig_proto_msgTypes[8]
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -743,7 +932,7 @@ func (x *RefreshSourceRequest) String() string {
 func (*RefreshSourceRequest) ProtoMessage() {}
 
 func (x *RefreshSourceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nyttig_v1_nyttig_proto_msgTypes[8]
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -756,7 +945,7 @@ func (x *RefreshSourceRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RefreshSourceRequest.ProtoReflect.Descriptor instead.
 func (*RefreshSourceRequest) Descriptor() ([]byte, []int) {
-	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{8}
+	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *RefreshSourceRequest) GetSourceId() int64 {
@@ -777,7 +966,7 @@ type AddTagRequest struct {
 
 func (x *AddTagRequest) Reset() {
 	*x = AddTagRequest{}
-	mi := &file_nyttig_v1_nyttig_proto_msgTypes[9]
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -789,7 +978,7 @@ func (x *AddTagRequest) String() string {
 func (*AddTagRequest) ProtoMessage() {}
 
 func (x *AddTagRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nyttig_v1_nyttig_proto_msgTypes[9]
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -802,7 +991,7 @@ func (x *AddTagRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AddTagRequest.ProtoReflect.Descriptor instead.
 func (*AddTagRequest) Descriptor() ([]byte, []int) {
-	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{9}
+	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *AddTagRequest) GetName() string {
@@ -838,7 +1027,7 @@ type TagParents struct {
 
 func (x *TagParents) Reset() {
 	*x = TagParents{}
-	mi := &file_nyttig_v1_nyttig_proto_msgTypes[10]
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -850,7 +1039,7 @@ func (x *TagParents) String() string {
 func (*TagParents) ProtoMessage() {}
 
 func (x *TagParents) ProtoReflect() protoreflect.Message {
-	mi := &file_nyttig_v1_nyttig_proto_msgTypes[10]
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -863,7 +1052,7 @@ func (x *TagParents) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TagParents.ProtoReflect.Descriptor instead.
 func (*TagParents) Descriptor() ([]byte, []int) {
-	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{10}
+	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *TagParents) GetIds() []int64 {
@@ -888,7 +1077,7 @@ type UpdateTagRequest struct {
 
 func (x *UpdateTagRequest) Reset() {
 	*x = UpdateTagRequest{}
-	mi := &file_nyttig_v1_nyttig_proto_msgTypes[11]
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -900,7 +1089,7 @@ func (x *UpdateTagRequest) String() string {
 func (*UpdateTagRequest) ProtoMessage() {}
 
 func (x *UpdateTagRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nyttig_v1_nyttig_proto_msgTypes[11]
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -913,7 +1102,7 @@ func (x *UpdateTagRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateTagRequest.ProtoReflect.Descriptor instead.
 func (*UpdateTagRequest) Descriptor() ([]byte, []int) {
-	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{11}
+	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *UpdateTagRequest) GetId() int64 {
@@ -953,7 +1142,7 @@ type RemoveTagRequest struct {
 
 func (x *RemoveTagRequest) Reset() {
 	*x = RemoveTagRequest{}
-	mi := &file_nyttig_v1_nyttig_proto_msgTypes[12]
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -965,7 +1154,7 @@ func (x *RemoveTagRequest) String() string {
 func (*RemoveTagRequest) ProtoMessage() {}
 
 func (x *RemoveTagRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nyttig_v1_nyttig_proto_msgTypes[12]
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -978,7 +1167,7 @@ func (x *RemoveTagRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemoveTagRequest.ProtoReflect.Descriptor instead.
 func (*RemoveTagRequest) Descriptor() ([]byte, []int) {
-	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{12}
+	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *RemoveTagRequest) GetId() int64 {
@@ -997,7 +1186,7 @@ type ListTagsResponse struct {
 
 func (x *ListTagsResponse) Reset() {
 	*x = ListTagsResponse{}
-	mi := &file_nyttig_v1_nyttig_proto_msgTypes[13]
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1009,7 +1198,7 @@ func (x *ListTagsResponse) String() string {
 func (*ListTagsResponse) ProtoMessage() {}
 
 func (x *ListTagsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_nyttig_v1_nyttig_proto_msgTypes[13]
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1022,7 +1211,7 @@ func (x *ListTagsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListTagsResponse.ProtoReflect.Descriptor instead.
 func (*ListTagsResponse) Descriptor() ([]byte, []int) {
-	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{13}
+	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *ListTagsResponse) GetTags() []*Tag {
@@ -1039,15 +1228,18 @@ type ViewFilter struct {
 	Search        string                 `protobuf:"bytes,1,opt,name=search,proto3" json:"search,omitempty"`
 	SourceId      int64                  `protobuf:"varint,2,opt,name=source_id,json=sourceId,proto3" json:"source_id,omitempty"`
 	TagId         int64                  `protobuf:"varint,3,opt,name=tag_id,json=tagId,proto3" json:"tag_id,omitempty"`
-	Sort          string                 `protobuf:"bytes,4,opt,name=sort,proto3" json:"sort,omitempty"` // "newest" (default) or "oldest"
+	Sort          string                 `protobuf:"bytes,4,opt,name=sort,proto3" json:"sort,omitempty"` // "newest" (default), "oldest" or "score"
 	UnviewedOnly  bool                   `protobuf:"varint,5,opt,name=unviewed_only,json=unviewedOnly,proto3" json:"unviewed_only,omitempty"`
+	AssessorId    int64                  `protobuf:"varint,6,opt,name=assessor_id,json=assessorId,proto3" json:"assessor_id,omitempty"` // 0 = none; whose scores min_score and sort "score" use
+	MinScore      *float64               `protobuf:"fixed64,7,opt,name=min_score,json=minScore,proto3,oneof" json:"min_score,omitempty"`
+	UnassessedBy  int64                  `protobuf:"varint,8,opt,name=unassessed_by,json=unassessedBy,proto3" json:"unassessed_by,omitempty"` // 0 = none
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ViewFilter) Reset() {
 	*x = ViewFilter{}
-	mi := &file_nyttig_v1_nyttig_proto_msgTypes[14]
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1059,7 +1251,7 @@ func (x *ViewFilter) String() string {
 func (*ViewFilter) ProtoMessage() {}
 
 func (x *ViewFilter) ProtoReflect() protoreflect.Message {
-	mi := &file_nyttig_v1_nyttig_proto_msgTypes[14]
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1072,7 +1264,7 @@ func (x *ViewFilter) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ViewFilter.ProtoReflect.Descriptor instead.
 func (*ViewFilter) Descriptor() ([]byte, []int) {
-	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{14}
+	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *ViewFilter) GetSearch() string {
@@ -1110,6 +1302,27 @@ func (x *ViewFilter) GetUnviewedOnly() bool {
 	return false
 }
 
+func (x *ViewFilter) GetAssessorId() int64 {
+	if x != nil {
+		return x.AssessorId
+	}
+	return 0
+}
+
+func (x *ViewFilter) GetMinScore() float64 {
+	if x != nil && x.MinScore != nil {
+		return *x.MinScore
+	}
+	return 0
+}
+
+func (x *ViewFilter) GetUnassessedBy() int64 {
+	if x != nil {
+		return x.UnassessedBy
+	}
+	return 0
+}
+
 type SavedView struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            int64                  `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -1123,7 +1336,7 @@ type SavedView struct {
 
 func (x *SavedView) Reset() {
 	*x = SavedView{}
-	mi := &file_nyttig_v1_nyttig_proto_msgTypes[15]
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1135,7 +1348,7 @@ func (x *SavedView) String() string {
 func (*SavedView) ProtoMessage() {}
 
 func (x *SavedView) ProtoReflect() protoreflect.Message {
-	mi := &file_nyttig_v1_nyttig_proto_msgTypes[15]
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1148,7 +1361,7 @@ func (x *SavedView) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SavedView.ProtoReflect.Descriptor instead.
 func (*SavedView) Descriptor() ([]byte, []int) {
-	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{15}
+	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *SavedView) GetId() int64 {
@@ -1197,7 +1410,7 @@ type AddSavedViewRequest struct {
 
 func (x *AddSavedViewRequest) Reset() {
 	*x = AddSavedViewRequest{}
-	mi := &file_nyttig_v1_nyttig_proto_msgTypes[16]
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1209,7 +1422,7 @@ func (x *AddSavedViewRequest) String() string {
 func (*AddSavedViewRequest) ProtoMessage() {}
 
 func (x *AddSavedViewRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nyttig_v1_nyttig_proto_msgTypes[16]
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1222,7 +1435,7 @@ func (x *AddSavedViewRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AddSavedViewRequest.ProtoReflect.Descriptor instead.
 func (*AddSavedViewRequest) Descriptor() ([]byte, []int) {
-	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{16}
+	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *AddSavedViewRequest) GetName() string {
@@ -1260,7 +1473,7 @@ type UpdateSavedViewRequest struct {
 
 func (x *UpdateSavedViewRequest) Reset() {
 	*x = UpdateSavedViewRequest{}
-	mi := &file_nyttig_v1_nyttig_proto_msgTypes[17]
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1272,7 +1485,7 @@ func (x *UpdateSavedViewRequest) String() string {
 func (*UpdateSavedViewRequest) ProtoMessage() {}
 
 func (x *UpdateSavedViewRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nyttig_v1_nyttig_proto_msgTypes[17]
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1285,7 +1498,7 @@ func (x *UpdateSavedViewRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateSavedViewRequest.ProtoReflect.Descriptor instead.
 func (*UpdateSavedViewRequest) Descriptor() ([]byte, []int) {
-	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{17}
+	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *UpdateSavedViewRequest) GetId() int64 {
@@ -1325,7 +1538,7 @@ type RemoveSavedViewRequest struct {
 
 func (x *RemoveSavedViewRequest) Reset() {
 	*x = RemoveSavedViewRequest{}
-	mi := &file_nyttig_v1_nyttig_proto_msgTypes[18]
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1337,7 +1550,7 @@ func (x *RemoveSavedViewRequest) String() string {
 func (*RemoveSavedViewRequest) ProtoMessage() {}
 
 func (x *RemoveSavedViewRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nyttig_v1_nyttig_proto_msgTypes[18]
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1350,7 +1563,7 @@ func (x *RemoveSavedViewRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemoveSavedViewRequest.ProtoReflect.Descriptor instead.
 func (*RemoveSavedViewRequest) Descriptor() ([]byte, []int) {
-	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{18}
+	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *RemoveSavedViewRequest) GetId() int64 {
@@ -1370,7 +1583,7 @@ type ReorderSavedViewsRequest struct {
 
 func (x *ReorderSavedViewsRequest) Reset() {
 	*x = ReorderSavedViewsRequest{}
-	mi := &file_nyttig_v1_nyttig_proto_msgTypes[19]
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1382,7 +1595,7 @@ func (x *ReorderSavedViewsRequest) String() string {
 func (*ReorderSavedViewsRequest) ProtoMessage() {}
 
 func (x *ReorderSavedViewsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nyttig_v1_nyttig_proto_msgTypes[19]
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1395,7 +1608,7 @@ func (x *ReorderSavedViewsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReorderSavedViewsRequest.ProtoReflect.Descriptor instead.
 func (*ReorderSavedViewsRequest) Descriptor() ([]byte, []int) {
-	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{19}
+	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *ReorderSavedViewsRequest) GetIds() []int64 {
@@ -1414,7 +1627,7 @@ type ListSavedViewsResponse struct {
 
 func (x *ListSavedViewsResponse) Reset() {
 	*x = ListSavedViewsResponse{}
-	mi := &file_nyttig_v1_nyttig_proto_msgTypes[20]
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1426,7 +1639,7 @@ func (x *ListSavedViewsResponse) String() string {
 func (*ListSavedViewsResponse) ProtoMessage() {}
 
 func (x *ListSavedViewsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_nyttig_v1_nyttig_proto_msgTypes[20]
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1439,7 +1652,7 @@ func (x *ListSavedViewsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListSavedViewsResponse.ProtoReflect.Descriptor instead.
 func (*ListSavedViewsResponse) Descriptor() ([]byte, []int) {
-	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{20}
+	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *ListSavedViewsResponse) GetViews() []*SavedView {
@@ -1447,6 +1660,363 @@ func (x *ListSavedViewsResponse) GetViews() []*SavedView {
 		return x.Views
 	}
 	return nil
+}
+
+type AddAssessorRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Description   string                 `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"`
+	Color         string                 `protobuf:"bytes,3,opt,name=color,proto3" json:"color,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AddAssessorRequest) Reset() {
+	*x = AddAssessorRequest{}
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[23]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AddAssessorRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AddAssessorRequest) ProtoMessage() {}
+
+func (x *AddAssessorRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[23]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AddAssessorRequest.ProtoReflect.Descriptor instead.
+func (*AddAssessorRequest) Descriptor() ([]byte, []int) {
+	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{23}
+}
+
+func (x *AddAssessorRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *AddAssessorRequest) GetDescription() string {
+	if x != nil {
+		return x.Description
+	}
+	return ""
+}
+
+func (x *AddAssessorRequest) GetColor() string {
+	if x != nil {
+		return x.Color
+	}
+	return ""
+}
+
+// Unset fields are unchanged; setting description or color to an empty
+// string clears it.
+type UpdateAssessorRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            int64                  `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+	Name          *string                `protobuf:"bytes,2,opt,name=name,proto3,oneof" json:"name,omitempty"`
+	Description   *string                `protobuf:"bytes,3,opt,name=description,proto3,oneof" json:"description,omitempty"`
+	Color         *string                `protobuf:"bytes,4,opt,name=color,proto3,oneof" json:"color,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpdateAssessorRequest) Reset() {
+	*x = UpdateAssessorRequest{}
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[24]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdateAssessorRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateAssessorRequest) ProtoMessage() {}
+
+func (x *UpdateAssessorRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[24]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateAssessorRequest.ProtoReflect.Descriptor instead.
+func (*UpdateAssessorRequest) Descriptor() ([]byte, []int) {
+	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{24}
+}
+
+func (x *UpdateAssessorRequest) GetId() int64 {
+	if x != nil {
+		return x.Id
+	}
+	return 0
+}
+
+func (x *UpdateAssessorRequest) GetName() string {
+	if x != nil && x.Name != nil {
+		return *x.Name
+	}
+	return ""
+}
+
+func (x *UpdateAssessorRequest) GetDescription() string {
+	if x != nil && x.Description != nil {
+		return *x.Description
+	}
+	return ""
+}
+
+func (x *UpdateAssessorRequest) GetColor() string {
+	if x != nil && x.Color != nil {
+		return *x.Color
+	}
+	return ""
+}
+
+type RemoveAssessorRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            int64                  `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RemoveAssessorRequest) Reset() {
+	*x = RemoveAssessorRequest{}
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[25]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RemoveAssessorRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RemoveAssessorRequest) ProtoMessage() {}
+
+func (x *RemoveAssessorRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[25]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RemoveAssessorRequest.ProtoReflect.Descriptor instead.
+func (*RemoveAssessorRequest) Descriptor() ([]byte, []int) {
+	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{25}
+}
+
+func (x *RemoveAssessorRequest) GetId() int64 {
+	if x != nil {
+		return x.Id
+	}
+	return 0
+}
+
+type ListAssessorsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Assessors     []*Assessor            `protobuf:"bytes,1,rep,name=assessors,proto3" json:"assessors,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListAssessorsResponse) Reset() {
+	*x = ListAssessorsResponse{}
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[26]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListAssessorsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListAssessorsResponse) ProtoMessage() {}
+
+func (x *ListAssessorsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[26]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListAssessorsResponse.ProtoReflect.Descriptor instead.
+func (*ListAssessorsResponse) Descriptor() ([]byte, []int) {
+	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{26}
+}
+
+func (x *ListAssessorsResponse) GetAssessors() []*Assessor {
+	if x != nil {
+		return x.Assessors
+	}
+	return nil
+}
+
+// Replaces the whole assessment for (item_id, assessor_id, tag_id): an unset
+// score or empty note is stored as NULL. At least one must be given.
+// tag_id 0 = the item as a whole.
+type PutAssessmentRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ItemId        int64                  `protobuf:"varint,1,opt,name=item_id,json=itemId,proto3" json:"item_id,omitempty"`
+	AssessorId    int64                  `protobuf:"varint,2,opt,name=assessor_id,json=assessorId,proto3" json:"assessor_id,omitempty"`
+	TagId         int64                  `protobuf:"varint,3,opt,name=tag_id,json=tagId,proto3" json:"tag_id,omitempty"`
+	Score         *float64               `protobuf:"fixed64,4,opt,name=score,proto3,oneof" json:"score,omitempty"`
+	Note          string                 `protobuf:"bytes,5,opt,name=note,proto3" json:"note,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PutAssessmentRequest) Reset() {
+	*x = PutAssessmentRequest{}
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[27]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PutAssessmentRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PutAssessmentRequest) ProtoMessage() {}
+
+func (x *PutAssessmentRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[27]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PutAssessmentRequest.ProtoReflect.Descriptor instead.
+func (*PutAssessmentRequest) Descriptor() ([]byte, []int) {
+	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{27}
+}
+
+func (x *PutAssessmentRequest) GetItemId() int64 {
+	if x != nil {
+		return x.ItemId
+	}
+	return 0
+}
+
+func (x *PutAssessmentRequest) GetAssessorId() int64 {
+	if x != nil {
+		return x.AssessorId
+	}
+	return 0
+}
+
+func (x *PutAssessmentRequest) GetTagId() int64 {
+	if x != nil {
+		return x.TagId
+	}
+	return 0
+}
+
+func (x *PutAssessmentRequest) GetScore() float64 {
+	if x != nil && x.Score != nil {
+		return *x.Score
+	}
+	return 0
+}
+
+func (x *PutAssessmentRequest) GetNote() string {
+	if x != nil {
+		return x.Note
+	}
+	return ""
+}
+
+type RemoveAssessmentRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ItemId        int64                  `protobuf:"varint,1,opt,name=item_id,json=itemId,proto3" json:"item_id,omitempty"`
+	AssessorId    int64                  `protobuf:"varint,2,opt,name=assessor_id,json=assessorId,proto3" json:"assessor_id,omitempty"`
+	TagId         int64                  `protobuf:"varint,3,opt,name=tag_id,json=tagId,proto3" json:"tag_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RemoveAssessmentRequest) Reset() {
+	*x = RemoveAssessmentRequest{}
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[28]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RemoveAssessmentRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RemoveAssessmentRequest) ProtoMessage() {}
+
+func (x *RemoveAssessmentRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[28]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RemoveAssessmentRequest.ProtoReflect.Descriptor instead.
+func (*RemoveAssessmentRequest) Descriptor() ([]byte, []int) {
+	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{28}
+}
+
+func (x *RemoveAssessmentRequest) GetItemId() int64 {
+	if x != nil {
+		return x.ItemId
+	}
+	return 0
+}
+
+func (x *RemoveAssessmentRequest) GetAssessorId() int64 {
+	if x != nil {
+		return x.AssessorId
+	}
+	return 0
+}
+
+func (x *RemoveAssessmentRequest) GetTagId() int64 {
+	if x != nil {
+		return x.TagId
+	}
+	return 0
 }
 
 type AddTagRuleRequest struct {
@@ -1462,7 +2032,7 @@ type AddTagRuleRequest struct {
 
 func (x *AddTagRuleRequest) Reset() {
 	*x = AddTagRuleRequest{}
-	mi := &file_nyttig_v1_nyttig_proto_msgTypes[21]
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1474,7 +2044,7 @@ func (x *AddTagRuleRequest) String() string {
 func (*AddTagRuleRequest) ProtoMessage() {}
 
 func (x *AddTagRuleRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nyttig_v1_nyttig_proto_msgTypes[21]
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1487,7 +2057,7 @@ func (x *AddTagRuleRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AddTagRuleRequest.ProtoReflect.Descriptor instead.
 func (*AddTagRuleRequest) Descriptor() ([]byte, []int) {
-	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{21}
+	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *AddTagRuleRequest) GetSourceId() int64 {
@@ -1534,7 +2104,7 @@ type RemoveTagRuleRequest struct {
 
 func (x *RemoveTagRuleRequest) Reset() {
 	*x = RemoveTagRuleRequest{}
-	mi := &file_nyttig_v1_nyttig_proto_msgTypes[22]
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1546,7 +2116,7 @@ func (x *RemoveTagRuleRequest) String() string {
 func (*RemoveTagRuleRequest) ProtoMessage() {}
 
 func (x *RemoveTagRuleRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nyttig_v1_nyttig_proto_msgTypes[22]
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1559,7 +2129,7 @@ func (x *RemoveTagRuleRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemoveTagRuleRequest.ProtoReflect.Descriptor instead.
 func (*RemoveTagRuleRequest) Descriptor() ([]byte, []int) {
-	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{22}
+	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *RemoveTagRuleRequest) GetId() int64 {
@@ -1578,7 +2148,7 @@ type ListTagRulesResponse struct {
 
 func (x *ListTagRulesResponse) Reset() {
 	*x = ListTagRulesResponse{}
-	mi := &file_nyttig_v1_nyttig_proto_msgTypes[23]
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1590,7 +2160,7 @@ func (x *ListTagRulesResponse) String() string {
 func (*ListTagRulesResponse) ProtoMessage() {}
 
 func (x *ListTagRulesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_nyttig_v1_nyttig_proto_msgTypes[23]
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1603,7 +2173,7 @@ func (x *ListTagRulesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListTagRulesResponse.ProtoReflect.Descriptor instead.
 func (*ListTagRulesResponse) Descriptor() ([]byte, []int) {
-	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{23}
+	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *ListTagRulesResponse) GetRules() []*TagRule {
@@ -1627,7 +2197,7 @@ type TestTagRuleRequest struct {
 
 func (x *TestTagRuleRequest) Reset() {
 	*x = TestTagRuleRequest{}
-	mi := &file_nyttig_v1_nyttig_proto_msgTypes[24]
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1639,7 +2209,7 @@ func (x *TestTagRuleRequest) String() string {
 func (*TestTagRuleRequest) ProtoMessage() {}
 
 func (x *TestTagRuleRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nyttig_v1_nyttig_proto_msgTypes[24]
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1652,7 +2222,7 @@ func (x *TestTagRuleRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TestTagRuleRequest.ProtoReflect.Descriptor instead.
 func (*TestTagRuleRequest) Descriptor() ([]byte, []int) {
-	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{24}
+	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *TestTagRuleRequest) GetSourceId() int64 {
@@ -1693,7 +2263,7 @@ type TestTagRuleResponse struct {
 
 func (x *TestTagRuleResponse) Reset() {
 	*x = TestTagRuleResponse{}
-	mi := &file_nyttig_v1_nyttig_proto_msgTypes[25]
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1705,7 +2275,7 @@ func (x *TestTagRuleResponse) String() string {
 func (*TestTagRuleResponse) ProtoMessage() {}
 
 func (x *TestTagRuleResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_nyttig_v1_nyttig_proto_msgTypes[25]
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1718,7 +2288,7 @@ func (x *TestTagRuleResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TestTagRuleResponse.ProtoReflect.Descriptor instead.
 func (*TestTagRuleResponse) Descriptor() ([]byte, []int) {
-	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{25}
+	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *TestTagRuleResponse) GetItems() []*Item {
@@ -1742,16 +2312,19 @@ type SearchRequest struct {
 	TagId         int64                  `protobuf:"varint,3,opt,name=tag_id,json=tagId,proto3" json:"tag_id,omitempty"`          // 0 = all tags; matches the tag or any tag below it
 	Limit         int32                  `protobuf:"varint,4,opt,name=limit,proto3" json:"limit,omitempty"`                       // default: 100
 	Offset        int32                  `protobuf:"varint,5,opt,name=offset,proto3" json:"offset,omitempty"`                     // default: 0
-	Sort          string                 `protobuf:"bytes,6,opt,name=sort,proto3" json:"sort,omitempty"`                          // newest, oldest; default newest
+	Sort          string                 `protobuf:"bytes,6,opt,name=sort,proto3" json:"sort,omitempty"`                          // newest, oldest, score; default newest
 	UnviewedOnly  bool                   `protobuf:"varint,7,opt,name=unviewed_only,json=unviewedOnly,proto3" json:"unviewed_only,omitempty"`
-	TagExact      bool                   `protobuf:"varint,8,opt,name=tag_exact,json=tagExact,proto3" json:"tag_exact,omitempty"` // match tag_id only, not its descendants
+	TagExact      bool                   `protobuf:"varint,8,opt,name=tag_exact,json=tagExact,proto3" json:"tag_exact,omitempty"`              // match tag_id only, not its descendants
+	AssessorId    int64                  `protobuf:"varint,9,opt,name=assessor_id,json=assessorId,proto3" json:"assessor_id,omitempty"`        // 0 = none; whose scores min_score and sort "score" use
+	MinScore      *float64               `protobuf:"fixed64,10,opt,name=min_score,json=minScore,proto3,oneof" json:"min_score,omitempty"`      // an in-scope score from assessor_id of at least this
+	UnassessedBy  int64                  `protobuf:"varint,11,opt,name=unassessed_by,json=unassessedBy,proto3" json:"unassessed_by,omitempty"` // 0 = none; no in-scope assessment by this assessor
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *SearchRequest) Reset() {
 	*x = SearchRequest{}
-	mi := &file_nyttig_v1_nyttig_proto_msgTypes[26]
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1763,7 +2336,7 @@ func (x *SearchRequest) String() string {
 func (*SearchRequest) ProtoMessage() {}
 
 func (x *SearchRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nyttig_v1_nyttig_proto_msgTypes[26]
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1776,7 +2349,7 @@ func (x *SearchRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SearchRequest.ProtoReflect.Descriptor instead.
 func (*SearchRequest) Descriptor() ([]byte, []int) {
-	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{26}
+	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *SearchRequest) GetQuery() string {
@@ -1835,6 +2408,27 @@ func (x *SearchRequest) GetTagExact() bool {
 	return false
 }
 
+func (x *SearchRequest) GetAssessorId() int64 {
+	if x != nil {
+		return x.AssessorId
+	}
+	return 0
+}
+
+func (x *SearchRequest) GetMinScore() float64 {
+	if x != nil && x.MinScore != nil {
+		return *x.MinScore
+	}
+	return 0
+}
+
+func (x *SearchRequest) GetUnassessedBy() int64 {
+	if x != nil {
+		return x.UnassessedBy
+	}
+	return 0
+}
+
 type SearchResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Items         []*Item                `protobuf:"bytes,1,rep,name=items,proto3" json:"items,omitempty"`
@@ -1845,7 +2439,7 @@ type SearchResponse struct {
 
 func (x *SearchResponse) Reset() {
 	*x = SearchResponse{}
-	mi := &file_nyttig_v1_nyttig_proto_msgTypes[27]
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1857,7 +2451,7 @@ func (x *SearchResponse) String() string {
 func (*SearchResponse) ProtoMessage() {}
 
 func (x *SearchResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_nyttig_v1_nyttig_proto_msgTypes[27]
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1870,7 +2464,7 @@ func (x *SearchResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SearchResponse.ProtoReflect.Descriptor instead.
 func (*SearchResponse) Descriptor() ([]byte, []int) {
-	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{27}
+	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *SearchResponse) GetItems() []*Item {
@@ -1896,7 +2490,7 @@ type MarkViewedRequest struct {
 
 func (x *MarkViewedRequest) Reset() {
 	*x = MarkViewedRequest{}
-	mi := &file_nyttig_v1_nyttig_proto_msgTypes[28]
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1908,7 +2502,7 @@ func (x *MarkViewedRequest) String() string {
 func (*MarkViewedRequest) ProtoMessage() {}
 
 func (x *MarkViewedRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nyttig_v1_nyttig_proto_msgTypes[28]
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1921,7 +2515,7 @@ func (x *MarkViewedRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MarkViewedRequest.ProtoReflect.Descriptor instead.
 func (*MarkViewedRequest) Descriptor() ([]byte, []int) {
-	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{28}
+	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *MarkViewedRequest) GetItemIds() []int64 {
@@ -1943,7 +2537,7 @@ type ClientMessage struct {
 
 func (x *ClientMessage) Reset() {
 	*x = ClientMessage{}
-	mi := &file_nyttig_v1_nyttig_proto_msgTypes[29]
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1955,7 +2549,7 @@ func (x *ClientMessage) String() string {
 func (*ClientMessage) ProtoMessage() {}
 
 func (x *ClientMessage) ProtoReflect() protoreflect.Message {
-	mi := &file_nyttig_v1_nyttig_proto_msgTypes[29]
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1968,7 +2562,7 @@ func (x *ClientMessage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ClientMessage.ProtoReflect.Descriptor instead.
 func (*ClientMessage) Descriptor() ([]byte, []int) {
-	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{29}
+	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *ClientMessage) GetMsg() isClientMessage_Msg {
@@ -2002,16 +2596,19 @@ type StreamFilter struct {
 	SourceId      int64                  `protobuf:"varint,1,opt,name=source_id,json=sourceId,proto3" json:"source_id,omitempty"` // 0 = all
 	TagId         int64                  `protobuf:"varint,2,opt,name=tag_id,json=tagId,proto3" json:"tag_id,omitempty"`          // 0 = all; matches the tag or any tag below it
 	Search        string                 `protobuf:"bytes,3,opt,name=search,proto3" json:"search,omitempty"`                      // FTS5 query string, empty = no filter
-	Sort          string                 `protobuf:"bytes,4,opt,name=sort,proto3" json:"sort,omitempty"`                          // newest, oldest; default newest
+	Sort          string                 `protobuf:"bytes,4,opt,name=sort,proto3" json:"sort,omitempty"`                          // newest, oldest, score; default newest
 	Limit         int32                  `protobuf:"varint,5,opt,name=limit,proto3" json:"limit,omitempty"`
 	UnviewedOnly  bool                   `protobuf:"varint,6,opt,name=unviewed_only,json=unviewedOnly,proto3" json:"unviewed_only,omitempty"`
+	AssessorId    int64                  `protobuf:"varint,7,opt,name=assessor_id,json=assessorId,proto3" json:"assessor_id,omitempty"` // 0 = none; whose scores min_score and sort "score" use
+	MinScore      *float64               `protobuf:"fixed64,8,opt,name=min_score,json=minScore,proto3,oneof" json:"min_score,omitempty"`
+	UnassessedBy  int64                  `protobuf:"varint,9,opt,name=unassessed_by,json=unassessedBy,proto3" json:"unassessed_by,omitempty"` // 0 = none
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *StreamFilter) Reset() {
 	*x = StreamFilter{}
-	mi := &file_nyttig_v1_nyttig_proto_msgTypes[30]
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2023,7 +2620,7 @@ func (x *StreamFilter) String() string {
 func (*StreamFilter) ProtoMessage() {}
 
 func (x *StreamFilter) ProtoReflect() protoreflect.Message {
-	mi := &file_nyttig_v1_nyttig_proto_msgTypes[30]
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2036,7 +2633,7 @@ func (x *StreamFilter) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StreamFilter.ProtoReflect.Descriptor instead.
 func (*StreamFilter) Descriptor() ([]byte, []int) {
-	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{30}
+	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{38}
 }
 
 func (x *StreamFilter) GetSourceId() int64 {
@@ -2081,6 +2678,27 @@ func (x *StreamFilter) GetUnviewedOnly() bool {
 	return false
 }
 
+func (x *StreamFilter) GetAssessorId() int64 {
+	if x != nil {
+		return x.AssessorId
+	}
+	return 0
+}
+
+func (x *StreamFilter) GetMinScore() float64 {
+	if x != nil && x.MinScore != nil {
+		return *x.MinScore
+	}
+	return 0
+}
+
+func (x *StreamFilter) GetUnassessedBy() int64 {
+	if x != nil {
+		return x.UnassessedBy
+	}
+	return 0
+}
+
 type ServerMessage struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Types that are valid to be assigned to Msg:
@@ -2088,6 +2706,7 @@ type ServerMessage struct {
 	//	*ServerMessage_Item
 	//	*ServerMessage_Reset_
 	//	*ServerMessage_Complete
+	//	*ServerMessage_ItemUpdate
 	Msg           isServerMessage_Msg `protobuf_oneof:"msg"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -2095,7 +2714,7 @@ type ServerMessage struct {
 
 func (x *ServerMessage) Reset() {
 	*x = ServerMessage{}
-	mi := &file_nyttig_v1_nyttig_proto_msgTypes[31]
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2107,7 +2726,7 @@ func (x *ServerMessage) String() string {
 func (*ServerMessage) ProtoMessage() {}
 
 func (x *ServerMessage) ProtoReflect() protoreflect.Message {
-	mi := &file_nyttig_v1_nyttig_proto_msgTypes[31]
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2120,7 +2739,7 @@ func (x *ServerMessage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ServerMessage.ProtoReflect.Descriptor instead.
 func (*ServerMessage) Descriptor() ([]byte, []int) {
-	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{31}
+	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{39}
 }
 
 func (x *ServerMessage) GetMsg() isServerMessage_Msg {
@@ -2157,6 +2776,15 @@ func (x *ServerMessage) GetComplete() *Complete {
 	return nil
 }
 
+func (x *ServerMessage) GetItemUpdate() *Item {
+	if x != nil {
+		if x, ok := x.Msg.(*ServerMessage_ItemUpdate); ok {
+			return x.ItemUpdate
+		}
+	}
+	return nil
+}
+
 type isServerMessage_Msg interface {
 	isServerMessage_Msg()
 }
@@ -2173,11 +2801,17 @@ type ServerMessage_Complete struct {
 	Complete *Complete `protobuf:"bytes,3,opt,name=complete,proto3,oneof"`
 }
 
+type ServerMessage_ItemUpdate struct {
+	ItemUpdate *Item `protobuf:"bytes,4,opt,name=item_update,json=itemUpdate,proto3,oneof"` // an item whose assessments changed, with all of them
+}
+
 func (*ServerMessage_Item) isServerMessage_Msg() {}
 
 func (*ServerMessage_Reset_) isServerMessage_Msg() {}
 
 func (*ServerMessage_Complete) isServerMessage_Msg() {}
+
+func (*ServerMessage_ItemUpdate) isServerMessage_Msg() {}
 
 type Reset struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -2187,7 +2821,7 @@ type Reset struct {
 
 func (x *Reset) Reset() {
 	*x = Reset{}
-	mi := &file_nyttig_v1_nyttig_proto_msgTypes[32]
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2199,7 +2833,7 @@ func (x *Reset) String() string {
 func (*Reset) ProtoMessage() {}
 
 func (x *Reset) ProtoReflect() protoreflect.Message {
-	mi := &file_nyttig_v1_nyttig_proto_msgTypes[32]
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2212,7 +2846,7 @@ func (x *Reset) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Reset.ProtoReflect.Descriptor instead.
 func (*Reset) Descriptor() ([]byte, []int) {
-	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{32}
+	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{40}
 }
 
 type Complete struct {
@@ -2223,7 +2857,7 @@ type Complete struct {
 
 func (x *Complete) Reset() {
 	*x = Complete{}
-	mi := &file_nyttig_v1_nyttig_proto_msgTypes[33]
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[41]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2235,7 +2869,7 @@ func (x *Complete) String() string {
 func (*Complete) ProtoMessage() {}
 
 func (x *Complete) ProtoReflect() protoreflect.Message {
-	mi := &file_nyttig_v1_nyttig_proto_msgTypes[33]
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[41]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2248,7 +2882,7 @@ func (x *Complete) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Complete.ProtoReflect.Descriptor instead.
 func (*Complete) Descriptor() ([]byte, []int) {
-	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{33}
+	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{41}
 }
 
 var File_nyttig_v1_nyttig_proto protoreflect.FileDescriptor
@@ -2272,7 +2906,7 @@ const file_nyttig_v1_nyttig_proto_rawDesc = "" +
 	"fetchError\x12\x14\n" +
 	"\x05color\x18\n" +
 	" \x01(\tR\x05color\x12\"\n" +
-	"\fabbreviation\x18\v \x01(\tR\fabbreviation\"\xfd\x02\n" +
+	"\fabbreviation\x18\v \x01(\tR\fabbreviation\"\xb6\x03\n" +
 	"\x04Item\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\x03R\x02id\x12\x1b\n" +
 	"\tsource_id\x18\x02 \x01(\x03R\bsourceId\x12\x1f\n" +
@@ -2288,13 +2922,34 @@ const file_nyttig_v1_nyttig_proto_rawDesc = "" +
 	"fetched_at\x18\n" +
 	" \x01(\v2\x1a.google.protobuf.TimestampR\tfetchedAt\x12\"\n" +
 	"\x04tags\x18\v \x03(\v2\x0e.nyttig.v1.TagR\x04tags\x12\x16\n" +
-	"\x06viewed\x18\f \x01(\bR\x06viewed\"^\n" +
+	"\x06viewed\x18\f \x01(\bR\x06viewed\x127\n" +
+	"\vassessments\x18\r \x03(\v2\x15.nyttig.v1.AssessmentR\vassessments\"^\n" +
 	"\x03Tag\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\x03R\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x14\n" +
 	"\x05color\x18\x03 \x01(\tR\x05color\x12\x1d\n" +
 	"\n" +
-	"parent_ids\x18\x04 \x03(\x03R\tparentIds\"\xb4\x01\n" +
+	"parent_ids\x18\x04 \x03(\x03R\tparentIds\"\xa1\x01\n" +
+	"\bAssessor\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\x03R\x02id\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x12 \n" +
+	"\vdescription\x18\x03 \x01(\tR\vdescription\x12\x14\n" +
+	"\x05color\x18\x04 \x01(\tR\x05color\x129\n" +
+	"\n" +
+	"created_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\"\x86\x02\n" +
+	"\n" +
+	"Assessment\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\x03R\x02id\x12\x17\n" +
+	"\aitem_id\x18\x02 \x01(\x03R\x06itemId\x12\x1f\n" +
+	"\vassessor_id\x18\x03 \x01(\x03R\n" +
+	"assessorId\x12#\n" +
+	"\rassessor_name\x18\x04 \x01(\tR\fassessorName\x12\x15\n" +
+	"\x06tag_id\x18\x05 \x01(\x03R\x05tagId\x12\x19\n" +
+	"\x05score\x18\x06 \x01(\x01H\x00R\x05score\x88\x01\x01\x12\x12\n" +
+	"\x04note\x18\a \x01(\tR\x04note\x129\n" +
+	"\n" +
+	"updated_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAtB\b\n" +
+	"\x06_score\"\xb4\x01\n" +
 	"\aTagRule\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\x03R\x02id\x12\x1b\n" +
 	"\tsource_id\x18\x02 \x01(\x03R\bsourceId\x12\x15\n" +
@@ -2356,14 +3011,20 @@ const file_nyttig_v1_nyttig_proto_rawDesc = "" +
 	"\x10RemoveTagRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\x03R\x02id\"6\n" +
 	"\x10ListTagsResponse\x12\"\n" +
-	"\x04tags\x18\x01 \x03(\v2\x0e.nyttig.v1.TagR\x04tags\"\x91\x01\n" +
+	"\x04tags\x18\x01 \x03(\v2\x0e.nyttig.v1.TagR\x04tags\"\x87\x02\n" +
 	"\n" +
 	"ViewFilter\x12\x16\n" +
 	"\x06search\x18\x01 \x01(\tR\x06search\x12\x1b\n" +
 	"\tsource_id\x18\x02 \x01(\x03R\bsourceId\x12\x15\n" +
 	"\x06tag_id\x18\x03 \x01(\x03R\x05tagId\x12\x12\n" +
 	"\x04sort\x18\x04 \x01(\tR\x04sort\x12#\n" +
-	"\runviewed_only\x18\x05 \x01(\bR\funviewedOnly\"\x96\x01\n" +
+	"\runviewed_only\x18\x05 \x01(\bR\funviewedOnly\x12\x1f\n" +
+	"\vassessor_id\x18\x06 \x01(\x03R\n" +
+	"assessorId\x12 \n" +
+	"\tmin_score\x18\a \x01(\x01H\x00R\bminScore\x88\x01\x01\x12#\n" +
+	"\runassessed_by\x18\b \x01(\x03R\funassessedByB\f\n" +
+	"\n" +
+	"_min_score\"\x96\x01\n" +
 	"\tSavedView\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\x03R\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12-\n" +
@@ -2386,7 +3047,36 @@ const file_nyttig_v1_nyttig_proto_rawDesc = "" +
 	"\x18ReorderSavedViewsRequest\x12\x10\n" +
 	"\x03ids\x18\x01 \x03(\x03R\x03ids\"D\n" +
 	"\x16ListSavedViewsResponse\x12*\n" +
-	"\x05views\x18\x01 \x03(\v2\x14.nyttig.v1.SavedViewR\x05views\"\x93\x01\n" +
+	"\x05views\x18\x01 \x03(\v2\x14.nyttig.v1.SavedViewR\x05views\"`\n" +
+	"\x12AddAssessorRequest\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
+	"\vdescription\x18\x02 \x01(\tR\vdescription\x12\x14\n" +
+	"\x05color\x18\x03 \x01(\tR\x05color\"\xa5\x01\n" +
+	"\x15UpdateAssessorRequest\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\x03R\x02id\x12\x17\n" +
+	"\x04name\x18\x02 \x01(\tH\x00R\x04name\x88\x01\x01\x12%\n" +
+	"\vdescription\x18\x03 \x01(\tH\x01R\vdescription\x88\x01\x01\x12\x19\n" +
+	"\x05color\x18\x04 \x01(\tH\x02R\x05color\x88\x01\x01B\a\n" +
+	"\x05_nameB\x0e\n" +
+	"\f_descriptionB\b\n" +
+	"\x06_color\"'\n" +
+	"\x15RemoveAssessorRequest\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\x03R\x02id\"J\n" +
+	"\x15ListAssessorsResponse\x121\n" +
+	"\tassessors\x18\x01 \x03(\v2\x13.nyttig.v1.AssessorR\tassessors\"\xa0\x01\n" +
+	"\x14PutAssessmentRequest\x12\x17\n" +
+	"\aitem_id\x18\x01 \x01(\x03R\x06itemId\x12\x1f\n" +
+	"\vassessor_id\x18\x02 \x01(\x03R\n" +
+	"assessorId\x12\x15\n" +
+	"\x06tag_id\x18\x03 \x01(\x03R\x05tagId\x12\x19\n" +
+	"\x05score\x18\x04 \x01(\x01H\x00R\x05score\x88\x01\x01\x12\x12\n" +
+	"\x04note\x18\x05 \x01(\tR\x04noteB\b\n" +
+	"\x06_score\"j\n" +
+	"\x17RemoveAssessmentRequest\x12\x17\n" +
+	"\aitem_id\x18\x01 \x01(\x03R\x06itemId\x12\x1f\n" +
+	"\vassessor_id\x18\x02 \x01(\x03R\n" +
+	"assessorId\x12\x15\n" +
+	"\x06tag_id\x18\x03 \x01(\x03R\x05tagId\"\x93\x01\n" +
 	"\x11AddTagRuleRequest\x12\x1b\n" +
 	"\tsource_id\x18\x01 \x01(\x03R\bsourceId\x12\x15\n" +
 	"\x06tag_id\x18\x02 \x01(\x03R\x05tagId\x12\x14\n" +
@@ -2404,7 +3094,7 @@ const file_nyttig_v1_nyttig_proto_rawDesc = "" +
 	"\x05limit\x18\x04 \x01(\x05R\x05limit\"V\n" +
 	"\x13TestTagRuleResponse\x12%\n" +
 	"\x05items\x18\x01 \x03(\v2\x0f.nyttig.v1.ItemR\x05items\x12\x18\n" +
-	"\ascanned\x18\x02 \x01(\x05R\ascanned\"\xdd\x01\n" +
+	"\ascanned\x18\x02 \x01(\x05R\ascanned\"\xd3\x02\n" +
 	"\rSearchRequest\x12\x14\n" +
 	"\x05query\x18\x01 \x01(\tR\x05query\x12\x1b\n" +
 	"\tsource_id\x18\x02 \x01(\x03R\bsourceId\x12\x15\n" +
@@ -2413,7 +3103,14 @@ const file_nyttig_v1_nyttig_proto_rawDesc = "" +
 	"\x06offset\x18\x05 \x01(\x05R\x06offset\x12\x12\n" +
 	"\x04sort\x18\x06 \x01(\tR\x04sort\x12#\n" +
 	"\runviewed_only\x18\a \x01(\bR\funviewedOnly\x12\x1b\n" +
-	"\ttag_exact\x18\b \x01(\bR\btagExact\"M\n" +
+	"\ttag_exact\x18\b \x01(\bR\btagExact\x12\x1f\n" +
+	"\vassessor_id\x18\t \x01(\x03R\n" +
+	"assessorId\x12 \n" +
+	"\tmin_score\x18\n" +
+	" \x01(\x01H\x00R\bminScore\x88\x01\x01\x12#\n" +
+	"\runassessed_by\x18\v \x01(\x03R\funassessedByB\f\n" +
+	"\n" +
+	"_min_score\"M\n" +
 	"\x0eSearchResponse\x12%\n" +
 	"\x05items\x18\x01 \x03(\v2\x0f.nyttig.v1.ItemR\x05items\x12\x14\n" +
 	"\x05total\x18\x02 \x01(\x05R\x05total\".\n" +
@@ -2421,22 +3118,30 @@ const file_nyttig_v1_nyttig_proto_rawDesc = "" +
 	"\bitem_ids\x18\x01 \x03(\x03R\aitemIds\"I\n" +
 	"\rClientMessage\x121\n" +
 	"\x06filter\x18\x01 \x01(\v2\x17.nyttig.v1.StreamFilterH\x00R\x06filterB\x05\n" +
-	"\x03msg\"\xa9\x01\n" +
+	"\x03msg\"\x9f\x02\n" +
 	"\fStreamFilter\x12\x1b\n" +
 	"\tsource_id\x18\x01 \x01(\x03R\bsourceId\x12\x15\n" +
 	"\x06tag_id\x18\x02 \x01(\x03R\x05tagId\x12\x16\n" +
 	"\x06search\x18\x03 \x01(\tR\x06search\x12\x12\n" +
 	"\x04sort\x18\x04 \x01(\tR\x04sort\x12\x14\n" +
 	"\x05limit\x18\x05 \x01(\x05R\x05limit\x12#\n" +
-	"\runviewed_only\x18\x06 \x01(\bR\funviewedOnly\"\x9a\x01\n" +
+	"\runviewed_only\x18\x06 \x01(\bR\funviewedOnly\x12\x1f\n" +
+	"\vassessor_id\x18\a \x01(\x03R\n" +
+	"assessorId\x12 \n" +
+	"\tmin_score\x18\b \x01(\x01H\x00R\bminScore\x88\x01\x01\x12#\n" +
+	"\runassessed_by\x18\t \x01(\x03R\funassessedByB\f\n" +
+	"\n" +
+	"_min_score\"\xce\x01\n" +
 	"\rServerMessage\x12%\n" +
 	"\x04item\x18\x01 \x01(\v2\x0f.nyttig.v1.ItemH\x00R\x04item\x12(\n" +
 	"\x05reset\x18\x02 \x01(\v2\x10.nyttig.v1.ResetH\x00R\x05reset\x121\n" +
-	"\bcomplete\x18\x03 \x01(\v2\x13.nyttig.v1.CompleteH\x00R\bcompleteB\x05\n" +
+	"\bcomplete\x18\x03 \x01(\v2\x13.nyttig.v1.CompleteH\x00R\bcomplete\x122\n" +
+	"\vitem_update\x18\x04 \x01(\v2\x0f.nyttig.v1.ItemH\x00R\n" +
+	"itemUpdateB\x05\n" +
 	"\x03msg\"\a\n" +
 	"\x05Reset\"\n" +
 	"\n" +
-	"\bComplete2\xc7\v\n" +
+	"\bComplete2\x83\x0f\n" +
 	"\x06Nyttig\x12;\n" +
 	"\tAddSource\x12\x1b.nyttig.v1.AddSourceRequest\x1a\x11.nyttig.v1.Source\x12F\n" +
 	"\fRemoveSource\x12\x1e.nyttig.v1.RemoveSourceRequest\x1a\x16.google.protobuf.Empty\x12A\n" +
@@ -2456,7 +3161,13 @@ const file_nyttig_v1_nyttig_proto_rawDesc = "" +
 	"\x0fUpdateSavedView\x12!.nyttig.v1.UpdateSavedViewRequest\x1a\x14.nyttig.v1.SavedView\x12L\n" +
 	"\x0fRemoveSavedView\x12!.nyttig.v1.RemoveSavedViewRequest\x1a\x16.google.protobuf.Empty\x12K\n" +
 	"\x0eListSavedViews\x12\x16.google.protobuf.Empty\x1a!.nyttig.v1.ListSavedViewsResponse\x12[\n" +
-	"\x11ReorderSavedViews\x12#.nyttig.v1.ReorderSavedViewsRequest\x1a!.nyttig.v1.ListSavedViewsResponse\x12E\n" +
+	"\x11ReorderSavedViews\x12#.nyttig.v1.ReorderSavedViewsRequest\x1a!.nyttig.v1.ListSavedViewsResponse\x12A\n" +
+	"\vAddAssessor\x12\x1d.nyttig.v1.AddAssessorRequest\x1a\x13.nyttig.v1.Assessor\x12G\n" +
+	"\x0eUpdateAssessor\x12 .nyttig.v1.UpdateAssessorRequest\x1a\x13.nyttig.v1.Assessor\x12J\n" +
+	"\x0eRemoveAssessor\x12 .nyttig.v1.RemoveAssessorRequest\x1a\x16.google.protobuf.Empty\x12I\n" +
+	"\rListAssessors\x12\x16.google.protobuf.Empty\x1a .nyttig.v1.ListAssessorsResponse\x12G\n" +
+	"\rPutAssessment\x12\x1f.nyttig.v1.PutAssessmentRequest\x1a\x15.nyttig.v1.Assessment\x12N\n" +
+	"\x10RemoveAssessment\x12\".nyttig.v1.RemoveAssessmentRequest\x1a\x16.google.protobuf.Empty\x12E\n" +
 	"\vStreamItems\x12\x18.nyttig.v1.ClientMessage\x1a\x18.nyttig.v1.ServerMessage(\x010\x01\x12=\n" +
 	"\x06Search\x12\x18.nyttig.v1.SearchRequest\x1a\x19.nyttig.v1.SearchResponse\x12B\n" +
 	"\n" +
@@ -2474,112 +3185,137 @@ func file_nyttig_v1_nyttig_proto_rawDescGZIP() []byte {
 	return file_nyttig_v1_nyttig_proto_rawDescData
 }
 
-var file_nyttig_v1_nyttig_proto_msgTypes = make([]protoimpl.MessageInfo, 34)
+var file_nyttig_v1_nyttig_proto_msgTypes = make([]protoimpl.MessageInfo, 42)
 var file_nyttig_v1_nyttig_proto_goTypes = []any{
 	(*Source)(nil),                   // 0: nyttig.v1.Source
 	(*Item)(nil),                     // 1: nyttig.v1.Item
 	(*Tag)(nil),                      // 2: nyttig.v1.Tag
-	(*TagRule)(nil),                  // 3: nyttig.v1.TagRule
-	(*AddSourceRequest)(nil),         // 4: nyttig.v1.AddSourceRequest
-	(*RemoveSourceRequest)(nil),      // 5: nyttig.v1.RemoveSourceRequest
-	(*UpdateSourceRequest)(nil),      // 6: nyttig.v1.UpdateSourceRequest
-	(*ListSourcesResponse)(nil),      // 7: nyttig.v1.ListSourcesResponse
-	(*RefreshSourceRequest)(nil),     // 8: nyttig.v1.RefreshSourceRequest
-	(*AddTagRequest)(nil),            // 9: nyttig.v1.AddTagRequest
-	(*TagParents)(nil),               // 10: nyttig.v1.TagParents
-	(*UpdateTagRequest)(nil),         // 11: nyttig.v1.UpdateTagRequest
-	(*RemoveTagRequest)(nil),         // 12: nyttig.v1.RemoveTagRequest
-	(*ListTagsResponse)(nil),         // 13: nyttig.v1.ListTagsResponse
-	(*ViewFilter)(nil),               // 14: nyttig.v1.ViewFilter
-	(*SavedView)(nil),                // 15: nyttig.v1.SavedView
-	(*AddSavedViewRequest)(nil),      // 16: nyttig.v1.AddSavedViewRequest
-	(*UpdateSavedViewRequest)(nil),   // 17: nyttig.v1.UpdateSavedViewRequest
-	(*RemoveSavedViewRequest)(nil),   // 18: nyttig.v1.RemoveSavedViewRequest
-	(*ReorderSavedViewsRequest)(nil), // 19: nyttig.v1.ReorderSavedViewsRequest
-	(*ListSavedViewsResponse)(nil),   // 20: nyttig.v1.ListSavedViewsResponse
-	(*AddTagRuleRequest)(nil),        // 21: nyttig.v1.AddTagRuleRequest
-	(*RemoveTagRuleRequest)(nil),     // 22: nyttig.v1.RemoveTagRuleRequest
-	(*ListTagRulesResponse)(nil),     // 23: nyttig.v1.ListTagRulesResponse
-	(*TestTagRuleRequest)(nil),       // 24: nyttig.v1.TestTagRuleRequest
-	(*TestTagRuleResponse)(nil),      // 25: nyttig.v1.TestTagRuleResponse
-	(*SearchRequest)(nil),            // 26: nyttig.v1.SearchRequest
-	(*SearchResponse)(nil),           // 27: nyttig.v1.SearchResponse
-	(*MarkViewedRequest)(nil),        // 28: nyttig.v1.MarkViewedRequest
-	(*ClientMessage)(nil),            // 29: nyttig.v1.ClientMessage
-	(*StreamFilter)(nil),             // 30: nyttig.v1.StreamFilter
-	(*ServerMessage)(nil),            // 31: nyttig.v1.ServerMessage
-	(*Reset)(nil),                    // 32: nyttig.v1.Reset
-	(*Complete)(nil),                 // 33: nyttig.v1.Complete
-	(*timestamppb.Timestamp)(nil),    // 34: google.protobuf.Timestamp
-	(*emptypb.Empty)(nil),            // 35: google.protobuf.Empty
+	(*Assessor)(nil),                 // 3: nyttig.v1.Assessor
+	(*Assessment)(nil),               // 4: nyttig.v1.Assessment
+	(*TagRule)(nil),                  // 5: nyttig.v1.TagRule
+	(*AddSourceRequest)(nil),         // 6: nyttig.v1.AddSourceRequest
+	(*RemoveSourceRequest)(nil),      // 7: nyttig.v1.RemoveSourceRequest
+	(*UpdateSourceRequest)(nil),      // 8: nyttig.v1.UpdateSourceRequest
+	(*ListSourcesResponse)(nil),      // 9: nyttig.v1.ListSourcesResponse
+	(*RefreshSourceRequest)(nil),     // 10: nyttig.v1.RefreshSourceRequest
+	(*AddTagRequest)(nil),            // 11: nyttig.v1.AddTagRequest
+	(*TagParents)(nil),               // 12: nyttig.v1.TagParents
+	(*UpdateTagRequest)(nil),         // 13: nyttig.v1.UpdateTagRequest
+	(*RemoveTagRequest)(nil),         // 14: nyttig.v1.RemoveTagRequest
+	(*ListTagsResponse)(nil),         // 15: nyttig.v1.ListTagsResponse
+	(*ViewFilter)(nil),               // 16: nyttig.v1.ViewFilter
+	(*SavedView)(nil),                // 17: nyttig.v1.SavedView
+	(*AddSavedViewRequest)(nil),      // 18: nyttig.v1.AddSavedViewRequest
+	(*UpdateSavedViewRequest)(nil),   // 19: nyttig.v1.UpdateSavedViewRequest
+	(*RemoveSavedViewRequest)(nil),   // 20: nyttig.v1.RemoveSavedViewRequest
+	(*ReorderSavedViewsRequest)(nil), // 21: nyttig.v1.ReorderSavedViewsRequest
+	(*ListSavedViewsResponse)(nil),   // 22: nyttig.v1.ListSavedViewsResponse
+	(*AddAssessorRequest)(nil),       // 23: nyttig.v1.AddAssessorRequest
+	(*UpdateAssessorRequest)(nil),    // 24: nyttig.v1.UpdateAssessorRequest
+	(*RemoveAssessorRequest)(nil),    // 25: nyttig.v1.RemoveAssessorRequest
+	(*ListAssessorsResponse)(nil),    // 26: nyttig.v1.ListAssessorsResponse
+	(*PutAssessmentRequest)(nil),     // 27: nyttig.v1.PutAssessmentRequest
+	(*RemoveAssessmentRequest)(nil),  // 28: nyttig.v1.RemoveAssessmentRequest
+	(*AddTagRuleRequest)(nil),        // 29: nyttig.v1.AddTagRuleRequest
+	(*RemoveTagRuleRequest)(nil),     // 30: nyttig.v1.RemoveTagRuleRequest
+	(*ListTagRulesResponse)(nil),     // 31: nyttig.v1.ListTagRulesResponse
+	(*TestTagRuleRequest)(nil),       // 32: nyttig.v1.TestTagRuleRequest
+	(*TestTagRuleResponse)(nil),      // 33: nyttig.v1.TestTagRuleResponse
+	(*SearchRequest)(nil),            // 34: nyttig.v1.SearchRequest
+	(*SearchResponse)(nil),           // 35: nyttig.v1.SearchResponse
+	(*MarkViewedRequest)(nil),        // 36: nyttig.v1.MarkViewedRequest
+	(*ClientMessage)(nil),            // 37: nyttig.v1.ClientMessage
+	(*StreamFilter)(nil),             // 38: nyttig.v1.StreamFilter
+	(*ServerMessage)(nil),            // 39: nyttig.v1.ServerMessage
+	(*Reset)(nil),                    // 40: nyttig.v1.Reset
+	(*Complete)(nil),                 // 41: nyttig.v1.Complete
+	(*timestamppb.Timestamp)(nil),    // 42: google.protobuf.Timestamp
+	(*emptypb.Empty)(nil),            // 43: google.protobuf.Empty
 }
 var file_nyttig_v1_nyttig_proto_depIdxs = []int32{
-	34, // 0: nyttig.v1.Source.created_at:type_name -> google.protobuf.Timestamp
-	34, // 1: nyttig.v1.Source.last_fetch:type_name -> google.protobuf.Timestamp
-	34, // 2: nyttig.v1.Item.published:type_name -> google.protobuf.Timestamp
-	34, // 3: nyttig.v1.Item.fetched_at:type_name -> google.protobuf.Timestamp
+	42, // 0: nyttig.v1.Source.created_at:type_name -> google.protobuf.Timestamp
+	42, // 1: nyttig.v1.Source.last_fetch:type_name -> google.protobuf.Timestamp
+	42, // 2: nyttig.v1.Item.published:type_name -> google.protobuf.Timestamp
+	42, // 3: nyttig.v1.Item.fetched_at:type_name -> google.protobuf.Timestamp
 	2,  // 4: nyttig.v1.Item.tags:type_name -> nyttig.v1.Tag
-	0,  // 5: nyttig.v1.ListSourcesResponse.sources:type_name -> nyttig.v1.Source
-	10, // 6: nyttig.v1.UpdateTagRequest.parents:type_name -> nyttig.v1.TagParents
-	2,  // 7: nyttig.v1.ListTagsResponse.tags:type_name -> nyttig.v1.Tag
-	14, // 8: nyttig.v1.SavedView.filter:type_name -> nyttig.v1.ViewFilter
-	14, // 9: nyttig.v1.AddSavedViewRequest.filter:type_name -> nyttig.v1.ViewFilter
-	14, // 10: nyttig.v1.UpdateSavedViewRequest.filter:type_name -> nyttig.v1.ViewFilter
-	15, // 11: nyttig.v1.ListSavedViewsResponse.views:type_name -> nyttig.v1.SavedView
-	3,  // 12: nyttig.v1.ListTagRulesResponse.rules:type_name -> nyttig.v1.TagRule
-	1,  // 13: nyttig.v1.TestTagRuleResponse.items:type_name -> nyttig.v1.Item
-	1,  // 14: nyttig.v1.SearchResponse.items:type_name -> nyttig.v1.Item
-	30, // 15: nyttig.v1.ClientMessage.filter:type_name -> nyttig.v1.StreamFilter
-	1,  // 16: nyttig.v1.ServerMessage.item:type_name -> nyttig.v1.Item
-	32, // 17: nyttig.v1.ServerMessage.reset:type_name -> nyttig.v1.Reset
-	33, // 18: nyttig.v1.ServerMessage.complete:type_name -> nyttig.v1.Complete
-	4,  // 19: nyttig.v1.Nyttig.AddSource:input_type -> nyttig.v1.AddSourceRequest
-	5,  // 20: nyttig.v1.Nyttig.RemoveSource:input_type -> nyttig.v1.RemoveSourceRequest
-	6,  // 21: nyttig.v1.Nyttig.UpdateSource:input_type -> nyttig.v1.UpdateSourceRequest
-	35, // 22: nyttig.v1.Nyttig.ListSources:input_type -> google.protobuf.Empty
-	8,  // 23: nyttig.v1.Nyttig.RefreshSource:input_type -> nyttig.v1.RefreshSourceRequest
-	9,  // 24: nyttig.v1.Nyttig.AddTag:input_type -> nyttig.v1.AddTagRequest
-	11, // 25: nyttig.v1.Nyttig.UpdateTag:input_type -> nyttig.v1.UpdateTagRequest
-	12, // 26: nyttig.v1.Nyttig.RemoveTag:input_type -> nyttig.v1.RemoveTagRequest
-	35, // 27: nyttig.v1.Nyttig.ListTags:input_type -> google.protobuf.Empty
-	21, // 28: nyttig.v1.Nyttig.AddTagRule:input_type -> nyttig.v1.AddTagRuleRequest
-	22, // 29: nyttig.v1.Nyttig.RemoveTagRule:input_type -> nyttig.v1.RemoveTagRuleRequest
-	35, // 30: nyttig.v1.Nyttig.ListTagRules:input_type -> google.protobuf.Empty
-	24, // 31: nyttig.v1.Nyttig.TestTagRule:input_type -> nyttig.v1.TestTagRuleRequest
-	16, // 32: nyttig.v1.Nyttig.AddSavedView:input_type -> nyttig.v1.AddSavedViewRequest
-	17, // 33: nyttig.v1.Nyttig.UpdateSavedView:input_type -> nyttig.v1.UpdateSavedViewRequest
-	18, // 34: nyttig.v1.Nyttig.RemoveSavedView:input_type -> nyttig.v1.RemoveSavedViewRequest
-	35, // 35: nyttig.v1.Nyttig.ListSavedViews:input_type -> google.protobuf.Empty
-	19, // 36: nyttig.v1.Nyttig.ReorderSavedViews:input_type -> nyttig.v1.ReorderSavedViewsRequest
-	29, // 37: nyttig.v1.Nyttig.StreamItems:input_type -> nyttig.v1.ClientMessage
-	26, // 38: nyttig.v1.Nyttig.Search:input_type -> nyttig.v1.SearchRequest
-	28, // 39: nyttig.v1.Nyttig.MarkViewed:input_type -> nyttig.v1.MarkViewedRequest
-	0,  // 40: nyttig.v1.Nyttig.AddSource:output_type -> nyttig.v1.Source
-	35, // 41: nyttig.v1.Nyttig.RemoveSource:output_type -> google.protobuf.Empty
-	0,  // 42: nyttig.v1.Nyttig.UpdateSource:output_type -> nyttig.v1.Source
-	7,  // 43: nyttig.v1.Nyttig.ListSources:output_type -> nyttig.v1.ListSourcesResponse
-	35, // 44: nyttig.v1.Nyttig.RefreshSource:output_type -> google.protobuf.Empty
-	2,  // 45: nyttig.v1.Nyttig.AddTag:output_type -> nyttig.v1.Tag
-	2,  // 46: nyttig.v1.Nyttig.UpdateTag:output_type -> nyttig.v1.Tag
-	35, // 47: nyttig.v1.Nyttig.RemoveTag:output_type -> google.protobuf.Empty
-	13, // 48: nyttig.v1.Nyttig.ListTags:output_type -> nyttig.v1.ListTagsResponse
-	3,  // 49: nyttig.v1.Nyttig.AddTagRule:output_type -> nyttig.v1.TagRule
-	35, // 50: nyttig.v1.Nyttig.RemoveTagRule:output_type -> google.protobuf.Empty
-	23, // 51: nyttig.v1.Nyttig.ListTagRules:output_type -> nyttig.v1.ListTagRulesResponse
-	25, // 52: nyttig.v1.Nyttig.TestTagRule:output_type -> nyttig.v1.TestTagRuleResponse
-	15, // 53: nyttig.v1.Nyttig.AddSavedView:output_type -> nyttig.v1.SavedView
-	15, // 54: nyttig.v1.Nyttig.UpdateSavedView:output_type -> nyttig.v1.SavedView
-	35, // 55: nyttig.v1.Nyttig.RemoveSavedView:output_type -> google.protobuf.Empty
-	20, // 56: nyttig.v1.Nyttig.ListSavedViews:output_type -> nyttig.v1.ListSavedViewsResponse
-	20, // 57: nyttig.v1.Nyttig.ReorderSavedViews:output_type -> nyttig.v1.ListSavedViewsResponse
-	31, // 58: nyttig.v1.Nyttig.StreamItems:output_type -> nyttig.v1.ServerMessage
-	27, // 59: nyttig.v1.Nyttig.Search:output_type -> nyttig.v1.SearchResponse
-	35, // 60: nyttig.v1.Nyttig.MarkViewed:output_type -> google.protobuf.Empty
-	40, // [40:61] is the sub-list for method output_type
-	19, // [19:40] is the sub-list for method input_type
-	19, // [19:19] is the sub-list for extension type_name
-	19, // [19:19] is the sub-list for extension extendee
-	0,  // [0:19] is the sub-list for field type_name
+	4,  // 5: nyttig.v1.Item.assessments:type_name -> nyttig.v1.Assessment
+	42, // 6: nyttig.v1.Assessor.created_at:type_name -> google.protobuf.Timestamp
+	42, // 7: nyttig.v1.Assessment.updated_at:type_name -> google.protobuf.Timestamp
+	0,  // 8: nyttig.v1.ListSourcesResponse.sources:type_name -> nyttig.v1.Source
+	12, // 9: nyttig.v1.UpdateTagRequest.parents:type_name -> nyttig.v1.TagParents
+	2,  // 10: nyttig.v1.ListTagsResponse.tags:type_name -> nyttig.v1.Tag
+	16, // 11: nyttig.v1.SavedView.filter:type_name -> nyttig.v1.ViewFilter
+	16, // 12: nyttig.v1.AddSavedViewRequest.filter:type_name -> nyttig.v1.ViewFilter
+	16, // 13: nyttig.v1.UpdateSavedViewRequest.filter:type_name -> nyttig.v1.ViewFilter
+	17, // 14: nyttig.v1.ListSavedViewsResponse.views:type_name -> nyttig.v1.SavedView
+	3,  // 15: nyttig.v1.ListAssessorsResponse.assessors:type_name -> nyttig.v1.Assessor
+	5,  // 16: nyttig.v1.ListTagRulesResponse.rules:type_name -> nyttig.v1.TagRule
+	1,  // 17: nyttig.v1.TestTagRuleResponse.items:type_name -> nyttig.v1.Item
+	1,  // 18: nyttig.v1.SearchResponse.items:type_name -> nyttig.v1.Item
+	38, // 19: nyttig.v1.ClientMessage.filter:type_name -> nyttig.v1.StreamFilter
+	1,  // 20: nyttig.v1.ServerMessage.item:type_name -> nyttig.v1.Item
+	40, // 21: nyttig.v1.ServerMessage.reset:type_name -> nyttig.v1.Reset
+	41, // 22: nyttig.v1.ServerMessage.complete:type_name -> nyttig.v1.Complete
+	1,  // 23: nyttig.v1.ServerMessage.item_update:type_name -> nyttig.v1.Item
+	6,  // 24: nyttig.v1.Nyttig.AddSource:input_type -> nyttig.v1.AddSourceRequest
+	7,  // 25: nyttig.v1.Nyttig.RemoveSource:input_type -> nyttig.v1.RemoveSourceRequest
+	8,  // 26: nyttig.v1.Nyttig.UpdateSource:input_type -> nyttig.v1.UpdateSourceRequest
+	43, // 27: nyttig.v1.Nyttig.ListSources:input_type -> google.protobuf.Empty
+	10, // 28: nyttig.v1.Nyttig.RefreshSource:input_type -> nyttig.v1.RefreshSourceRequest
+	11, // 29: nyttig.v1.Nyttig.AddTag:input_type -> nyttig.v1.AddTagRequest
+	13, // 30: nyttig.v1.Nyttig.UpdateTag:input_type -> nyttig.v1.UpdateTagRequest
+	14, // 31: nyttig.v1.Nyttig.RemoveTag:input_type -> nyttig.v1.RemoveTagRequest
+	43, // 32: nyttig.v1.Nyttig.ListTags:input_type -> google.protobuf.Empty
+	29, // 33: nyttig.v1.Nyttig.AddTagRule:input_type -> nyttig.v1.AddTagRuleRequest
+	30, // 34: nyttig.v1.Nyttig.RemoveTagRule:input_type -> nyttig.v1.RemoveTagRuleRequest
+	43, // 35: nyttig.v1.Nyttig.ListTagRules:input_type -> google.protobuf.Empty
+	32, // 36: nyttig.v1.Nyttig.TestTagRule:input_type -> nyttig.v1.TestTagRuleRequest
+	18, // 37: nyttig.v1.Nyttig.AddSavedView:input_type -> nyttig.v1.AddSavedViewRequest
+	19, // 38: nyttig.v1.Nyttig.UpdateSavedView:input_type -> nyttig.v1.UpdateSavedViewRequest
+	20, // 39: nyttig.v1.Nyttig.RemoveSavedView:input_type -> nyttig.v1.RemoveSavedViewRequest
+	43, // 40: nyttig.v1.Nyttig.ListSavedViews:input_type -> google.protobuf.Empty
+	21, // 41: nyttig.v1.Nyttig.ReorderSavedViews:input_type -> nyttig.v1.ReorderSavedViewsRequest
+	23, // 42: nyttig.v1.Nyttig.AddAssessor:input_type -> nyttig.v1.AddAssessorRequest
+	24, // 43: nyttig.v1.Nyttig.UpdateAssessor:input_type -> nyttig.v1.UpdateAssessorRequest
+	25, // 44: nyttig.v1.Nyttig.RemoveAssessor:input_type -> nyttig.v1.RemoveAssessorRequest
+	43, // 45: nyttig.v1.Nyttig.ListAssessors:input_type -> google.protobuf.Empty
+	27, // 46: nyttig.v1.Nyttig.PutAssessment:input_type -> nyttig.v1.PutAssessmentRequest
+	28, // 47: nyttig.v1.Nyttig.RemoveAssessment:input_type -> nyttig.v1.RemoveAssessmentRequest
+	37, // 48: nyttig.v1.Nyttig.StreamItems:input_type -> nyttig.v1.ClientMessage
+	34, // 49: nyttig.v1.Nyttig.Search:input_type -> nyttig.v1.SearchRequest
+	36, // 50: nyttig.v1.Nyttig.MarkViewed:input_type -> nyttig.v1.MarkViewedRequest
+	0,  // 51: nyttig.v1.Nyttig.AddSource:output_type -> nyttig.v1.Source
+	43, // 52: nyttig.v1.Nyttig.RemoveSource:output_type -> google.protobuf.Empty
+	0,  // 53: nyttig.v1.Nyttig.UpdateSource:output_type -> nyttig.v1.Source
+	9,  // 54: nyttig.v1.Nyttig.ListSources:output_type -> nyttig.v1.ListSourcesResponse
+	43, // 55: nyttig.v1.Nyttig.RefreshSource:output_type -> google.protobuf.Empty
+	2,  // 56: nyttig.v1.Nyttig.AddTag:output_type -> nyttig.v1.Tag
+	2,  // 57: nyttig.v1.Nyttig.UpdateTag:output_type -> nyttig.v1.Tag
+	43, // 58: nyttig.v1.Nyttig.RemoveTag:output_type -> google.protobuf.Empty
+	15, // 59: nyttig.v1.Nyttig.ListTags:output_type -> nyttig.v1.ListTagsResponse
+	5,  // 60: nyttig.v1.Nyttig.AddTagRule:output_type -> nyttig.v1.TagRule
+	43, // 61: nyttig.v1.Nyttig.RemoveTagRule:output_type -> google.protobuf.Empty
+	31, // 62: nyttig.v1.Nyttig.ListTagRules:output_type -> nyttig.v1.ListTagRulesResponse
+	33, // 63: nyttig.v1.Nyttig.TestTagRule:output_type -> nyttig.v1.TestTagRuleResponse
+	17, // 64: nyttig.v1.Nyttig.AddSavedView:output_type -> nyttig.v1.SavedView
+	17, // 65: nyttig.v1.Nyttig.UpdateSavedView:output_type -> nyttig.v1.SavedView
+	43, // 66: nyttig.v1.Nyttig.RemoveSavedView:output_type -> google.protobuf.Empty
+	22, // 67: nyttig.v1.Nyttig.ListSavedViews:output_type -> nyttig.v1.ListSavedViewsResponse
+	22, // 68: nyttig.v1.Nyttig.ReorderSavedViews:output_type -> nyttig.v1.ListSavedViewsResponse
+	3,  // 69: nyttig.v1.Nyttig.AddAssessor:output_type -> nyttig.v1.Assessor
+	3,  // 70: nyttig.v1.Nyttig.UpdateAssessor:output_type -> nyttig.v1.Assessor
+	43, // 71: nyttig.v1.Nyttig.RemoveAssessor:output_type -> google.protobuf.Empty
+	26, // 72: nyttig.v1.Nyttig.ListAssessors:output_type -> nyttig.v1.ListAssessorsResponse
+	4,  // 73: nyttig.v1.Nyttig.PutAssessment:output_type -> nyttig.v1.Assessment
+	43, // 74: nyttig.v1.Nyttig.RemoveAssessment:output_type -> google.protobuf.Empty
+	39, // 75: nyttig.v1.Nyttig.StreamItems:output_type -> nyttig.v1.ServerMessage
+	35, // 76: nyttig.v1.Nyttig.Search:output_type -> nyttig.v1.SearchResponse
+	43, // 77: nyttig.v1.Nyttig.MarkViewed:output_type -> google.protobuf.Empty
+	51, // [51:78] is the sub-list for method output_type
+	24, // [24:51] is the sub-list for method input_type
+	24, // [24:24] is the sub-list for extension type_name
+	24, // [24:24] is the sub-list for extension extendee
+	0,  // [0:24] is the sub-list for field type_name
 }
 
 func init() { file_nyttig_v1_nyttig_proto_init() }
@@ -2587,16 +3323,23 @@ func file_nyttig_v1_nyttig_proto_init() {
 	if File_nyttig_v1_nyttig_proto != nil {
 		return
 	}
-	file_nyttig_v1_nyttig_proto_msgTypes[6].OneofWrappers = []any{}
-	file_nyttig_v1_nyttig_proto_msgTypes[11].OneofWrappers = []any{}
-	file_nyttig_v1_nyttig_proto_msgTypes[17].OneofWrappers = []any{}
-	file_nyttig_v1_nyttig_proto_msgTypes[29].OneofWrappers = []any{
+	file_nyttig_v1_nyttig_proto_msgTypes[4].OneofWrappers = []any{}
+	file_nyttig_v1_nyttig_proto_msgTypes[8].OneofWrappers = []any{}
+	file_nyttig_v1_nyttig_proto_msgTypes[13].OneofWrappers = []any{}
+	file_nyttig_v1_nyttig_proto_msgTypes[16].OneofWrappers = []any{}
+	file_nyttig_v1_nyttig_proto_msgTypes[19].OneofWrappers = []any{}
+	file_nyttig_v1_nyttig_proto_msgTypes[24].OneofWrappers = []any{}
+	file_nyttig_v1_nyttig_proto_msgTypes[27].OneofWrappers = []any{}
+	file_nyttig_v1_nyttig_proto_msgTypes[34].OneofWrappers = []any{}
+	file_nyttig_v1_nyttig_proto_msgTypes[37].OneofWrappers = []any{
 		(*ClientMessage_Filter)(nil),
 	}
-	file_nyttig_v1_nyttig_proto_msgTypes[31].OneofWrappers = []any{
+	file_nyttig_v1_nyttig_proto_msgTypes[38].OneofWrappers = []any{}
+	file_nyttig_v1_nyttig_proto_msgTypes[39].OneofWrappers = []any{
 		(*ServerMessage_Item)(nil),
 		(*ServerMessage_Reset_)(nil),
 		(*ServerMessage_Complete)(nil),
+		(*ServerMessage_ItemUpdate)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -2604,7 +3347,7 @@ func file_nyttig_v1_nyttig_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_nyttig_v1_nyttig_proto_rawDesc), len(file_nyttig_v1_nyttig_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   34,
+			NumMessages:   42,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

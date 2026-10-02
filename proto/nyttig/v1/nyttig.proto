@@ -36,6 +36,7 @@ message Item {
     google.protobuf.Timestamp fetched_at = 10;
     repeated Tag tags  = 11;
     bool   viewed      = 12;
+    repeated Assessment assessments = 13;  // every assessor's, by assessor name
 }
 
 message Tag {
@@ -43,6 +44,30 @@ message Tag {
     string name  = 2;
     string color = 3;  // hex color, e.g. "#FF6B35"
     repeated int64 parent_ids = 4;  // direct parents; empty = top-level
+}
+
+// Assessor is a registered system (a model, a CVE reader, you) that writes
+// assessments. description says what its score means.
+message Assessor {
+    int64  id          = 1;
+    string name        = 2;
+    string description = 3;
+    string color       = 4;  // hex color, e.g. "#FF6B35"
+    google.protobuf.Timestamp created_at = 5;
+}
+
+// Assessment is one assessor's judgement on an item: an optional score from
+// 0 to 1 and an optional note, for one tag or for the item as a whole.
+// Notes are untrusted text.
+message Assessment {
+    int64  id            = 1;
+    int64  item_id       = 2;
+    int64  assessor_id   = 3;
+    string assessor_name = 4;
+    int64  tag_id        = 5;  // 0 = the item as a whole
+    optional double score = 6;  // unset = no score (0 is a score)
+    string note          = 7;
+    google.protobuf.Timestamp updated_at = 8;
 }
 
 message TagRule {
@@ -134,8 +159,11 @@ message ViewFilter {
     string search = 1;
     int64 source_id = 2;
     int64 tag_id = 3;
-    string sort = 4;          // "newest" (default) or "oldest"
+    string sort = 4;          // "newest" (default), "oldest" or "score"
     bool unviewed_only = 5;
+    int64 assessor_id = 6;    // 0 = none; whose scores min_score and sort "score" use
+    optional double min_score = 7;
+    int64 unassessed_by = 8;  // 0 = none
 }
 
 message SavedView {
@@ -172,6 +200,48 @@ message ReorderSavedViewsRequest {
 
 message ListSavedViewsResponse {
     repeated SavedView views = 1;
+}
+
+// ── Assessors and assessments ───────────────────────────────
+
+message AddAssessorRequest {
+    string name        = 1;
+    string description = 2;
+    string color       = 3;
+}
+
+// Unset fields are unchanged; setting description or color to an empty
+// string clears it.
+message UpdateAssessorRequest {
+    int64           id          = 1;
+    optional string name        = 2;
+    optional string description = 3;
+    optional string color       = 4;
+}
+
+message RemoveAssessorRequest {
+    int64 id = 1;
+}
+
+message ListAssessorsResponse {
+    repeated Assessor assessors = 1;
+}
+
+// Replaces the whole assessment for (item_id, assessor_id, tag_id): an unset
+// score or empty note is stored as NULL. At least one must be given.
+// tag_id 0 = the item as a whole.
+message PutAssessmentRequest {
+    int64 item_id     = 1;
+    int64 assessor_id = 2;
+    int64 tag_id      = 3;
+    optional double score = 4;
+    string note       = 5;
+}
+
+message RemoveAssessmentRequest {
+    int64 item_id     = 1;
+    int64 assessor_id = 2;
+    int64 tag_id      = 3;
 }
 
 // ── Tag rules ───────────────────────────────────────────────
@@ -214,9 +284,12 @@ message SearchRequest {
     int64  tag_id    = 3;  // 0 = all tags; matches the tag or any tag below it
     int32  limit     = 4;  // default: 100
     int32  offset    = 5;  // default: 0
-    string sort      = 6;  // newest, oldest; default newest
+    string sort      = 6;  // newest, oldest, score; default newest
     bool   unviewed_only = 7;
     bool   tag_exact = 8;  // match tag_id only, not its descendants
+    int64  assessor_id = 9;   // 0 = none; whose scores min_score and sort "score" use
+    optional double min_score = 10;  // an in-scope score from assessor_id of at least this
+    int64  unassessed_by = 11;  // 0 = none; no in-scope assessment by this assessor
 }
 
 message SearchResponse {
@@ -242,9 +315,12 @@ message StreamFilter {
     int64  source_id = 1;  // 0 = all
     int64  tag_id    = 2;  // 0 = all; matches the tag or any tag below it
     string search    = 3;  // FTS5 query string, empty = no filter
-    string sort      = 4;  // newest, oldest; default newest
+    string sort      = 4;  // newest, oldest, score; default newest
     int32  limit     = 5;
     bool   unviewed_only = 6;
+    int64  assessor_id = 7;   // 0 = none; whose scores min_score and sort "score" use
+    optional double min_score = 8;
+    int64  unassessed_by = 9;  // 0 = none
 }
 
 message ServerMessage {
@@ -252,6 +328,7 @@ message ServerMessage {
         Item     item     = 1;
         Reset    reset    = 2;
         Complete complete = 3;
+        Item     item_update = 4;  // an item whose assessments changed, with all of them
     }
 }
 
@@ -286,6 +363,14 @@ service Nyttig {
     rpc RemoveSavedView(RemoveSavedViewRequest) returns (google.protobuf.Empty);
     rpc ListSavedViews(google.protobuf.Empty) returns (ListSavedViewsResponse);
     rpc ReorderSavedViews(ReorderSavedViewsRequest) returns (ListSavedViewsResponse);
+
+    // Assessors and assessments
+    rpc AddAssessor(AddAssessorRequest) returns (Assessor);
+    rpc UpdateAssessor(UpdateAssessorRequest) returns (Assessor);
+    rpc RemoveAssessor(RemoveAssessorRequest) returns (google.protobuf.Empty);
+    rpc ListAssessors(google.protobuf.Empty) returns (ListAssessorsResponse);
+    rpc PutAssessment(PutAssessmentRequest) returns (Assessment);
+    rpc RemoveAssessment(RemoveAssessmentRequest) returns (google.protobuf.Empty);
 
     // Core feed stream (bidirectional)
     rpc StreamItems(stream ClientMessage) returns (stream ServerMessage);

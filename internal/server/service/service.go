@@ -667,12 +667,21 @@ func (s *Service) checkViewRefs(f *pb.ViewFilter) error {
 			return status.Errorf(codes.NotFound, "tag %d not found", f.TagId)
 		}
 	}
+	for _, id := range []int64{f.AssessorId, f.UnassessedBy} {
+		if id == 0 {
+			continue
+		}
+		if err := s.checkAssessor(id); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
 // applyViewFilter copies a (validated) proto filter onto v; nil clears it.
 func applyViewFilter(v *db.SavedView, f *pb.ViewFilter) {
 	v.Search, v.SourceID, v.TagID, v.Sort, v.UnviewedOnly = "", nil, nil, "newest", false
+	v.AssessorID, v.MinScore, v.UnassessedBy = nil, nil, nil
 	if f == nil {
 		return
 	}
@@ -689,6 +698,18 @@ func applyViewFilter(v *db.SavedView, f *pb.ViewFilter) {
 		v.Sort = f.Sort
 	}
 	v.UnviewedOnly = f.UnviewedOnly
+	if f.AssessorId != 0 {
+		id := f.AssessorId
+		v.AssessorID = &id
+	}
+	if f.MinScore != nil {
+		score := *f.MinScore
+		v.MinScore = &score
+	}
+	if f.UnassessedBy != 0 {
+		id := f.UnassessedBy
+		v.UnassessedBy = &id
+	}
 }
 
 func dbSavedViewToProto(v *db.SavedView) *pb.SavedView {
@@ -698,6 +719,16 @@ func dbSavedViewToProto(v *db.SavedView) *pb.SavedView {
 	}
 	if v.TagID != nil {
 		f.TagId = *v.TagID
+	}
+	if v.AssessorID != nil {
+		f.AssessorId = *v.AssessorID
+	}
+	if v.MinScore != nil {
+		score := *v.MinScore
+		f.MinScore = &score
+	}
+	if v.UnassessedBy != nil {
+		f.UnassessedBy = *v.UnassessedBy
 	}
 	return &pb.SavedView{Id: v.ID, Name: v.Name, Filter: f, Favorite: v.Favorite, Position: int32(v.Position)}
 }
@@ -834,10 +865,11 @@ func (s *Service) TestTagRule(ctx context.Context, req *pb.TestTagRuleRequest) (
 // it lists items matching the other filters, which clients use for paging
 // beyond what StreamItems sends.
 func (s *Service) Search(ctx context.Context, req *pb.SearchRequest) (*pb.SearchResponse, error) {
-	switch req.Sort {
-	case "", "newest", "oldest":
-	default:
-		return nil, status.Errorf(codes.InvalidArgument, "sort must be newest or oldest, got %q", req.Sort)
+	if err := firstErr(
+		validateSort(req.Sort),
+		validateAssessmentFilter(req.AssessorId, req.MinScore, req.UnassessedBy, req.Sort),
+	); err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 	limit := int(req.Limit)
 	if limit <= 0 {
@@ -852,6 +884,9 @@ func (s *Service) Search(ctx context.Context, req *pb.SearchRequest) (*pb.Search
 		Limit:        limit,
 		Offset:       int(req.Offset),
 		UnviewedOnly: req.UnviewedOnly,
+		AssessorID:   req.AssessorId,
+		MinScore:     req.MinScore,
+		UnassessedBy: req.UnassessedBy,
 	})
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "search: %v", err)
@@ -1076,6 +1111,13 @@ func (s *Service) sendFilteredItems(stream pb.Nyttig_StreamItemsServer, filter *
 		limit = 200
 	}
 
+	if err := firstErr(
+		validateSort(filter.Sort),
+		validateAssessmentFilter(filter.AssessorId, filter.MinScore, filter.UnassessedBy, filter.Sort),
+	); err != nil {
+		return status.Error(codes.InvalidArgument, err.Error())
+	}
+
 	sort := filter.Sort
 	if sort == "" {
 		sort = "newest"
@@ -1088,6 +1130,9 @@ func (s *Service) sendFilteredItems(stream pb.Nyttig_StreamItemsServer, filter *
 		Sort:         sort,
 		Limit:        limit,
 		UnviewedOnly: filter.UnviewedOnly,
+		AssessorID:   filter.AssessorId,
+		MinScore:     filter.MinScore,
+		UnassessedBy: filter.UnassessedBy,
 	}
 
 	items, _, err := db.ListItems(s.db, dbFilter)
@@ -1243,6 +1288,9 @@ func ItemToProto(item *db.Item) *pb.Item {
 	}
 	for i, t := range item.Tags {
 		p.Tags[i] = dbTagToProto(t)
+	}
+	for _, a := range item.Assessments {
+		p.Assessments = append(p.Assessments, dbAssessmentToProto(a))
 	}
 	return p
 }
