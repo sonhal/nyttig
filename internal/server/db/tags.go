@@ -146,6 +146,26 @@ func DeleteTag(db *sql.DB, id int64) (bool, error) {
 	return deleteByID(db, `DELETE FROM tags WHERE id = ?`, id)
 }
 
+// UpdateTagAndParents writes a tag's name and color and, when parentIDs is
+// non-nil, replaces its parent set, all in one transaction. The errors are
+// those of SetTagParents.
+func UpdateTagAndParents(db *sql.DB, t *Tag, parentIDs *[]int64) error {
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.Exec(`UPDATE tags SET name = ?, color = ? WHERE id = ?`, t.Name, t.Color, t.ID); err != nil {
+		return err
+	}
+	if parentIDs != nil {
+		if err := setTagParents(tx, t.ID, *parentIDs); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
 // ── Tag tree ────────────────────────────────────────────────
 
 // ListTagEdges returns every (child, parent) pair, ordered by child and

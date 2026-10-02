@@ -9,9 +9,11 @@ package service
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"io"
 	"log/slog"
 	"sync"
+	"sync/atomic"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -41,13 +43,42 @@ type Service struct {
 	onSourceAdded   SourceLifecycleFunc
 	onSourceRemoved SourceRemoveFunc
 	onSourceUpdated SourceLifecycleFunc
+
+	// tagGraph is a snapshot of the tag tree for itemMatchesFilter, rebuilt
+	// after every tag change (ReloadTagGraph).
+	tagGraph atomic.Pointer[tagGraph]
 }
 
 // New creates a Service backed by the given database.
 func New(database *sql.DB) *Service {
-	return &Service{
+	s := &Service{
 		db:  database,
 		hub: NewHub(),
+	}
+	s.tagGraph.Store(&tagGraph{})
+	if err := s.ReloadTagGraph(); err != nil {
+		slog.Warn("load tag tree", "error", err)
+	}
+	return s
+}
+
+// ReloadTagGraph rebuilds the tag tree snapshot that stream filters use. The
+// service calls it after every tag change; the daemon calls it after seeding
+// tags from the config, which writes to the database directly.
+func (s *Service) ReloadTagGraph() error {
+	edges, err := db.ListTagEdges(s.db)
+	if err != nil {
+		return err
+	}
+	s.tagGraph.Store(newTagGraph(edges))
+	return nil
+}
+
+// reloadTagGraph is ReloadTagGraph for the RPC handlers, whose own write has
+// already succeeded: a failure is logged, not returned.
+func (s *Service) reloadTagGraph() {
+	if err := s.ReloadTagGraph(); err != nil {
+		slog.Error("reload tag tree", "error", err)
 	}
 }
 
@@ -277,26 +308,29 @@ func (s *Service) AddTag(ctx context.Context, req *pb.AddTagRequest) (*pb.Tag, e
 	if err := firstErr(
 		validateName("name", req.Name, maxTagNameLen),
 		validateColor(req.Color),
+		validateParentIDs(req.ParentIds),
 	); err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 
-	id, err := db.InsertTag(s.db, req.Name, optionalString(req.Color))
+	id, err := db.InsertTagWithParents(s.db, req.Name, optionalString(req.Color), req.ParentIds)
 	if isUniqueViolation(err) {
 		return nil, status.Errorf(codes.AlreadyExists, "tag %q already exists", req.Name)
 	}
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "insert tag: %v", err)
+		return nil, tagTreeError(err, "insert tag")
 	}
+	s.reloadTagGraph()
 
 	tag, err := db.GetTag(s.db, id)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "get created tag: %v", err)
 	}
+	tag.ParentIDs = req.ParentIds
 	return dbTagToProto(tag), nil
 }
 
-// UpdateTag renames and/or recolors a tag in place. Unlike removing and
+// UpdateTag renames, recolors and/or re-parents a tag in place. Unlike removing and
 // re-adding a tag, this keeps its rules and item assignments.
 func (s *Service) UpdateTag(ctx context.Context, req *pb.UpdateTagRequest) (*pb.Tag, error) {
 	tag, err := db.GetTag(s.db, req.Id)
@@ -316,27 +350,41 @@ func (s *Service) UpdateTag(ctx context.Context, req *pb.UpdateTagRequest) (*pb.
 		errs = append(errs, validateColor(*req.Color))
 		tag.Color = optionalString(*req.Color)
 	}
+	var parents *[]int64
+	if req.Parents != nil {
+		errs = append(errs, validateParentIDs(req.Parents.Ids))
+		ids := req.Parents.Ids
+		if ids == nil {
+			ids = []int64{}
+		}
+		parents = &ids
+	}
 	if err := firstErr(errs...); err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 
-	err = db.UpdateTag(s.db, tag)
+	err = db.UpdateTagAndParents(s.db, tag, parents)
 	if isUniqueViolation(err) {
 		return nil, status.Errorf(codes.AlreadyExists, "tag %q already exists", tag.Name)
 	}
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "update tag: %v", err)
+		return nil, tagTreeError(err, "update tag")
 	}
+	s.reloadTagGraph()
 
 	updated, err := db.GetTag(s.db, req.Id)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "get updated tag: %v", err)
 	}
+	if err := s.fillParents(updated); err != nil {
+		return nil, status.Errorf(codes.Internal, "get tag parents: %v", err)
+	}
 	return dbTagToProto(updated), nil
 }
 
-// RemoveTag deletes a tag and all its associated rules and item associations.
-// An unknown ID is NotFound.
+// RemoveTag deletes a tag and all its associated rules, item associations and
+// parent edges. Its children are kept (a child with no other parent becomes
+// top-level). An unknown ID is NotFound.
 func (s *Service) RemoveTag(ctx context.Context, req *pb.RemoveTagRequest) (*emptypb.Empty, error) {
 	deleted, err := db.DeleteTag(s.db, req.Id)
 	if err != nil {
@@ -345,7 +393,38 @@ func (s *Service) RemoveTag(ctx context.Context, req *pb.RemoveTagRequest) (*emp
 	if !deleted {
 		return nil, status.Errorf(codes.NotFound, "tag %d not found", req.Id)
 	}
+	s.reloadTagGraph()
 	return &emptypb.Empty{}, nil
+}
+
+// fillParents sets t.ParentIDs, which GetTag leaves empty.
+func (s *Service) fillParents(t *db.Tag) error {
+	edges, err := db.ListTagEdges(s.db)
+	if err != nil {
+		return err
+	}
+	t.ParentIDs = nil
+	for _, e := range edges {
+		if e.ChildID == t.ID {
+			t.ParentIDs = append(t.ParentIDs, e.ParentID)
+		}
+	}
+	return nil
+}
+
+// tagTreeError maps the db layer's tag-tree errors to gRPC codes: a cycle is
+// the client's mistake, an unknown parent is NotFound.
+func tagTreeError(err error, what string) error {
+	var cyc *db.ErrTagCycle
+	var nf *db.ErrTagNotFound
+	switch {
+	case errors.As(err, &cyc):
+		return status.Error(codes.InvalidArgument, cyc.Error())
+	case errors.As(err, &nf):
+		return status.Error(codes.NotFound, nf.Error())
+	default:
+		return status.Errorf(codes.Internal, "%s: %v", what, err)
+	}
 }
 
 // ListTags returns all defined tags.
@@ -505,6 +584,7 @@ func (s *Service) Search(ctx context.Context, req *pb.SearchRequest) (*pb.Search
 	items, total, err := db.ListItems(s.db, db.ItemFilter{
 		SourceID:     req.SourceId,
 		TagID:        req.TagId,
+		TagExact:     req.TagExact,
 		Search:       req.Query,
 		Sort:         req.Sort,
 		Limit:        limit,
@@ -776,9 +856,11 @@ func (s *Service) itemMatchesFilter(item *pb.Item, filter *pb.StreamFilter) bool
 		return false
 	}
 	if filter.TagId != 0 {
+		// The filter tag or any tag below it, like ListItems.
+		subtree := s.tagGraph.Load().subtree(filter.TagId)
 		hasTag := false
 		for _, t := range item.Tags {
-			if t.Id == filter.TagId {
+			if subtree[t.Id] {
 				hasTag = true
 				break
 			}
@@ -850,8 +932,9 @@ func dbSourceToProto(src *db.Source) *pb.Source {
 
 func dbTagToProto(t *db.Tag) *pb.Tag {
 	p := &pb.Tag{
-		Id:   t.ID,
-		Name: t.Name,
+		Id:        t.ID,
+		Name:      t.Name,
+		ParentIds: t.ParentIDs,
 	}
 	if t.Color != nil {
 		p.Color = *t.Color

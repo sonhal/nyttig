@@ -42,6 +42,7 @@ message Tag {
     int64  id    = 1;
     string name  = 2;
     string color = 3;  // hex color, e.g. "#FF6B35"
+    repeated int64 parent_ids = 4;  // direct parents; empty = top-level
 }
 
 message TagRule {
@@ -97,14 +98,24 @@ message RefreshSourceRequest {
 message AddTagRequest {
     string name  = 1;
     string color = 2;
+    repeated int64 parent_ids = 3;
+}
+
+// TagParents wraps a parent set to give it presence: a repeated field cannot
+// be optional in proto3, and UpdateTagRequest needs "unset" (unchanged) to
+// differ from "set to empty" (make top-level).
+message TagParents {
+    repeated int64 ids = 1;
 }
 
 // UpdateTagRequest patches a tag. Unset fields are left unchanged; setting
-// color to an empty string clears it.
+// color to an empty string clears it. A set parents replaces the whole
+// parent set.
 message UpdateTagRequest {
-    int64           id    = 1;
-    optional string name  = 2;
-    optional string color = 3;
+    int64           id      = 1;
+    optional string name    = 2;
+    optional string color   = 3;
+    optional TagParents parents = 4;
 }
 
 message RemoveTagRequest {
@@ -152,11 +163,12 @@ message TestTagRuleResponse {
 message SearchRequest {
     string query     = 1;
     int64  source_id = 2;  // 0 = all sources
-    int64  tag_id    = 3;  // 0 = all tags
+    int64  tag_id    = 3;  // 0 = all tags; matches the tag or any tag below it
     int32  limit     = 4;  // default: 100
     int32  offset    = 5;  // default: 0
     string sort      = 6;  // newest, oldest; default newest
     bool   unviewed_only = 7;
+    bool   tag_exact = 8;  // match tag_id only, not its descendants
 }
 
 message SearchResponse {
@@ -180,7 +192,7 @@ message ClientMessage {
 
 message StreamFilter {
     int64  source_id = 1;  // 0 = all
-    int64  tag_id    = 2;  // 0 = all
+    int64  tag_id    = 2;  // 0 = all; matches the tag or any tag below it
     string search    = 3;  // FTS5 query string, empty = no filter
     string sort      = 4;  // newest, oldest; default newest
     int32  limit     = 5;
