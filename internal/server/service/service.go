@@ -12,6 +12,7 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"strings"
 	"sync"
 	"sync/atomic"
 
@@ -22,6 +23,7 @@ import (
 
 	pb "github.com/sonhal/nyttig/internal/proto/nyttig/v1"
 	"github.com/sonhal/nyttig/internal/server/db"
+	"github.com/sonhal/nyttig/internal/server/fetcher"
 )
 
 // RefreshSourceFunc is called by RefreshSource RPC. The scheduler registers
@@ -34,6 +36,12 @@ type SourceLifecycleFunc func(ctx context.Context, src db.Source)
 // SourceRemoveFunc is called on RemoveSource to stop the scheduler runner.
 type SourceRemoveFunc func(id int64)
 
+// ProfileResolver looks up a Bluesky account by handle or DID. The fetcher's
+// BlueskyResolver implements it; tests use a fake.
+type ProfileResolver interface {
+	ResolveProfile(ctx context.Context, actor string) (*fetcher.BlueskyProfile, error)
+}
+
 // Service implements the NyttigServer gRPC interface.
 type Service struct {
 	pb.UnimplementedNyttigServer
@@ -43,6 +51,7 @@ type Service struct {
 	onSourceAdded   SourceLifecycleFunc
 	onSourceRemoved SourceRemoveFunc
 	onSourceUpdated SourceLifecycleFunc
+	profiles        ProfileResolver
 
 	// tagGraph is a snapshot of the tag tree for itemMatchesFilter, rebuilt
 	// after every tag change (ReloadTagGraph).
@@ -99,9 +108,54 @@ func (s *Service) OnSourceRemoved(fn SourceRemoveFunc) {
 }
 
 // OnSourceUpdated registers a callback invoked after an update that changes
-// how a source is fetched: its enabled state, url or refresh interval.
+// how a source is fetched: its enabled state, url, type or refresh interval.
 func (s *Service) OnSourceUpdated(fn SourceLifecycleFunc) {
 	s.onSourceUpdated = fn
+}
+
+// SetProfileResolver registers the Bluesky account lookup AddSource and
+// UpdateSource use to turn a handle into a DID. Without one, adding a Bluesky
+// source fails with Unavailable.
+func (s *Service) SetProfileResolver(r ProfileResolver) {
+	s.profiles = r
+}
+
+// resolveBluesky looks up the account named by input (a handle, DID or
+// profile URL, already syntax-checked). Bluesky rejecting the account, such
+// as an unknown handle, is InvalidArgument; failing to reach Bluesky is
+// Unavailable.
+func (s *Service) resolveBluesky(ctx context.Context, input string) (*fetcher.BlueskyProfile, error) {
+	actor, err := fetcher.ParseBlueskyActor(input)
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+	if s.profiles == nil {
+		return nil, status.Error(codes.Unavailable, "bluesky lookup is not configured")
+	}
+	profile, err := s.profiles.ResolveProfile(ctx, actor)
+	if err != nil {
+		var xerr *fetcher.XRPCError
+		// Bluesky answered that it has no such account (or rejected the
+		// request); a rate limit or server error is not the user's fault.
+		if errors.As(err, &xerr) && xerr.Status >= 400 && xerr.Status < 500 && xerr.Status != 429 {
+			return nil, status.Errorf(codes.InvalidArgument, "bluesky: %v", xerr)
+		}
+		return nil, status.Errorf(codes.Unavailable, "bluesky lookup failed: %v", err)
+	}
+	return profile, nil
+}
+
+// blueskyDefaultName names a source after the account: its display name, or
+// @handle.
+func blueskyDefaultName(p *fetcher.BlueskyProfile) string {
+	name := p.DisplayName
+	if name == "" {
+		name = "@" + p.Handle
+	}
+	if r := []rune(name); len(r) > maxNameLen {
+		name = string(r[:maxNameLen])
+	}
+	return name
 }
 
 // Hub returns the notification hub so the daemon can push new items to
@@ -128,14 +182,28 @@ func (s *Service) AddSource(ctx context.Context, req *pb.AddSourceRequest) (*pb.
 		src.RefreshSec = defaultRefreshSec
 	}
 	if err := firstErr(
-		validateName("name", src.Name, maxNameLen),
-		validateFeedURL(src.URL),
+		validateSourceName(src.Type, src.Name),
 		validateFeedType(src.Type),
+		validateSourceURL(src.Type, src.URL),
 		validateRefreshSec(int32(src.RefreshSec)),
 		validateColor(req.Color),
 		validateAbbreviation(req.Abbreviation),
 	); err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+	if src.Type == fetcher.TypeBluesky {
+		// Store the account by DID: a handle can change hands.
+		profile, err := s.resolveBluesky(ctx, src.URL)
+		if err != nil {
+			return nil, err
+		}
+		src.URL = fetcher.BlueskyProfileURL(profile.DID)
+		if strings.TrimSpace(src.Name) == "" {
+			src.Name = blueskyDefaultName(profile)
+		}
+		if err := validateName("name", src.Name, maxNameLen); err != nil {
+			return nil, status.Error(codes.InvalidArgument, err.Error())
+		}
 	}
 	if req.Color != "" {
 		src.Color = &req.Color
@@ -194,7 +262,7 @@ func (s *Service) RemoveSource(ctx context.Context, req *pb.RemoveSourceRequest)
 // UpdateSource patches an existing feed source. Only fields set in the
 // request are changed; for color and abbreviation an empty string clears the
 // value. The scheduler is notified when a change affects fetching (enabled,
-// url or refresh interval), so edits take effect without a daemon restart.
+// url, type or refresh interval), so edits take effect without a daemon restart.
 func (s *Service) UpdateSource(ctx context.Context, req *pb.UpdateSourceRequest) (*pb.Source, error) {
 	existing, err := db.GetSource(s.db, req.Id)
 	if err != nil {
@@ -211,12 +279,14 @@ func (s *Service) UpdateSource(ctx context.Context, req *pb.UpdateSourceRequest)
 		existing.Name = *req.Name
 	}
 	if req.Url != nil {
-		errs = append(errs, validateFeedURL(*req.Url))
 		existing.URL = *req.Url
 	}
 	if req.Type != nil {
-		errs = append(errs, validateFeedType(*req.Type))
 		existing.Type = *req.Type
+	}
+	if req.Url != nil || req.Type != nil {
+		// The url's rules depend on the type, so check the merged result.
+		errs = append(errs, validateFeedType(existing.Type), validateSourceURL(existing.Type, existing.URL))
 	}
 	if req.RefreshSec != nil {
 		errs = append(errs, validateRefreshSec(*req.RefreshSec))
@@ -236,6 +306,13 @@ func (s *Service) UpdateSource(ctx context.Context, req *pb.UpdateSourceRequest)
 	if err := firstErr(errs...); err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
+	if existing.Type == fetcher.TypeBluesky && (existing.Type != before.Type || existing.URL != before.URL) {
+		profile, err := s.resolveBluesky(ctx, existing.URL)
+		if err != nil {
+			return nil, err
+		}
+		existing.URL = fetcher.BlueskyProfileURL(profile.DID)
+	}
 
 	err = db.UpdateSource(s.db, existing)
 	if isUniqueViolation(err) {
@@ -247,6 +324,7 @@ func (s *Service) UpdateSource(ctx context.Context, req *pb.UpdateSourceRequest)
 
 	fetchChanged := before.Enabled != existing.Enabled ||
 		before.URL != existing.URL ||
+		before.Type != existing.Type ||
 		before.RefreshSec != existing.RefreshSec
 	if fetchChanged && s.onSourceUpdated != nil {
 		s.onSourceUpdated(ctx, *existing)

@@ -48,6 +48,14 @@ function colorError(v: string): string | undefined {
 	return v === '' || COLOR_RE.test(v) ? undefined : 'a hex color like #FF6600, or empty';
 }
 
+/** Checks a Bluesky account input (handle, DID or profile URL) loosely; the daemon checks it properly. */
+function accountError(v: string): string | undefined {
+	if (v === '') return 'a handle like alice.bsky.social is required';
+	if (utf8Len(v) > MAX_URL_BYTES) return `account must be at most ${MAX_URL_BYTES} bytes`;
+	if (/\s/.test(v) || CONTROL_RE.test(v)) return 'a handle like alice.bsky.social, a DID, or a bsky.app profile URL';
+	return undefined;
+}
+
 /** Checks a feed URL the way the daemon does: absolute http(s), a host, no credentials. */
 export function urlError(v: string): string | undefined {
 	if (v === '') return 'url is required';
@@ -111,7 +119,7 @@ export function formatInterval(sec: number | undefined): string {
 export interface SourceForm {
 	name: string;
 	url: string;
-	type: 'rss' | 'atom';
+	type: 'rss' | 'atom' | 'bluesky';
 	/** A refresh interval as typed, e.g. "1h". */
 	refresh: string;
 	enabled: boolean;
@@ -124,7 +132,7 @@ export function sourceForm(s?: Source): SourceForm {
 	return {
 		name: s?.name ?? '',
 		url: s?.url ?? '',
-		type: s?.type === 'atom' ? 'atom' : 'rss',
+		type: s?.type === 'atom' || s?.type === 'bluesky' ? s.type : 'rss',
 		refresh: formatInterval(s ? s.refresh_sec : DEFAULT_REFRESH_SEC),
 		// New sources are enabled unless unchecked: proto3's default for
 		// AddSourceRequest.enabled is false, so it is always sent.
@@ -136,9 +144,12 @@ export function sourceForm(s?: Source): SourceForm {
 
 export function validateSource(f: SourceForm): Errors<SourceForm> {
 	const e: Errors<SourceForm> = {};
-	const name = nameError('name', f.name, MAX_NAME);
+	// A Bluesky source is named after the account when the name is blank.
+	const name = f.type === 'bluesky' && f.name.trim() === '' ? undefined : nameError('name', f.name, MAX_NAME);
 	if (name) e.name = name;
-	const url = urlError(f.url.trim());
+	// The daemon resolves a Bluesky handle, DID or profile URL, so only
+	// the shape common to all of them is checked here.
+	const url = f.type === 'bluesky' ? accountError(f.url.trim()) : urlError(f.url.trim());
 	if (url) e.url = url;
 	const sec = parseInterval(f.refresh);
 	if (sec === null) e.refresh = 'an interval like 30m, 1h or 3600';
@@ -187,7 +198,8 @@ export function sourceAddBody(f: SourceForm): SourceBody {
 export function sourcePatchBody(orig: Source, f: SourceForm): SourceBody {
 	const v = sourceValues(f);
 	const p: SourceBody = {};
-	if (v.name !== (orig.name ?? '')) p.name = v.name;
+	// A blank name on a Bluesky source means "keep the current one".
+	if (v.name !== (orig.name ?? '') && !(v.type === 'bluesky' && v.name === '')) p.name = v.name;
 	if (v.url !== (orig.url ?? '')) p.url = v.url;
 	if (v.type !== (orig.type || 'rss')) p.type = v.type;
 	if (v.refresh_sec !== (orig.refresh_sec ?? 0)) p.refresh_sec = v.refresh_sec;

@@ -161,6 +161,43 @@ describe('source form', () => {
 		expect(sourcePatchBody(orig, { ...f, color: '', abbreviation: '' })).toEqual({ color: '', abbreviation: '' });
 	});
 
+	it('keeps a bluesky source a bluesky source, and its name optional', () => {
+		const orig: Source = {
+			id: '4',
+			name: 'Alice',
+			url: 'https://bsky.app/profile/did:plc:z72i7hdynmk6r22z27h6tvur',
+			type: 'bluesky',
+			refresh_sec: 3600,
+			enabled: true
+		};
+		const f = sourceForm(orig);
+		expect(f.type).toBe('bluesky');
+		// Editing something else must not send a type change (or flip it to rss).
+		expect(sourcePatchBody(orig, f)).toEqual({});
+		expect(sourcePatchBody(orig, { ...f, enabled: false })).toEqual({ enabled: false });
+
+		// A handle, a DID or a profile URL is accepted instead of a feed URL.
+		const add: SourceForm = { ...f, name: '', url: 'alice.bsky.social' };
+		expect(validateSource(add)).toEqual({});
+		expect(validateSource({ ...add, url: '@alice.bsky.social' })).toEqual({});
+		expect(validateSource({ ...add, url: 'did:plc:z72i7hdynmk6r22z27h6tvur' })).toEqual({});
+		expect(validateSource({ ...add, url: 'https://bsky.app/profile/alice.bsky.social' })).toEqual({});
+		expect(validateSource({ ...add, url: '' }).url).toBeDefined();
+		expect(validateSource({ ...add, url: 'alice bsky social' }).url).toBeDefined();
+		// A blank name is left out, so the daemon names the source after the account.
+		expect(sourceAddBody(add)).toMatchObject({ type: 'bluesky', url: 'alice.bsky.social', name: '' });
+		// ...and on an edit it keeps the current name.
+		expect(sourcePatchBody(orig, { ...f, name: '' })).toEqual({});
+		expect(sourcePatchBody(orig, { ...f, name: 'Al' })).toEqual({ name: 'Al' });
+
+		// The name stays required for rss and atom.
+		for (const type of ['rss', 'atom'] as const) {
+			expect(validateSource({ ...valid, type, name: '' }).name).toBeDefined();
+		}
+		// A bluesky account is not a feed URL.
+		expect(validateSource({ ...valid, type: 'rss', url: 'alice.bsky.social' }).url).toBeDefined();
+	});
+
 	it('treats a missing type as rss and a missing enabled as false', () => {
 		const orig: Source = { id: '2', name: 'x', url: 'https://x.example/f', refresh_sec: 3600 };
 		const f = sourceForm(orig);

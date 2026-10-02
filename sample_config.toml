@@ -45,6 +45,19 @@ type = "atom"
 # color = "#00ADD8"        # optional: hex color for source chip in TUI
 # abbreviation = "Go"      # optional: short display name for TUI
 
+# A Bluesky account's own posts (no replies or reposts). Use the account's DID
+# in the URL: it survives a handle change. A handle URL such as
+# https://bsky.app/profile/alice.bsky.social also works, but breaks if the
+# account renames. nyttigd does not look handles up at startup. To find a DID,
+# run `nyttig add-source -t bluesky -u alice.bsky.social` and read it from
+# `nyttig list-sources`, or open
+# https://public.api.bsky.app/xrpc/app.bsky.actor.getProfile?actor=alice.bsky.social
+# [[sources]]
+# name = "Alice"
+# url = "https://bsky.app/profile/did:plc:z72i7hdynmk6r22z27h6tvur"
+# type = "bluesky"
+# refresh_sec = 900
+
 [[tags]]
 name = "rust"
 color = "#FF6B35"
