@@ -634,6 +634,16 @@ Rows are marked viewed as they scroll into view, like in the TUI, and sent
 to the daemon about every 3 seconds; what is pending when you close the tab
 is sent with a beacon.
 
+### Home screen app
+
+The app has a web app manifest and iOS home screen tags, so it runs like an
+app, without the browser's toolbars: in Safari on an iPhone, open the site,
+tap Share, then **Add to Home Screen** (Chrome and Edge offer "Install").
+It is still the live site, not an offline copy. Browsers fetch the manifest
+without the basic auth credentials, so the example Caddyfile leaves it and
+the icons public. The PNG icons are rendered from `web/static/icon.svg` by
+`node web/scripts/icons.mjs`.
+
 ### Security
 
 nyttig-api is meant to be reachable from the internet only through a

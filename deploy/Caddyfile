@@ -11,7 +11,11 @@
 # Let's Encrypt needs a DNS record for the host and ports 80 and 443 open.
 
 nyttig.example.com {
-	basic_auth {
+	# The home screen app's manifest and icons are fetched without the
+	# basic auth credentials (browsers send none for the manifest, and iOS
+	# may not for the icon), so they are public. They hold nothing private.
+	@private not path /manifest.webmanifest /apple-touch-icon.png /icon-192.png /icon-512.png
+	basic_auth @private {
 		sondre $2a$14$REPLACE_WITH_THE_OUTPUT_OF_caddy_hash-password
 	}
 
