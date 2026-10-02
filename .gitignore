@@ -1,4 +1,4 @@
-# Build output (see AGENT.md). Anchored to the repo root so the cmd/nyttig and
+# Build output (see AGENTS.md). Anchored to the repo root so the cmd/nyttig and
 # cmd/nyttigd source directories are not matched.
 /bin/
 /dist/
