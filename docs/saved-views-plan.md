@@ -1,6 +1,6 @@
 # Saved views plan
 
-Status: **phases 1–3 implemented, not yet merged** (the backend, and the CLI). Phases 4–7 are planned.
+Status: **phases 1–4 implemented, not yet merged** (the backend, the CLI and the HTTP API). Phases 5–7 are planned.
 
 Saved views are persistent, named feed filters, like Linear's views. You can
 bring one up with a key or a tab instead of retyping
@@ -252,3 +252,14 @@ so leave it to CI.
   the stored one plus the flags given (the RPC replaces the filter as a whole).
 - CLI: `search -view` lets flags passed explicitly (query, `-s`, `-tag`,
   `-sort`, `-unviewed`) override the view's filter.
+- API: responses use the request's filter shape, not protojson's proto names.
+  A view is `{id, name, filter: {q, source, tag, sort, unviewed}, favorite,
+  position}` (IDs as strings, zero values left out except `filter`, which is
+  always present), and the list and reorder answers are `{"views": [...]}`.
+  The plan only fixed the request keys; keeping both directions the same
+  means the web's `filterToViewBody` and `viewToFilter` use one shape. This
+  is the one place `internal/api` doesn't send protojson (`viewJSON` in
+  `manage.go`). Phase 6's `types.ts` must mirror it, not protojson.
+- API: the `readObject` helper is the former `parseBody` renamed, which
+  `readBody` already called; `jsonBody.object` reads a nested member with it.
+  `PUT /api/views/order` requires `ids` and answers 200 with the new list.

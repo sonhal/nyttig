@@ -360,3 +360,139 @@ func TestRemoveUnknownIsNotFound(t *testing.T) {
 		}
 	}
 }
+
+func TestViews(t *testing.T) {
+	fc := &fakeClient{views: []*pb.SavedView{
+		{Id: 1, Name: "Security", Filter: &pb.ViewFilter{Search: "openssl", SourceId: 9007199254740993, TagId: 4, Sort: "oldest", UnviewedOnly: true}, Favorite: true},
+		{Id: 2, Name: "All", Position: 1},
+	}}
+	th := newTestHandler(t, fc)
+
+	rec := th.do("GET", "/api/views", "", nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("list views: %d %s", rec.Code, rec.Body)
+	}
+	want := `{"views":[{"id":"1","name":"Security","filter":{"q":"openssl","source":"9007199254740993","tag":"4","sort":"oldest","unviewed":true},"favorite":true},` +
+		`{"id":"2","name":"All","filter":{},"position":1}]}`
+	if rec.Body.String() != want {
+		t.Errorf("list views body:\n got %s\nwant %s", rec.Body, want)
+	}
+
+	rec = th.do("POST", "/api/views", `{"name":"sec","filter":{"q":"x","source":"2","tag":"3","sort":"oldest","unviewed":true},"favorite":true}`, nil)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("add view: %d %s", rec.Code, rec.Body)
+	}
+	wantAdd := &pb.AddSavedViewRequest{Name: "sec", Favorite: true,
+		Filter: &pb.ViewFilter{Search: "x", SourceId: 2, TagId: 3, Sort: "oldest", UnviewedOnly: true}}
+	if !proto.Equal(fc.lastReq, wantAdd) {
+		t.Errorf("AddSavedViewRequest = %v, want %v", fc.lastReq, wantAdd)
+	}
+	if !strings.Contains(rec.Body.String(), `"id":"6"`) || !strings.Contains(rec.Body.String(), `"source":"2"`) {
+		t.Errorf("add view body: %s", rec.Body)
+	}
+	// A minimal view: no filter, not a favorite.
+	if rec := th.do("POST", "/api/views", `{"name":"plain"}`, nil); rec.Code != http.StatusCreated ||
+		!proto.Equal(fc.lastReq, &pb.AddSavedViewRequest{Name: "plain"}) {
+		t.Errorf("add minimal view: %d, %v", rec.Code, fc.lastReq)
+	}
+
+	// PATCH: absent = unchanged; a present filter replaces the whole filter,
+	// even an empty one.
+	for _, tc := range []struct {
+		body string
+		want *pb.UpdateSavedViewRequest
+	}{
+		{`{"name":"renamed"}`, &pb.UpdateSavedViewRequest{Id: 3, Name: ptr("renamed")}},
+		{`{"favorite":false}`, &pb.UpdateSavedViewRequest{Id: 3, Favorite: ptr(false)}},
+		{`{"filter":{}}`, &pb.UpdateSavedViewRequest{Id: 3, Filter: &pb.ViewFilter{}}},
+		{`{"filter":{"tag":"7","q":""}}`, &pb.UpdateSavedViewRequest{Id: 3, Filter: &pb.ViewFilter{TagId: 7}}},
+		{`{"name":"n","favorite":true,"filter":{"sort":"oldest"}}`,
+			&pb.UpdateSavedViewRequest{Id: 3, Name: ptr("n"), Favorite: ptr(true), Filter: &pb.ViewFilter{Sort: "oldest"}}},
+	} {
+		rec := th.do("PATCH", "/api/views/3", tc.body, nil)
+		if rec.Code != http.StatusOK || !proto.Equal(fc.lastReq, tc.want) {
+			t.Errorf("%s: %d, UpdateSavedViewRequest = %v, want %v", tc.body, rec.Code, fc.lastReq, tc.want)
+		}
+	}
+
+	fc.lastReq = nil
+	for _, tc := range []struct{ method, path, body string }{
+		{"POST", "/api/views", `{"filter":null}`},
+		{"POST", "/api/views", `{"filter":"x"}`},
+		{"POST", "/api/views", `{"filter":[]}`},
+		{"POST", "/api/views", `{"filter":{"unknown":1}}`},
+		{"POST", "/api/views", `{"filter":{"q":"a","q":"b"}}`},
+		{"POST", "/api/views", `{"filter":{"q":null}}`},
+		{"POST", "/api/views", `{"filter":{"source":2}}`},
+		{"POST", "/api/views", `{"filter":{"tag":"x"}}`},
+		{"POST", "/api/views", `{"filter":{"tag":"-1"}}`},
+		{"POST", "/api/views", `{"filter":{"unviewed":"yes"}}`},
+		{"POST", "/api/views", `{"filter":{"sort":1}}`},
+		{"POST", "/api/views", `{"filter":{},"filter":{}}`},
+		{"POST", "/api/views", `{"name":"x","position":1}`},
+		{"POST", "/api/views", `{"name":1}`},
+		{"POST", "/api/views", `{"favorite":"true"}`},
+		{"PATCH", "/api/views/3", `{"name":null}`},
+		{"PATCH", "/api/views/3", `{"filter":{"search":"x"}}`},
+		{"PATCH", "/api/views/0", `{}`},
+		{"PATCH", "/api/views/x", `{}`},
+		{"DELETE", "/api/views/0", ``},
+		{"DELETE", "/api/views/1", `{"cascade":true}`},
+		{"PUT", "/api/views/order", `{}`},
+		{"PUT", "/api/views/order", `{"ids":null}`},
+		{"PUT", "/api/views/order", `{"ids":[1,2]}`},
+		{"PUT", "/api/views/order", `{"ids":["1","0"]}`},
+		{"PUT", "/api/views/order", `{"ids":["1"],"extra":true}`},
+	} {
+		if rec := th.do(tc.method, tc.path, tc.body, nil); rec.Code != http.StatusBadRequest || fc.lastReq != nil {
+			t.Errorf("%s %s %s: %d (RPC %v), want 400 and no RPC", tc.method, tc.path, tc.body, rec.Code, fc.lastReq)
+		}
+	}
+
+	rec = th.do("PUT", "/api/views/order", `{"ids":["2","1"]}`, nil)
+	if rec.Code != http.StatusOK || !proto.Equal(fc.lastReq, &pb.ReorderSavedViewsRequest{Ids: []int64{2, 1}}) {
+		t.Fatalf("reorder: %d %s, %v", rec.Code, rec.Body, fc.lastReq)
+	}
+	if want := `{"views":[{"id":"2","name":"v2","filter":{}},{"id":"1","name":"v1","filter":{},"position":1}]}`; rec.Body.String() != want {
+		t.Errorf("reorder body:\n got %s\nwant %s", rec.Body, want)
+	}
+
+	for _, body := range []string{"", "{}"} {
+		if rec := th.do("DELETE", "/api/views/4", body, nil); rec.Code != http.StatusNoContent {
+			t.Errorf("DELETE view with %q: %d %s", body, rec.Code, rec.Body)
+		}
+	}
+	if got := strings.Join(fc.removed, " "); got != "view/4 view/4" {
+		t.Errorf("removed = %q", got)
+	}
+}
+
+func TestViewErrors(t *testing.T) {
+	for _, tc := range []struct {
+		err  error
+		want int
+	}{
+		{status.Error(codes.InvalidArgument, "name must not be empty"), http.StatusBadRequest},
+		{status.Error(codes.FailedPrecondition, "at most 100 views"), http.StatusBadRequest},
+		{status.Error(codes.AlreadyExists, `a view named "sec" already exists`), http.StatusConflict},
+		{status.Error(codes.NotFound, "view 7 not found"), http.StatusNotFound},
+		{status.Error(codes.Unavailable, "down"), http.StatusServiceUnavailable},
+	} {
+		th := newTestHandler(t, &fakeClient{err: tc.err})
+		for _, rq := range []struct{ method, path, body string }{
+			{"GET", "/api/views", ""},
+			{"POST", "/api/views", `{"name":"x"}`},
+			{"PATCH", "/api/views/7", `{"name":"x"}`},
+			{"DELETE", "/api/views/7", ""},
+			{"PUT", "/api/views/order", `{"ids":["1"]}`},
+		} {
+			rec := th.do(rq.method, rq.path, rq.body, nil)
+			if rec.Code != tc.want {
+				t.Errorf("%s %s with %v: %d, want %d", rq.method, rq.path, tc.err, rec.Code, tc.want)
+			}
+			if got, _ := decode(t, rec)["error"].(string); got != status.Convert(tc.err).Message() {
+				t.Errorf("%s %s: error %q, want the daemon's message", rq.method, rq.path, got)
+			}
+		}
+	}
+}
