@@ -141,11 +141,13 @@ cmd/nyttig-api/main.go      nyttig-api entrypoint: flags, listen-address guard, 
 web/                        The SvelteKit app (pnpm); "pnpm build" writes a Node server to web/build/
 web/src/lib/                Pure modules (reducer, keymap, filter, query, command, highlight,
                             fuzzy, history, help, sanitize, viewed, forms, latest, meta,
-                            format, tagtree) with Vitest tests next to them, plus the Svelte
-                            components; metadata.svelte.ts holds the sources and tags every
-                            view shares, prefs.svelte.ts the time format (localStorage)
-web/src/routes/             / is the feed; sources/, tags/ and rules/ are the management views
-                            (ManageView.svelte is their shared frame)
+                            format, tagtree, views) with Vitest tests next to them, plus the
+                            Svelte components (ViewTabs.svelte is the saved views' tab row above
+                            the filter bar); metadata.svelte.ts holds the sources, tags and
+                            saved views every page shares, prefs.svelte.ts the time format
+                            (localStorage)
+web/src/routes/             / is the feed; sources/, tags/, rules/ and views/ are the management
+                            pages (ManageView.svelte is their shared frame)
 web/e2e/                    Playwright tests; stack.mjs starts a feed server, nyttigd, nyttig-api,
                             the app server and a Caddy-like proxy (proxy.mjs)
 internal/server/service/    gRPC service impl + Hub (broadcasts pushed items to subscribers);
@@ -167,6 +169,7 @@ deploy/README.md            VPS guide: sizing, build for Debian, mTLS for the TU
 deploy/Caddyfile            Example reverse proxy (TLS, basic auth, /api/* vs the app)
 docs/web-client-plan.md     Plan for the nyttig-api browser client (phases and decisions)
 docs/tag-tree-plan.md       Plan for parent tags (the tag tree): decisions and phases
+docs/saved-views-plan.md    Plan for saved views (named filters, tabs): decisions and phases
 docs/saved-views-plan.md    Plan for saved views (named filters, feed tabs): decisions and phases
 CLAUDE.md                   `@AGENTS.md`: makes Claude Code load this file
 ```
@@ -251,6 +254,28 @@ which phases are done and whether they are merged; keep it current.
   in a second pass and never removes any. Any count of "items with this tag"
   that describes what a delete removes (the web confirmation) must use
   `tag_exact`.
+- **Saved views** (`saved_views`, `docs/saved-views-plan.md`) are named
+  filters stored in the daemon (`ViewFilter`: search, one source, one tag,
+  sort, unviewed) and shared by the web app and the CLI. They are **resolved
+  client-side into a plain filter**: nothing in the stream, the Hub,
+  `ListItems` or `itemMatchesFilter` knows about views. A deleted source or
+  tag is `ON DELETE SET NULL` on the view, so the view stays and loses that
+  part. Names are unique and case-insensitive; `position` orders the views
+  and `ReorderSavedViews` must get exactly the full set. In the web app the
+  URL stays the source of truth: `/?view=<id>&<full filter params>`, where
+  `view` only says which tab is active (`filterFromParams` ignores it, and
+  `setFilter`, `metadata.feedSearch` and the off-feed filter commands keep
+  it); a tab shows `*` when the filter differs from the saved one
+  (`views.ts`: `isModified`). The tabs are the favorites in position order,
+  and only the first nine have a number key. **nyttig-api's view JSON is not
+  protojson** (`viewJSON` in `internal/api/manage.go`): a view is
+  `{id, name, filter: {q, source, tag, sort, unviewed}, favorite, position}`
+  with string IDs, zero values left out and `filter` always present (the
+  daemon spells out `sort: "newest"`). The filter keys are the web `Filter`
+  type's and the feed URL's, in requests and responses alike, and a PATCH
+  with `filter` replaces the whole filter. Lists and the reorder answer are
+  `{"views": [...]}`. In the web app `command.ts`'s old `View` is now `Page`
+  (the routes); "view" always means a saved view.
 - **Tagging** is rule-based only (no manual tagging). Rules are regex over
   `title`/`description`/`both`, global or per-source, evaluated by `priority`.
 - **View tracking** is K9s-style: the TUI marks items viewed as they scroll

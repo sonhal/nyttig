@@ -1,6 +1,6 @@
 # Saved views plan
 
-Status: **phases 1–4 implemented, not yet merged** (the backend, the CLI and the HTTP API). Phases 5–7 are planned.
+Status: **phases 1–7 implemented, not yet merged** (the backend, the CLI, the HTTP API and the web app).
 
 Saved views are persistent, named feed filters, like Linear's views. You can
 bring one up with a key or a tab instead of retyping
@@ -263,3 +263,29 @@ so leave it to CI.
 - API: the `readObject` helper is the former `parseBody` renamed, which
   `readBody` already called; `jsonBody.object` reads a nested member with it.
   `PUT /api/views/order` requires `ids` and answers 200 with the new list.
+- Web: the `view` URL parameter is read raw (a numeric ID) for keeping it
+  through filter changes and for `metadata.feedSearch`; the open view is
+  looked up in `metadata.views` only to draw the tab, so a bookmark works
+  before the views have loaded.
+- Web: `:view <name>` takes an exact name (any case) or a unique prefix, and
+  `all`/`*`/`-` for the unfiltered feed unless a view has that name.
+  `:save <name>` from a management page creates the view and opens the feed
+  on it, like the filter commands do. `:save` without a name needs an open
+  view and says so otherwise.
+- Web: the open view gets a tab even when it is not a favorite (reached
+  through `v`), after the favorites. A deleted view's `?view=` is ignored.
+- Web: the help group formerly called "Views" (`:`, `?`, `q`) is renamed
+  "General", and the new keys are in "Saved views". The management tools
+  `moveUp`/`moveDown` (`K`/`J`) are new `Tool` and `ManageAction` types, and
+  the `Space` help line reads "enable or disable the selected source, or
+  favorite a view". The management toolbar labels are `fav`, `up`, `down`.
+- Web: `ManageView`'s `view` prop is now `page`, and the tab strip's
+  `aria-label` is "pages". The tab counts of every management page include
+  `views`. `FilterBar` no longer pads for the top safe area on a phone:
+  `ViewTabs` is the first row and does.
+- Web: the new `views` command and page are in the `COMMANDS` table after
+  `rules`; `view` and `save` come after `tag` so that `:s` + Tab keeps
+  cycling `sources`, `sort`, `src` first.
+- Web: the daemon spells out `sort: "newest"` in a view's filter, so
+  `viewToFilter` and `filterToViewBody` treat it as the default
+  (`filterToViewBody` leaves defaults out).
