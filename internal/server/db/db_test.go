@@ -46,7 +46,7 @@ func TestOpen_ReportsFTS5AndVersion(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
-	defer database.Close()
+	defer func() { _ = database.Close() }()
 
 	if err := requireFTS5(database); err != nil {
 		t.Fatalf("requireFTS5: %v", err)

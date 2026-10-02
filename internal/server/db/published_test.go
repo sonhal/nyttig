@@ -13,7 +13,7 @@ func openTestDB(t *testing.T) *sql.DB {
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
-	t.Cleanup(func() { database.Close() })
+	t.Cleanup(func() { _ = database.Close() })
 	return database
 }
 
@@ -177,7 +177,7 @@ func TestMigration_NormalizesPublished(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer database.Close()
+	defer func() { _ = database.Close() }()
 	database.SetMaxOpenConns(1)
 	if _, err := database.Exec("PRAGMA foreign_keys=ON"); err != nil {
 		t.Fatal(err)
@@ -223,14 +223,14 @@ func TestMigration_NormalizesPublished(t *testing.T) {
 	if _, err := database.Exec(`INSERT INTO items (source_id, guid, link, title, published) VALUES (1, 'junk', 'l', 'junk', 'not a date')`); err != nil {
 		t.Fatal(err)
 	}
-	database.Close()
+	_ = database.Close()
 
 	// Open runs the pending migrations.
 	migrated, err := Open(path)
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
-	defer migrated.Close()
+	defer func() { _ = migrated.Close() }()
 
 	// Rows written before and after the migration share one shape.
 	fresh := time.Date(2024, 6, 15, 9, 0, 0, 0, time.UTC)

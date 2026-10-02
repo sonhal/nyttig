@@ -52,7 +52,7 @@ func Open(dsn string) (*sql.DB, error) {
 	// go-sqlite3 (build tag sqlite_fts5) or the system's (build tag
 	// libsqlite3), and only the build decides whether FTS5 is in it.
 	if err := requireFTS5(db); err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, err
 	}
 
