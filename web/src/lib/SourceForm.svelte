@@ -68,10 +68,10 @@
 		<div class="field grow">
 			<label
 				><span class="k">url</span><input
-					type="url"
+					type={f.type === 'bluesky' ? 'text' : 'url'}
 					bind:value={f.url}
 					maxlength="2048"
-					placeholder="https://example.com/feed.xml"
+					placeholder={f.type === 'bluesky' ? 'alice.bsky.social' : 'https://example.com/feed.xml'}
 					autocomplete="off"
 					autocapitalize="off"
 					spellcheck="false"
@@ -82,12 +82,18 @@
 				/></label
 			>
 			{@render err('url')}
+			{#if f.type === 'bluesky'}
+				<span class="hint"
+					>a handle (alice.bsky.social), a DID, or a bsky.app profile URL; the name is optional</span
+				>
+			{/if}
 		</div>
 		<div class="field">
 			<label
 				><span class="k">type</span><select bind:value={f.type}>
 					<option value="rss">rss</option>
 					<option value="atom">atom</option>
+					<option value="bluesky">bluesky</option>
 				</select></label
 			>
 		</div>

@@ -176,6 +176,10 @@ func main() {
 		logger.Info("feed fetches restricted to public addresses")
 	}
 
+	// Adding a Bluesky source looks the account up through the same client,
+	// so the address restrictions apply to it too.
+	svc.SetProfileResolver(fetcher.NewBlueskyResolver(httpClient))
+
 	// fetchFn is the callback the scheduler invokes for each source fetch.
 	fetchFn := func(ctx context.Context, s scheduler.Source) error {
 		return doFetch(ctx, database, httpClient, s, tgr, hub, logger)

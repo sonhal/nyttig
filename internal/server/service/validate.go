@@ -9,6 +9,7 @@ import (
 	"unicode/utf8"
 
 	pb "github.com/sonhal/nyttig/internal/proto/nyttig/v1"
+	"github.com/sonhal/nyttig/internal/server/fetcher"
 )
 
 // Input limits for values that clients send to the daemon. The daemon is the
@@ -75,13 +76,35 @@ func validateFeedURL(raw string) error {
 	return nil
 }
 
+// validateSourceName is validateName for a source's name, which a Bluesky
+// source may leave blank: AddSource then names it after the account.
+func validateSourceName(typ, name string) error {
+	if typ == fetcher.TypeBluesky && strings.TrimSpace(name) == "" {
+		return nil
+	}
+	return validateName("name", name, maxNameLen)
+}
+
+// validateSourceURL checks a source's url for its type. A Bluesky source
+// takes an account (handle, DID or profile URL) rather than a feed URL.
+func validateSourceURL(typ, raw string) error {
+	if typ != fetcher.TypeBluesky {
+		return validateFeedURL(raw)
+	}
+	if len(raw) > maxURLLen {
+		return fmt.Errorf("url must be at most %d bytes", maxURLLen)
+	}
+	_, err := fetcher.ParseBlueskyActor(raw)
+	return err
+}
+
 // validateFeedType accepts the feed types the fetcher understands.
 func validateFeedType(typ string) error {
 	switch typ {
-	case "rss", "atom":
+	case "rss", "atom", fetcher.TypeBluesky:
 		return nil
 	default:
-		return fmt.Errorf("type must be rss or atom, got %q", typ)
+		return fmt.Errorf("type must be rss, atom or bluesky, got %q", typ)
 	}
 }
 

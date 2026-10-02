@@ -1,6 +1,6 @@
-// Package fetcher handles fetching RSS/Atom feeds from remote sources,
-// parsing them, deduplicating entries, and inserting new items into the
-// database.
+// Package fetcher handles fetching RSS/Atom feeds and Bluesky accounts from
+// remote sources, parsing them, deduplicating entries, and inserting new
+// items into the database.
 package fetcher
 
 import (
@@ -100,7 +100,8 @@ type FetchResult struct {
 // ── Public API ──────────────────────────────────────────────────
 
 // Fetch fetches the feed from the source's URL, parses it as RSS 2.0 or
-// Atom, deduplicates entries via GUID or SHA-256 of the link, and inserts
+// Atom (or, for a Bluesky source, reads the account's posts through the
+// Bluesky API), deduplicates entries via GUID or SHA-256 of the link, and inserts
 // new items into the database. It updates the source's last_fetch and
 // fetch_error columns before returning.
 func Fetch(database *sql.DB, src *db.Source) (*FetchResult, error) {
@@ -120,59 +121,83 @@ type doer interface {
 
 // ── Internal ────────────────────────────────────────────────────
 
-func fetchInternal(database *sql.DB, src *db.Source, client doer) (*FetchResult, error) {
-	result := &FetchResult{SourceID: src.ID}
-
-	// 1. Build HTTP request.
-	req, err := http.NewRequest(http.MethodGet, src.URL, nil)
+// buildRequest returns the GET request for a source: its URL for RSS and
+// Atom, the author-feed API call for Bluesky. An error means the source is
+// misconfigured; it is reported as the source's fetch error.
+func buildRequest(src *db.Source) (*http.Request, error) {
+	reqURL, accept := src.URL, "application/rss+xml, application/atom+xml, application/xml, */*"
+	if src.Type == TypeBluesky {
+		// Config-seeded sources skip the service's validation, so check
+		// the account here.
+		var err error
+		if reqURL, err = blueskyFeedURL(src.URL); err != nil {
+			return nil, err
+		}
+		accept = "application/json"
+	}
+	req, err := http.NewRequest(http.MethodGet, reqURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("create request: %w", err)
 	}
 	req.Header.Set("User-Agent", userAgent)
-	req.Header.Set("Accept", "application/rss+xml, application/atom+xml, application/xml, */*")
+	req.Header.Set("Accept", accept)
+	return req, nil
+}
 
-	// 2. Issue HTTP GET.
-	resp, err := client.Do(req)
-	if err != nil {
+// parseBody parses a response body according to the source's type.
+func parseBody(src *db.Source, body []byte) ([]parsedEntry, error) {
+	if src.Type == TypeBluesky {
+		return parseBluesky(body)
+	}
+	// Auto-detect RSS vs Atom by root element.
+	return parseFeed(body)
+}
+
+func fetchInternal(database *sql.DB, src *db.Source, client doer) (*FetchResult, error) {
+	result := &FetchResult{SourceID: src.ID}
+
+	// fail records a fetch error on the source and the result.
+	fail := func(err error) (*FetchResult, error) {
 		result.FetchError = err.Error()
 		_ = db.UpdateSourceFetchError(database, src.ID, err.Error())
 		_ = db.UpdateSourceLastFetch(database, src.ID, time.Now())
 		return result, nil
 	}
+
+	// 1. Build HTTP request.
+	req, err := buildRequest(src)
+	if err != nil {
+		return fail(err)
+	}
+
+	// 2. Issue HTTP GET.
+	resp, err := client.Do(req)
+	if err != nil {
+		return fail(err)
+	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		err := fmt.Errorf("HTTP %d", resp.StatusCode)
-		result.FetchError = err.Error()
-		_ = db.UpdateSourceFetchError(database, src.ID, err.Error())
-		_ = db.UpdateSourceLastFetch(database, src.ID, time.Now())
-		return result, nil
+		if src.Type == TypeBluesky {
+			return fail(xrpcError(resp))
+		}
+		return fail(fmt.Errorf("HTTP %d", resp.StatusCode))
 	}
 
 	// 3. Read response body with size limit.
 	const maxBodySize = 10 * 1024 * 1024 // 10 MiB
 	body, err := io.ReadAll(io.LimitReader(resp.Body, maxBodySize+1))
 	if err != nil {
-		result.FetchError = err.Error()
-		_ = db.UpdateSourceFetchError(database, src.ID, err.Error())
-		_ = db.UpdateSourceLastFetch(database, src.ID, time.Now())
-		return result, nil
+		return fail(err)
 	}
 	if int64(len(body)) > maxBodySize {
-		err := fmt.Errorf("response body exceeds 10MiB limit")
-		result.FetchError = err.Error()
-		_ = db.UpdateSourceFetchError(database, src.ID, err.Error())
-		_ = db.UpdateSourceLastFetch(database, src.ID, time.Now())
-		return result, nil
+		return fail(fmt.Errorf("response body exceeds 10MiB limit"))
 	}
 
-	// 4. Parse entries (auto-detect RSS vs Atom by root element).
-	entries, parseErr := parseFeed(body)
+	// 4. Parse entries.
+	entries, parseErr := parseBody(src, body)
 	if parseErr != nil {
-		result.FetchError = parseErr.Error()
-		_ = db.UpdateSourceFetchError(database, src.ID, parseErr.Error())
-		_ = db.UpdateSourceLastFetch(database, src.ID, time.Now())
-		return result, nil
+		return fail(parseErr)
 	}
 
 	// 5. Insert new items with deduplication.

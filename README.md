@@ -3,7 +3,7 @@
 > Warning: This project is generated using LLMs
 
 
-Nyttig is a news aggregator with a developer-oriented terminal UI. Subscribe to RSS/Atom feeds, apply regex-based tags, full-text search, and browse your collected news stream in a compact, keyboard-driven interface inspired by [K9s](https://k9scli.io/) and Kibana.
+Nyttig is a news aggregator with a developer-oriented terminal UI. Subscribe to RSS/Atom feeds and Bluesky accounts, apply regex-based tags, full-text search, and browse your collected news stream in a compact, keyboard-driven interface inspired by [K9s](https://k9scli.io/) and Kibana.
 
 ## Architecture
 
@@ -16,7 +16,7 @@ nyttig-api       web client API — JSON + SSE for the browser app, a gRPC clien
 nyttig-web       web client app — the SvelteKit app in web/, served by Node
 ```
 
-- **Daemon**: Periodically fetches RSS/Atom feeds, applies tagging rules, stores items in SQLite (with FTS5 full-text search).
+- **Daemon**: Periodically fetches RSS/Atom feeds and Bluesky accounts, applies tagging rules, stores items in SQLite (with FTS5 full-text search).
 - **Client**: Bubble Tea TUI with a filter bar, scrollable news table with tag chips, and K9s-style view tracking. Also supports CLI subcommands for headless management (`add-source`, `list-sources`, etc.).
 - **Protocol**: gRPC with bidirectional streaming — the daemon pushes new items to the TUI in real time as they are fetched.
 - **Web client**: a SvelteKit app (`web/`) with the same feed view in a browser (desktop and phone), backed by the `nyttig-api` service, see [Web Client](#web-client).
@@ -218,11 +218,41 @@ clients such as nyttig-api; `socket` must then be a Unix socket path.
 | Field         | Required | Default | Description                                      |
 |---------------|----------|---------|--------------------------------------------------|
 | `name`        | yes      | —       | Display name for the feed                        |
-| `url`         | yes      | —       | Feed URL (RSS or Atom)                           |
-| `type`        | no       | `rss`   | Feed type: `rss` or `atom`                       |
+| `url`         | yes      | —       | Feed URL (RSS or Atom), or for `bluesky` the profile URL |
+| `type`        | no       | `rss`   | Feed type: `rss`, `atom` or `bluesky`            |
 | `refresh_sec` | no       | `3600`  | Fetch interval in seconds                        |
 | `color`       | no       | —       | Hex color for the source chip in the TUI         |
 | `abbreviation`| no       | —       | Short display name in the TUI (falls back to `name`) |
+
+#### Bluesky sources
+
+`type = "bluesky"` follows one account's own posts (replies and reposts are
+left out; quote posts are kept) through Bluesky's public API, so no login is
+needed. The `url` is the account's profile URL, ideally with its DID, which
+does not change when the account renames itself:
+
+```toml
+[[sources]]
+name = "Alice"
+url = "https://bsky.app/profile/did:plc:z72i7hdynmk6r22z27h6tvur"
+type = "bluesky"
+```
+
+`https://bsky.app/profile/alice.bsky.social` also works, but stops working if
+the account changes its handle. The config file is read without network
+access, so nyttigd does not resolve handles at startup. To find a DID, add the
+account once with `nyttig add-source -t bluesky -u alice.bsky.social` and read
+the DID from `nyttig list-sources`, or open
+`https://public.api.bsky.app/xrpc/app.bsky.actor.getProfile?actor=alice.bsky.social`
+in a browser and copy the `did` field.
+
+Adding a source with the CLI, the TUI or the web app accepts a handle
+(`alice.bsky.social` or `@alice.bsky.social`), a DID, or a profile URL. The
+daemon looks the account up once and stores the profile URL with its DID. The
+name is optional for Bluesky sources: it defaults to the account's display
+name, or `@handle`. Each post becomes an item: the title is the post's first
+line, the description holds the full text plus any quoted post, image alt text
+and link card.
 
 ### `[[tags]]`
 
@@ -316,9 +346,9 @@ Items are automatically marked as viewed when you scroll past them in the TUI (K
 When invoked with arguments, `nyttig` acts as a CLI management tool:
 
 ```
-nyttig add-source      -n <name> -u <url> [-t rss|atom] [-r refresh_sec] [-color <hex>] [-abbreviation <short>]
+nyttig add-source      -n <name> -u <url> [-t rss|atom|bluesky] [-r refresh_sec] [-color <hex>] [-abbreviation <short>]
 nyttig list-sources
-nyttig update-source   -id <source_id> [-n <name>] [-u <url>] [-t rss|atom] [-r refresh_sec]
+nyttig update-source   -id <source_id> [-n <name>] [-u <url>] [-t rss|atom|bluesky] [-r refresh_sec]
                        [-enable|-disable] [-color <hex>] [-abbreviation <short>]
 nyttig remove-source   -id <source_id>
 nyttig add-tag         -n <name> [-c <hex_color>] [-parent <name|id>]...
@@ -367,11 +397,11 @@ clients get the same checks:
 
 | Value           | Rule                                                        |
 |-----------------|-------------------------------------------------------------|
-| Source URL      | Absolute `http`/`https` URL with a host, no credentials, at most 2048 bytes |
-| Source type     | `rss` or `atom`                                             |
+| Source URL      | Absolute `http`/`https` URL with a host, no credentials, at most 2048 bytes; for `bluesky`, a handle, DID or bsky.app profile URL |
+| Source type     | `rss`, `atom` or `bluesky`                                  |
 | Refresh interval| 60 seconds to 7 days (default 3600)                         |
 | Colors          | `#RRGGBB`, or empty for none                                |
-| Names           | Non-empty, no control characters; sources ≤ 200, tags ≤ 64, abbreviations ≤ 16 characters |
+| Names           | Non-empty (a `bluesky` source may omit its name), no control characters; sources ≤ 200, tags ≤ 64, abbreviations ≤ 16 characters |
 | Tag rule pattern| Valid Go (RE2) regex, at most 1024 bytes; `field` is `title`, `description` or `both` |
 
 A duplicate source URL or tag name is rejected with `AlreadyExists`. Sources,
@@ -862,7 +892,7 @@ Removing a source, tag or tag rule that does not exist fails with gRPC
 | Database      | SQLite with FTS5                    |
 | Migrations    | Embedded SQL files                  |
 | Configuration | TOML                                |
-| Feed parsing  | `encoding/xml` (RSS 2.0 / Atom), any encoding the feed declares |
+| Feed parsing  | `encoding/xml` (RSS 2.0 / Atom), any encoding the feed declares; `encoding/json` (Bluesky) |
 | Logging       | `slog` with JSON output             |
 
 ## License

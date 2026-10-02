@@ -141,6 +141,11 @@ a {
 	font-size: 12px;
 	line-height: 16px;
 }
+.mform .hint {
+	color: var(--dim);
+	font-size: 12px;
+	line-height: 16px;
+}
 .mform .actions {
 	display: flex;
 	align-items: center;
@@ -195,7 +200,8 @@ a {
 		width: 24px;
 		height: 24px;
 	}
-	.mform .ferr {
+	.mform .ferr,
+	.mform .hint {
 		padding-left: 12ch;
 	}
 	.mform .actions {
