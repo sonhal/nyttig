@@ -4,6 +4,7 @@
 package fetcher
 
 import (
+	"bytes"
 	"database/sql"
 	"encoding/xml"
 	"fmt"
@@ -14,6 +15,8 @@ import (
 	"strings"
 	"time"
 	"unicode"
+
+	"golang.org/x/net/html/charset"
 
 	"github.com/sonhal/nyttig/internal/server/db"
 )
@@ -261,10 +264,20 @@ func parseFeed(body []byte) ([]parsedEntry, error) {
 	return nil, fmt.Errorf("unrecognized feed format")
 }
 
+// decodeXML is xml.Unmarshal with support for the encoding named in the XML
+// declaration. Plain Unmarshal fails on anything but UTF-8 ("encoding
+// ISO-8859-1 declared but Decoder.CharsetReader is nil"), and plenty of
+// feeds still declare ISO-8859-1 or windows-1252.
+func decodeXML(body []byte, v any) error {
+	dec := xml.NewDecoder(bytes.NewReader(body))
+	dec.CharsetReader = charset.NewReaderLabel
+	return dec.Decode(v)
+}
+
 // parseRSS parses an RSS 2.0 XML feed into normalized entries.
 func parseRSS(body []byte) ([]parsedEntry, error) {
 	var feed rssFeed
-	if err := xml.Unmarshal(body, &feed); err != nil {
+	if err := decodeXML(body, &feed); err != nil {
 		return nil, fmt.Errorf("rss parse: %w", err)
 	}
 
@@ -291,7 +304,7 @@ func parseRSS(body []byte) ([]parsedEntry, error) {
 // parseAtom parses an Atom 1.0 XML feed into normalized entries.
 func parseAtom(body []byte) ([]parsedEntry, error) {
 	var feed atomFeed
-	if err := xml.Unmarshal(body, &feed); err != nil {
+	if err := decodeXML(body, &feed); err != nil {
 		return nil, fmt.Errorf("atom parse: %w", err)
 	}
 

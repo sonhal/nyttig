@@ -927,3 +927,69 @@ func TestFetch_InsertFailureIsRecorded(t *testing.T) {
 		t.Errorf("source fetch_error = %q after a clean fetch, want empty", *updated.FetchError)
 	}
 }
+
+// TestParseFeed_NonUTF8Encodings feeds bodies whose bytes are not UTF-8.
+func TestParseFeed_NonUTF8Encodings(t *testing.T) {
+	tests := []struct {
+		name  string
+		body  []byte
+		title string
+	}{
+		{
+			name:  "RSS ISO-8859-1",
+			body:  []byte("<?xml version=\"1.0\" encoding=\"ISO-8859-1\"?><rss version=\"2.0\"><channel><title>T</title><item><title>Caf\xe9 \xc5rhus</title><link>http://x/1</link><guid>1</guid></item></channel></rss>"),
+			title: "Café Århus",
+		},
+		{
+			name:  "Atom windows-1252",
+			body:  []byte("<?xml version=\"1.0\" encoding=\"windows-1252\"?><feed xmlns=\"http://www.w3.org/2005/Atom\"><entry><title>Caf\xe9 \x93quoted\x94</title><id>1</id><link href=\"http://x/1\"/></entry></feed>"),
+			title: "Café “quoted”",
+		},
+		{
+			name:  "RSS UTF-8 still works",
+			body:  []byte("<?xml version=\"1.0\" encoding=\"UTF-8\"?><rss version=\"2.0\"><channel><title>T</title><item><title>Café</title><link>http://x/1</link><guid>1</guid></item></channel></rss>"),
+			title: "Café",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			entries, err := parseFeed(tc.body)
+			if err != nil {
+				t.Fatalf("parseFeed: %v", err)
+			}
+			if len(entries) != 1 || entries[0].Title != tc.title {
+				t.Fatalf("entries = %+v, want one titled %q", entries, tc.title)
+			}
+		})
+	}
+
+	if _, err := parseFeed([]byte(`<?xml version="1.0" encoding="no-such-charset"?><rss version="2.0"><channel></channel></rss>`)); err == nil {
+		t.Error("an unknown encoding should be an error, not silently accepted")
+	}
+}
+
+// TestFetch_ISO88591Feed runs a Latin-1 feed through the whole fetch path.
+func TestFetch_ISO88591Feed(t *testing.T) {
+	database := setupDB(t)
+	defer func() { _ = database.Close() }()
+
+	body := []byte("<?xml version=\"1.0\" encoding=\"ISO-8859-1\"?><rss version=\"2.0\"><channel><title>T</title><item><title>Caf\xe9</title><link>http://x/1</link><guid>1</guid></item></channel></rss>")
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/rss+xml; charset=ISO-8859-1")
+		_, _ = w.Write(body)
+	}))
+	defer srv.Close()
+
+	src := insertTestSource(t, database, "Latin", srv.URL)
+	result, err := Fetch(database, src)
+	if err != nil || result.FetchError != "" {
+		t.Fatalf("Fetch = %v, %q", err, result.FetchError)
+	}
+	if len(result.NewItems) != 1 || result.NewItems[0].Title != "Café" {
+		t.Fatalf("NewItems = %+v, want title Café", result.NewItems)
+	}
+	item, err := db.GetItem(database, result.NewItems[0].ID)
+	if err != nil || item.Title != "Café" {
+		t.Errorf("stored title = %v (%v), want Café", item, err)
+	}
+}
