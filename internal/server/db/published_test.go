@@ -3,6 +3,7 @@ package db
 import (
 	"database/sql"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -279,3 +280,49 @@ func TestMigration_NormalizesPublished(t *testing.T) {
 }
 
 func ptr(t time.Time) *time.Time { return &t }
+
+// queryPlan returns the EXPLAIN QUERY PLAN detail lines of a query.
+func queryPlan(t *testing.T, database *sql.DB, query string, args ...any) []string {
+	t.Helper()
+	rows, err := database.Query("EXPLAIN QUERY PLAN "+query, args...)
+	if err != nil {
+		t.Fatalf("explain: %v", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var plan []string
+	for rows.Next() {
+		var id, parent, notUsed int
+		var detail string
+		if err := rows.Scan(&id, &parent, &notUsed, &detail); err != nil {
+			t.Fatal(err)
+		}
+		plan = append(plan, detail)
+	}
+	return plan
+}
+
+// TestIndexes_UsedByHotQueries checks with EXPLAIN QUERY PLAN that the
+// newest-first listing walks idx_items_published instead of sorting the
+// table, and that tag filters use idx_item_tags_tag_id.
+func TestIndexes_UsedByHotQueries(t *testing.T) {
+	database := openTestDB(t)
+
+	// The exact ORDER BY of ListItems for the default sort.
+	plan := strings.Join(queryPlan(t, database, `SELECT i.id FROM items i JOIN sources s ON s.id = i.source_id
+		ORDER BY i.published DESC NULLS LAST, i.fetched_at DESC LIMIT 100 OFFSET 0`), "\n")
+	if !strings.Contains(plan, "idx_items_published") {
+		t.Errorf("newest-first plan does not use idx_items_published:\n%s", plan)
+	}
+	if strings.Contains(plan, "TEMP B-TREE") {
+		t.Errorf("newest-first plan sorts in a temp b-tree:\n%s", plan)
+	}
+
+	plan = strings.Join(queryPlan(t, database, `SELECT COUNT(*) FROM item_tags WHERE tag_id = ?`, 1), "\n")
+	if !strings.Contains(plan, "idx_item_tags_tag_id") {
+		t.Errorf("tag lookup plan does not use idx_item_tags_tag_id:\n%s", plan)
+	}
+	plan = strings.Join(queryPlan(t, database, `SELECT i.id FROM items i WHERE i.id IN (SELECT item_id FROM item_tags WHERE tag_id = ?)`, 1), "\n")
+	if !strings.Contains(plan, "idx_item_tags_tag_id") {
+		t.Errorf("tag filter plan does not use idx_item_tags_tag_id:\n%s", plan)
+	}
+}
