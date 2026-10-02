@@ -22,6 +22,11 @@ updates:
     directory: /web
     schedule:
       interval: weekly
+    ignore:
+      # svelte-check only runs on TypeScript 7 alongside TypeScript 6 and
+      # behind its experimental --tsgo flag; stay on 6 until it does.
+      - dependency-name: typescript
+        update-types: ["version-update:semver-major"]
     groups:
       web-dependencies:
         patterns: ["*"]
