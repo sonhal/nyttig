@@ -52,6 +52,8 @@ export interface Filter {
 	tag: string;
 	sort: Sort;
 	unviewed: boolean;
+	/** A rolling window such as "7d" (since.ts), "" = any time. */
+	since: string;
 }
 
 export type RuleField = 'title' | 'description' | 'both';
@@ -86,6 +88,8 @@ export interface ViewFilter {
 	tag?: string;
 	sort?: string;
 	unviewed?: boolean;
+	/** The window as the user typed it ("7d"); absent = any time. */
+	since?: string;
 }
 
 /** A saved view. Unlike the other types this is not protojson: see viewJSON in internal/api/manage.go. */

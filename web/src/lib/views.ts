@@ -7,6 +7,7 @@
 // Everything here is pure: the views come in as arguments.
 
 import { defaultFilter, filterToParams, sameFilter } from './filter';
+import { validSince } from './since';
 import type { Filter, SavedView, ViewFilter } from './types';
 
 /** The most views the daemon keeps. */
@@ -23,7 +24,8 @@ export function viewToFilter(v: SavedView): Filter {
 		source: f.source ?? '',
 		tag: f.tag ?? '',
 		sort: f.sort === 'oldest' ? 'oldest' : 'newest',
-		unviewed: !!f.unviewed
+		unviewed: !!f.unviewed,
+		since: validSince(f.since)
 	};
 }
 
@@ -35,6 +37,7 @@ export function filterToViewBody(f: Filter): ViewFilter {
 	if (f.tag) b.tag = f.tag;
 	if (f.sort !== defaultFilter.sort) b.sort = f.sort;
 	if (f.unviewed) b.unviewed = true;
+	if (f.since) b.since = f.since;
 	return b;
 }
 
