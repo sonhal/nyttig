@@ -55,9 +55,11 @@ type SourceInfo struct {
 
 // TagInfo describes a tag shown in the dropdown.
 type TagInfo struct {
-	ID    int64
-	Name  string
-	Color string
+	ID        int64
+	Name      string
+	Color     string
+	ParentIDs []int64 // direct parents; empty = top-level
+	Depth     int     // set by SetTags: 0 for a root, 1 for its children, ...
 }
 
 // ── FilterBar ──────────────────────────────────────────────────
@@ -75,6 +77,8 @@ type FilterBar struct {
 	// Tag dropdown.
 	tagIdx int // index into tags slice
 	tags   []TagInfo
+	// tagBelow is how many tags sit below each tag (by ID), for the label.
+	tagBelow map[int64]int
 
 	// Sort dropdown.
 	sortIdx int
@@ -99,10 +103,12 @@ func (f *FilterBar) SetSources(sources []SourceInfo) {
 	}
 }
 
-// SetTags replaces the tag list. A virtual "all" entry is always first.
+// SetTags replaces the tag list. A virtual "all" entry is always first, then
+// the tags in tree order (see flattenTagTree).
 func (f *FilterBar) SetTags(tags []TagInfo) {
 	f.tags = []TagInfo{{ID: 0, Name: "all"}}
-	f.tags = append(f.tags, tags...)
+	f.tags = append(f.tags, flattenTagTree(tags)...)
+	f.tagBelow = tagDescendantCounts(tags)
 	if f.tagIdx >= len(f.tags) {
 		f.tagIdx = 0
 	}
@@ -252,6 +258,10 @@ func (f *FilterBar) View() string {
 	tagName := "all"
 	if f.tagIdx >= 0 && f.tagIdx < len(f.tags) {
 		tagName = f.tags[f.tagIdx].Name
+		// A tag filter also covers the tags below it.
+		if n := f.tagBelow[f.tags[f.tagIdx].ID]; n > 0 {
+			tagName += fmt.Sprintf(" +%d", n)
+		}
 	}
 	tagSeg := fmt.Sprintf("%s [%s]", filterLabelStyle.Render("tag:"),
 		filterValueStyle.Render(tagName))
