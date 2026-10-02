@@ -999,9 +999,10 @@ An assessor is any program that:
 
 1. Registers once: `nyttig add-assessor -n claude -description "importance for
    the tag, 0-1"` or `[[assessors]]` in the config.
-2. Finds work by polling `Search` (or `GET /api/items`) with the tag it covers
-   and `unassessed` set to itself, or by holding a `StreamItems` stream (or
-   `/api/stream`) open with that filter.
+2. Finds work by polling `GET /api/items?view=<name>` (see
+   [Fetch work by saved view](#fetch-work-by-saved-view)), or `Search` with the
+   tag it covers and `unassessed` set to itself, or by holding a `StreamItems`
+   stream (or `/api/stream`) open with that filter.
 3. Calls `PutAssessment` (or `PUT /api/items/{id}/assessments`) for each item.
    With a `tag_id` the score is for that tag; without one it is for the item
    as a whole. Re-assessing is just another call.
@@ -1044,6 +1045,50 @@ score of `0` is a score), and at least a score or a note is required.
 assessor names are untrusted text: nyttig-api strips control and bidirectional
 override characters from them, and the web app renders them as plain text only
 (no Markdown, no links).
+
+#### Fetch work by saved view
+
+The work definition can live in a saved view, so the owner retargets an
+assessor by editing the view in the web app, with no change to the assessor's
+code, prompt or config. `GET /api/items?view=<id or name>` (and
+`/api/stream?view=...`) resolves the view in nyttig-api: an ID if a view has
+it, else the name in any case; an unknown view is 404. The view supplies the
+filter (search, source, tag, sort, unviewed, `since`, assessor, minimum score,
+"not assessed by"). Its `since` window becomes the cutoff "now minus the
+window", taken once per request or per stream snapshot. `limit`, `offset` and
+`tag_exact` are the request's. `nyttig search -view NAME` resolves views the
+same way (the same code, `internal/client`).
+
+The recommended pattern is a **shared reading view plus request parameters**,
+not a view per assessor. Your own `cve` view (`tag:CVE since:7d`) is also what
+a daily Claude Routine polls:
+
+- `GET /api/items?view=cve` is everything in the window. Use it for a daily
+  "add and update" run: `PUT` replaces the earlier assessment of an item.
+- `GET /api/items?view=cve&unassessed=<claude id>` is only the new items. A
+  view that already says `unassessed:claude` (say `claude-cve` =
+  `tag:CVE since:1d unassessed:claude`) gives the same list with no parameter,
+  and an item drops out of it as soon as it is assessed.
+
+A parameter that is present replaces the view's field, and **present but empty
+(or `0` / `false`) clears it**: `unviewed=0`, `min_score=`, `assessor=` (the
+minimum and a score sort go with it), `unassessed=`, `after=` (the window;
+`after=<unix seconds>` replaces it), `q=`, `tag=`, `source=`, and `sort=newest`
+over a score sort. A bare `since` is not a parameter. In the CLI, `-unviewed=false`,
+`-assessor ''`, `-unassessed-by ''`, `-tag ''`, `-since ''` and a negative
+`-min-score` do the same.
+
+**A view's reading settings also apply to the assessor.** `is:unviewed` hides
+the items you have already read, and `score:claude>=0.7` means Claude never
+sees an item it has not scored. Clear them in the request:
+
+```bash
+curl -u assessor:PASSWORD \
+  'https://news.example.com/api/items?view=cve&unviewed=0&min_score=&unassessed=1'
+```
+
+A paged read (`offset`) of a view with a window counts "now" per request; pass
+`after=<unix seconds>` taken once to keep the window fixed between pages.
 
 ## Database
 

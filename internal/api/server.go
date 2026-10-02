@@ -31,6 +31,9 @@ type Config struct {
 	PingInterval time.Duration
 	// StreamQueue is the per-connection SSE queue length. Default 1024.
 	StreamQueue int
+	// Now is the clock that turns a saved view's window ("since:1d") into a
+	// cutoff for ?view=. Default time.Now; tests fix it.
+	Now func() time.Time
 }
 
 // ── Construction ──────────────────────────────────────────────
@@ -53,7 +56,10 @@ func New(cfg Config) (http.Handler, error) {
 	if cfg.StreamQueue <= 0 {
 		cfg.StreamQueue = defaultQueueSize
 	}
-	a := &handlers{client: cfg.Client}
+	if cfg.Now == nil {
+		cfg.Now = time.Now
+	}
+	a := &handlers{client: cfg.Client, now: cfg.Now}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/health", a.health)
 	mux.HandleFunc("GET /api/sources", a.listSources)
@@ -87,6 +93,7 @@ func New(cfg Config) (http.Handler, error) {
 		pingInterval: cfg.PingInterval,
 		queueSize:    cfg.StreamQueue,
 		log:          cfg.Logger,
+		now:          cfg.Now,
 	})
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "no such endpoint")

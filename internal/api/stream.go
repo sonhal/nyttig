@@ -15,6 +15,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"github.com/sonhal/nyttig/internal/client"
 	pb "github.com/sonhal/nyttig/internal/proto/nyttig/v1"
 )
 
@@ -60,12 +61,21 @@ type streamHandler struct {
 	pingInterval time.Duration
 	queueSize    int
 	log          *slog.Logger
+	now          func() time.Time // the clock for a view's window (view=)
 }
 
 func (h *streamHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	f, err := parseFeedFilter(r.URL.Query())
+	// The view (if any) and its window are resolved once, here: the cutoff
+	// is that of this snapshot, and a reconnect resolves them again.
+	rctx, rcancel := context.WithTimeout(r.Context(), rpcTimeout)
+	now := time.Now
+	if h.now != nil {
+		now = h.now
+	}
+	req, err := feedRequest(rctx, h.client, now(), r.URL.Query())
+	rcancel()
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeFeedError(w, err)
 		return
 	}
 
@@ -77,17 +87,7 @@ func (h *streamHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		writeRPCError(w, err)
 		return
 	}
-	if err := stream.Send(&pb.ClientMessage{Msg: &pb.ClientMessage_Filter{Filter: &pb.StreamFilter{
-		SourceId:     f.SourceID,
-		TagId:        f.TagID,
-		Search:       f.Query,
-		Sort:         f.Sort,
-		UnviewedOnly: f.UnviewedOnly,
-		After:        f.After,
-		AssessorId:   f.AssessorID,
-		MinScore:     f.MinScore,
-		UnassessedBy: f.UnassessedBy,
-	}}}); err != nil {
+	if err := stream.Send(&pb.ClientMessage{Msg: &pb.ClientMessage_Filter{Filter: client.StreamFilterOf(req)}}); err != nil {
 		writeRPCError(w, recvError(stream, err))
 		return
 	}

@@ -1,6 +1,6 @@
 # Assessments plan: scores and notes from external assessors
 
-Status: **phases 1–8 implemented, not yet merged** (database layer, proto and RPCs, live updates, CLI and config, HTTP API, web app, TUI, rating yourself). `main`'s date window (#25) is merged into the branch; assessments and `since:` work together everywhere.
+Status: **phases 1–9 implemented, not yet merged** (database layer, proto and RPCs, live updates, CLI and config, HTTP API, web app, TUI, rating yourself, fetching work by saved view). `main`'s date window (#25) is merged into the branch; assessments and `since:` work together everywhere.
 
 Other systems can attach a judgement to a news item: an optional **score**
 from 0.0 to 1.0, an optional **note**, and the **assessor** that made it.
@@ -487,6 +487,33 @@ Re-assessing is just another `PutAssessment`.
    - Your scores give a ground truth to compare Claude's and the CVE
      reader's against.
 
+9. **`feat(api): fetch items by saved view`.**
+   - `GET /api/items?view=<id or name>` and `GET /api/stream?view=...`:
+     nyttig-api resolves the view (an ID if a view has it, else the name in
+     any case; unknown is 404). The view is the base filter, including
+     `since` (turned into `after = now - window`, once per request or stream
+     snapshot, with `internal/since`) and the assessment fields.
+   - One resolver for both clients: `client.FindView`,
+     `client.ViewSearchRequest(view, Overrides, now)` and
+     `client.StreamFilterOf`; `nyttig search -view` and nyttig-api use them.
+   - **A shared reading view plus parameters**, not a view per assessor: the
+     owner's `cve` view (`tag:CVE since:7d`) is also what a daily Claude
+     Routine polls. `?view=cve` is everything in the window (re-assess; `PUT`
+     replaces), `?view=cve&unassessed=<id>` only new items. A parameter that is
+     present replaces the view's field, and present but empty (or `0` /
+     `false`) clears it: `unviewed=0`, `min_score=`, `assessor=` (minimum and
+     score sort go with it), `unassessed=`, `after=`, `q=`, `tag=`, `source=`,
+     `sort=newest`. The CLI: `-unviewed=false`, `-assessor ''`,
+     `-unassessed-by ''`, `-tag ''`, `-since ''`, negative `-min-score`.
+   - README warns that a view's reading settings apply to the assessor too
+     (`is:unviewed` hides what you read; `score:claude>=0.7` hides unscored
+     items) and shows the clearing parameters.
+   - Tests: handler tests with the fake client (by name, by ID, unknown 404,
+     override and clearing precedence, `since` to `after` against a fixed
+     clock, the stream), resolver tests in `internal/client`, and
+     `e2e/assessor-view.spec.ts` (a view `tag since:7d unassessed:<a>`, assess
+     one, it drops out, edit the view, parameters override).
+
 Each phase updates this plan's `Status:` line, the README and `AGENTS.md`
 (layout, and an architecture note on assessments next to the tag tree
 note), and records deviations below.
@@ -537,6 +564,11 @@ govulncheck can't reach vuln.go.dev from the sandbox, so leave it to CI.
 
 ## Deviations from this plan
 
+- **Phase 9, no `since` parameter.** `since` stays out of the HTTP API (the
+  date window plan's rule). A view's window is converted in nyttig-api; to
+  change it per request use `after=<unix seconds>` or `after=` to drop it.
+  Paged reads of a windowed view should pass `after` so the window cannot slide
+  between pages.
 - **Merge with the date window (#25).** `main` took migration 7
   (`saved_view_since`) and proto fields while this branch was open, so the
   branch's numbers moved (nothing was released):

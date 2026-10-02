@@ -2,7 +2,6 @@ package main
 
 import (
 	"testing"
-	"time"
 
 	pb "github.com/sonhal/nyttig/internal/proto/nyttig/v1"
 )
@@ -145,25 +144,6 @@ func TestParseScoreArg(t *testing.T) {
 	for _, bad := range []string{"", "1.5", "-0.1", "high", "1e-1", "NaN", "Inf", "0.5x", "+0.5"} {
 		if _, err := parseScoreArg(bad); err == nil {
 			t.Errorf("parseScoreArg(%q) accepted", bad)
-		}
-	}
-}
-
-func TestCutoffFromSince(t *testing.T) {
-	now := time.Date(2026, 9, 10, 12, 0, 0, 0, time.UTC)
-	got, err := cutoffFromSince("7d", now)
-	if err != nil || !got.AsTime().Equal(time.Date(2026, 9, 3, 12, 0, 0, 0, time.UTC)) {
-		t.Errorf("7d = %v, %v", got, err)
-	}
-	if got, err := cutoffFromSince("9999y", now); err != nil || got.AsTime().Unix() != 0 {
-		t.Errorf("9999y = %v, %v; want the epoch", got, err)
-	}
-	if got, err := cutoffFromSince("", now); got != nil || err != nil {
-		t.Errorf("empty = %v, %v; want nil, nil", got, err)
-	}
-	for _, bad := range []string{"1m", "7", "x", "0d"} {
-		if _, err := cutoffFromSince(bad, now); err == nil {
-			t.Errorf("%q: want an error", bad)
 		}
 	}
 }

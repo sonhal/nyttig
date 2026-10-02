@@ -376,6 +376,16 @@ which phases are done and whether they are merged; keep it current.
   changes), and closes the connection when its bounded queue overflows so
   the browser resyncs. Items and colors are sanitized on the way out
   (`sanitize.go`), and again in the browser.
+- **Fetching by view** (phase 9). `GET /api/items?view=<id or name>` and
+  `/api/stream?view=` resolve a saved view in nyttig-api (`feedRequest` in
+  `internal/api/api.go`), through the same functions as `nyttig search -view`
+  (`internal/client/viewquery.go`: `FindView`, `ViewSearchRequest`,
+  `StreamFilterOf`) so the two cannot drift. The view's `since` becomes
+  `after = now - window` once per request or stream snapshot (`Config.Now`
+  fixes the clock in tests); there is still no `since` HTTP parameter. A
+  parameter that is present replaces the view's field and present-but-empty
+  (or `0`/`false`) clears it; clearing the assessor also drops the minimum
+  and a score sort. Unknown view: 404 (`client.ErrViewNotFound`).
 - **Web log-viewer features** (phase 3). `keymap.ts` holds every mode's keys
   as binding tables; the key handler and the help overlay (`help.ts`) both
   read them, so add a key there and it shows in `?`. `query.ts` parses and

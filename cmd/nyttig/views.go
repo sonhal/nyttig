@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -9,13 +10,9 @@ import (
 	"strconv"
 	"strings"
 	"text/tabwriter"
-	"time"
-
-	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/sonhal/nyttig/internal/client"
 	pb "github.com/sonhal/nyttig/internal/proto/nyttig/v1"
-	"github.com/sonhal/nyttig/internal/since"
 	"github.com/sonhal/nyttig/internal/tui"
 )
 
@@ -51,22 +48,14 @@ func resolveSourceID(ctx context.Context, c *client.Client, ref string) (int64, 
 	return 0, fmt.Errorf("source %q not found (see 'nyttig list-sources')", ref)
 }
 
-// findView picks a view out of views by ID (a numeric ref that matches one)
-// or by name, ignoring case like the daemon's uniqueness rule does.
+// findView picks a view out of views by ID or by name (client.FindView, the
+// rule nyttig-api's ?view= uses too).
 func findView(views []*pb.SavedView, ref string) (*pb.SavedView, error) {
-	if id, err := strconv.ParseInt(ref, 10, 64); err == nil {
-		for _, v := range views {
-			if v.Id == id {
-				return v, nil
-			}
-		}
+	v, err := client.FindView(views, ref)
+	if errors.Is(err, client.ErrViewNotFound) {
+		return nil, fmt.Errorf("view %q not found (see 'nyttig list-views')", ref)
 	}
-	for _, v := range views {
-		if strings.EqualFold(v.Name, ref) {
-			return v, nil
-		}
-	}
-	return nil, fmt.Errorf("view %q not found (see 'nyttig list-views')", ref)
+	return v, err
 }
 
 var operatorPrefix = regexp.MustCompile(`^[A-Za-z]+:`)
@@ -142,25 +131,6 @@ func formatViewFilter(f *pb.ViewFilter, sources, tags, assessors map[int64]strin
 		parts = append(parts, "sort:"+f.Sort)
 	}
 	return strings.Join(parts, " ")
-}
-
-// cutoffFromSince resolves a window such as "7d" to the absolute cutoff the
-// daemon's queries take, counted back from now and never before the Unix
-// epoch (a window like 9999y reaches before year 1, which a Timestamp cannot
-// hold). An empty window is no cutoff (nil).
-func cutoffFromSince(text string, now time.Time) (*timestamppb.Timestamp, error) {
-	if text == "" {
-		return nil, nil
-	}
-	w, err := since.Parse(text)
-	if err != nil {
-		return nil, err
-	}
-	cut := w.Cutoff(now)
-	if cut.Before(time.Unix(0, 0)) {
-		cut = time.Unix(0, 0)
-	}
-	return timestamppb.New(cut), nil
 }
 
 // nameMaps loads the source, tag and assessor names used to format filters.
