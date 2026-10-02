@@ -6,13 +6,17 @@
 // patterns are the exception: only their length is checked here, since Go
 // RE2 syntax can't be checked with JavaScript's regex engine.
 
-import type { RuleBody, SourceBody, TagBody } from './api';
-import type { RuleField, Source, Tag, TagRule } from './types';
+import type { RuleBody, SourceBody, TagBody, ViewBody } from './api';
+import { sameFilter } from './filter';
+import { format, parse } from './query';
+import type { RuleField, SavedView, Source, Tag, TagRule } from './types';
+import { filterToViewBody, viewToFilter } from './views';
 
 // The daemon's limits.
 export const MAX_NAME = 200;
 export const MAX_ABBREVIATION = 16;
 export const MAX_TAG_NAME = 64;
+export const MAX_VIEW_NAME = 64;
 export const MAX_TAG_PARENTS = 16;
 export const MAX_URL_BYTES = 2048;
 export const MAX_PATTERN_BYTES = 1024;
@@ -246,6 +250,53 @@ export function tagPatchBody(orig: Tag, f: TagForm): TagBody {
 	const was = [...(orig.parent_ids ?? [])].sort();
 	const now = [...f.parent_ids].sort();
 	if (was.length !== now.length || was.some((id, i) => id !== now[i])) p.parent_ids = [...f.parent_ids];
+	return p;
+}
+
+// ── Views ─────────────────────────────────────────────────────
+
+export interface ViewForm {
+	name: string;
+	/** The filter as the "/" bar's query text (query.ts). */
+	query: string;
+	favorite: boolean;
+}
+
+/** The form for a new view (no argument; favorite, like ":save <name>") or for editing v. */
+export function viewForm(v?: SavedView, sources: readonly Source[] = [], tags: readonly Tag[] = []): ViewForm {
+	return {
+		name: v?.name ?? '',
+		query: v ? format(viewToFilter(v), sources, tags) : '',
+		favorite: v ? !!v.favorite : true
+	};
+}
+
+/** The query is checked with the "/" bar's parser, so it shows the same errors. */
+export function validateView(f: ViewForm, sources: readonly Source[], tags: readonly Tag[]): Errors<ViewForm> {
+	const e: Errors<ViewForm> = {};
+	const name = nameError('name', f.name, MAX_VIEW_NAME);
+	if (name) e.name = name;
+	const q = parse(f.query, sources, tags).errors[0];
+	if (q) e.query = q.message;
+	return e;
+}
+
+/** The POST /api/views body for a valid form. */
+export function viewAddBody(f: ViewForm, sources: readonly Source[], tags: readonly Tag[]): ViewBody {
+	return {
+		name: f.name.trim(),
+		filter: filterToViewBody(parse(f.query, sources, tags).filter),
+		favorite: f.favorite
+	};
+}
+
+/** The PATCH /api/views/:id body: only what changed; a changed query sends the whole filter. */
+export function viewPatchBody(orig: SavedView, f: ViewForm, sources: readonly Source[], tags: readonly Tag[]): ViewBody {
+	const p: ViewBody = {};
+	if (f.name.trim() !== (orig.name ?? '')) p.name = f.name.trim();
+	const filter = parse(f.query, sources, tags).filter;
+	if (!sameFilter(viewToFilter(orig), filter)) p.filter = filterToViewBody(filter);
+	if (f.favorite !== !!orig.favorite) p.favorite = f.favorite;
 	return p;
 }
 

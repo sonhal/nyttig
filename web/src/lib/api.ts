@@ -3,7 +3,7 @@
 // nyttig-api's CSRF check requires.
 
 import { filterToParams } from './filter';
-import type { Filter, Item, RuleTest, Source, Tag, TagRule } from './types';
+import type { Filter, Item, RuleTest, SavedView, Source, Tag, TagRule, ViewFilter } from './types';
 
 export class ApiError extends Error {
 	constructor(
@@ -14,7 +14,7 @@ export class ApiError extends Error {
 	}
 }
 
-/** True when the daemon says the thing (source, tag, rule) does not exist. */
+/** True when the daemon says the thing (source, tag, rule, view) does not exist. */
 export function isNotFound(e: unknown): boolean {
 	return e instanceof ApiError && e.status === 404;
 }
@@ -78,6 +78,13 @@ export interface RuleBody {
 	priority?: number;
 }
 
+export interface ViewBody {
+	name?: string;
+	/** On PATCH this replaces the whole filter. */
+	filter?: ViewFilter;
+	favorite?: boolean;
+}
+
 const idPath = (base: string, id: string) => base + '/' + encodeURIComponent(id);
 
 export function addSource(body: SourceBody): Promise<Source> {
@@ -102,6 +109,27 @@ export function updateTag(id: string, patch: TagBody): Promise<Tag> {
 
 export function removeTag(id: string): Promise<void> {
 	return request<void>('DELETE', idPath('/api/tags', id));
+}
+
+export async function listViews(): Promise<SavedView[]> {
+	return (await request<{ views?: SavedView[] }>('GET', '/api/views')).views ?? [];
+}
+
+export function addView(body: ViewBody): Promise<SavedView> {
+	return request<SavedView>('POST', '/api/views', body);
+}
+
+export function updateView(id: string, patch: ViewBody): Promise<SavedView> {
+	return request<SavedView>('PATCH', idPath('/api/views', id), patch);
+}
+
+export function removeView(id: string): Promise<void> {
+	return request<void>('DELETE', idPath('/api/views', id));
+}
+
+/** Sets the display order; ids must list every view once. Answers with the views in the new order. */
+export async function reorderViews(ids: string[]): Promise<SavedView[]> {
+	return (await request<{ views?: SavedView[] }>('PUT', '/api/views/order', { ids })).views ?? [];
 }
 
 export async function listRules(): Promise<TagRule[]> {

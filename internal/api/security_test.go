@@ -130,3 +130,31 @@ func TestCSRF(t *testing.T) {
 		t.Errorf("GET with foreign Origin: %d", rec.Code)
 	}
 }
+
+// The saved-views routes sit behind the same Host and CSRF checks.
+func TestViewsRoutesAreGuarded(t *testing.T) {
+	fc := &fakeClient{}
+	th := newTestHandler(t, fc)
+	for _, rq := range []struct{ method, path, body string }{
+		{"POST", "/api/views", `{"name":"x"}`},
+		{"PATCH", "/api/views/1", `{"name":"x"}`},
+		{"DELETE", "/api/views/1", ``},
+		{"PUT", "/api/views/order", `{"ids":["1"]}`},
+	} {
+		for name, hdr := range map[string]map[string]string{
+			"cross origin": {"Origin": "https://evil.example"},
+			"no origin":    {"Origin": ""},
+			"form":         {"Content-Type": "text/plain"},
+		} {
+			if rec := th.do(rq.method, rq.path, rq.body, hdr); rec.Code != http.StatusForbidden && rec.Code != http.StatusUnsupportedMediaType {
+				t.Errorf("%s %s (%s): %d, want 403 or 415", rq.method, rq.path, name, rec.Code)
+			}
+		}
+	}
+	if rec := th.do("GET", "/api/views", "", map[string]string{"Host": "evil.example"}); rec.Code != http.StatusForbidden && rec.Code != http.StatusMisdirectedRequest {
+		t.Errorf("GET with a foreign Host: %d", rec.Code)
+	}
+	if fc.lastReq != nil || len(fc.removed) != 0 {
+		t.Errorf("a guarded request reached the daemon: %v %v", fc.lastReq, fc.removed)
+	}
+}

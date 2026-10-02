@@ -8,13 +8,14 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"google.golang.org/protobuf/types/known/emptypb"
 
 	pb "github.com/sonhal/nyttig/internal/proto/nyttig/v1"
 )
 
-// Management endpoints: sources, tags and tag rules. The daemon validates
+// Management endpoints: sources, tags, tag rules and saved views. The daemon validates
 // every value (service/validate.go), so these handlers only check the shape
 // of a request: exact field names, JSON types, IDs, and which fields are
 // present. Presence matters for PATCH, where an absent field is left
@@ -49,7 +50,7 @@ func readBody(w http.ResponseWriter, r *http.Request, allowed ...string) (jsonBo
 		writeError(w, http.StatusBadRequest, "read body")
 		return nil, false
 	}
-	b, err := parseBody(raw, allowed)
+	b, err := readObject(raw, allowed)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return nil, false
@@ -57,10 +58,10 @@ func readBody(w http.ResponseWriter, r *http.Request, allowed ...string) (jsonBo
 	return b, true
 }
 
-// parseBody reads one JSON object member by member, so that duplicate
+// readObject reads one JSON object member by member, so that duplicate
 // names are caught too (a plain map decode keeps the last one silently).
 // An empty body is an empty object.
-func parseBody(raw []byte, allowed []string) (jsonBody, error) {
+func readObject(raw []byte, allowed []string) (jsonBody, error) {
 	b := jsonBody{}
 	if len(bytes.TrimSpace(raw)) == 0 {
 		return b, nil
@@ -194,6 +195,21 @@ func (b jsonBody) idList(field string) ([]int64, bool, error) {
 		ids[i] = n
 	}
 	return ids, true, nil
+}
+
+// object returns a nested JSON object member, read with the same strictness
+// as the body itself (only the allowed members, no duplicates, no nulls), and
+// whether the member is present.
+func (b jsonBody) object(field string, allowed ...string) (jsonBody, bool, error) {
+	v, ok := b[field]
+	if !ok {
+		return nil, false, nil
+	}
+	o, err := readObject(v, allowed)
+	if err != nil {
+		return nil, true, fmt.Errorf("%w: %s: %s", errBody, field, strings.TrimPrefix(err.Error(), errBody.Error()+": "))
+	}
+	return o, true, nil
 }
 
 // pathID parses the {id} path segment, which must be a positive integer.
@@ -504,4 +520,183 @@ func (a *handlers) testRule(w http.ResponseWriter, r *http.Request) {
 		resp.Items[i] = sanitizeItem(it)
 	}
 	writeProto(w, resp)
+}
+
+// ── Saved views ───────────────────────────────────────────────
+
+var (
+	viewFields   = []string{"name", "filter", "favorite"}
+	filterFields = []string{"q", "source", "tag", "sort", "unviewed"}
+)
+
+// viewJSON is a saved view as the browser sees it. Its filter uses the same
+// keys as a request body and the web's Filter (and the feed URL), not the
+// proto field names; zero values are left out, and IDs are strings.
+type viewJSON struct {
+	ID       string     `json:"id"`
+	Name     string     `json:"name"`
+	Filter   filterJSON `json:"filter"`
+	Favorite bool       `json:"favorite,omitempty"`
+	Position int32      `json:"position,omitempty"`
+}
+
+type filterJSON struct {
+	Q        string `json:"q,omitempty"`
+	Source   string `json:"source,omitempty"`
+	Tag      string `json:"tag,omitempty"`
+	Sort     string `json:"sort,omitempty"`
+	Unviewed bool   `json:"unviewed,omitempty"`
+}
+
+func idString(id int64) string {
+	if id == 0 {
+		return ""
+	}
+	return strconv.FormatInt(id, 10)
+}
+
+func toViewJSON(v *pb.SavedView) viewJSON {
+	f := v.GetFilter()
+	return viewJSON{
+		ID:   strconv.FormatInt(v.GetId(), 10),
+		Name: v.GetName(),
+		Filter: filterJSON{
+			Q: f.GetSearch(), Source: idString(f.GetSourceId()), Tag: idString(f.GetTagId()),
+			Sort: f.GetSort(), Unviewed: f.GetUnviewedOnly(),
+		},
+		Favorite: v.GetFavorite(),
+		Position: v.GetPosition(),
+	}
+}
+
+func toViewsJSON(views []*pb.SavedView) map[string][]viewJSON {
+	out := make([]viewJSON, len(views))
+	for i, v := range views {
+		out[i] = toViewJSON(v)
+	}
+	return map[string][]viewJSON{"views": out}
+}
+
+// viewFilter reads the "filter" member, and whether it is present.
+func viewFilter(b jsonBody) (*pb.ViewFilter, bool, error) {
+	o, present, err := b.object("filter", filterFields...)
+	if err != nil || !present {
+		return nil, present, err
+	}
+	q, err1 := o.str("q")
+	src, err2 := o.id("source")
+	tag, err3 := o.id("tag")
+	sort, err4 := o.str("sort")
+	unviewed, err5 := o.boolean("unviewed")
+	if err := firstErr(err1, err2, err3, err4, err5); err != nil {
+		return nil, true, fmt.Errorf("%w: filter: %s", errBody, strings.TrimPrefix(err.Error(), errBody.Error()+": "))
+	}
+	return &pb.ViewFilter{Search: valueOr(q, ""), SourceId: src, TagId: tag, Sort: valueOr(sort, ""), UnviewedOnly: valueOr(unviewed, false)}, true, nil
+}
+
+func (a *handlers) listViews(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := a.rpcContext(r)
+	defer cancel()
+	resp, err := a.client.ListSavedViews(ctx, &emptypb.Empty{})
+	if err != nil {
+		writeRPCError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, toViewsJSON(resp.Views))
+}
+
+// addView creates a view. An absent filter is an unfiltered view.
+func (a *handlers) addView(w http.ResponseWriter, r *http.Request) {
+	b, ok := readBody(w, r, viewFields...)
+	if !ok {
+		return
+	}
+	name, err1 := b.str("name")
+	filter, _, err2 := viewFilter(b)
+	favorite, err3 := b.boolean("favorite")
+	if err := firstErr(err1, err2, err3); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	ctx, cancel := a.rpcContext(r)
+	defer cancel()
+	v, err := a.client.AddSavedView(ctx, &pb.AddSavedViewRequest{Name: valueOr(name, ""), Filter: filter, Favorite: valueOr(favorite, false)})
+	if err != nil {
+		writeRPCError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, toViewJSON(v))
+}
+
+// updateView renames, re-filters and/or (un)favorites a view. Absent fields
+// are unchanged; a present filter replaces the whole saved filter.
+func (a *handlers) updateView(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(w, r)
+	if !ok {
+		return
+	}
+	b, ok := readBody(w, r, viewFields...)
+	if !ok {
+		return
+	}
+	req := &pb.UpdateSavedViewRequest{Id: id}
+	var err1, err3 error
+	req.Name, err1 = b.str("name")
+	filter, _, err2 := viewFilter(b)
+	req.Filter = filter
+	req.Favorite, err3 = b.boolean("favorite")
+	if err := firstErr(err1, err2, err3); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	ctx, cancel := a.rpcContext(r)
+	defer cancel()
+	v, err := a.client.UpdateSavedView(ctx, req)
+	if err != nil {
+		writeRPCError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, toViewJSON(v))
+}
+
+func (a *handlers) removeView(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(w, r)
+	if !ok {
+		return
+	}
+	if _, ok := readBody(w, r); !ok {
+		return
+	}
+	ctx, cancel := a.rpcContext(r)
+	defer cancel()
+	if _, err := a.client.RemoveSavedView(ctx, &pb.RemoveSavedViewRequest{Id: id}); err != nil {
+		writeRPCError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// reorderViews sets the display order. ids must list every view once; the
+// daemon checks that. It answers with the views in the new order.
+func (a *handlers) reorderViews(w http.ResponseWriter, r *http.Request) {
+	b, ok := readBody(w, r, "ids")
+	if !ok {
+		return
+	}
+	ids, present, err := b.idList("ids")
+	if err == nil && !present {
+		err = fmt.Errorf("%w: ids is required", errBody)
+	}
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	ctx, cancel := a.rpcContext(r)
+	defer cancel()
+	resp, err := a.client.ReorderSavedViews(ctx, &pb.ReorderSavedViewsRequest{Ids: ids})
+	if err != nil {
+		writeRPCError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, toViewsJSON(resp.Views))
 }

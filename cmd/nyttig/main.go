@@ -13,6 +13,8 @@
 //	nyttig add-tag-rule -tag rust -p '(?i)\brust\b'  # auto-tag matching items
 //	nyttig list-tag-rules                        # list all tag rules
 //	nyttig search -q "sqlite"                    # full-text search stored items
+//	nyttig add-view -n sec -tag "cyber security" -unviewed   # save a filter as a view
+//	nyttig search -view sec                      # run a saved view's filter
 //	nyttig refresh                               # force immediate fetch of all sources
 package main
 
@@ -96,6 +98,16 @@ func main() {
 		searchCmd()
 	case "update-source":
 		updateSourceCmd()
+	case "list-views":
+		listViewsCmd()
+	case "add-view":
+		addViewCmd()
+	case "update-view":
+		updateViewCmd()
+	case "remove-view":
+		removeViewCmd()
+	case "reorder-views":
+		reorderViewsCmd()
 	case "refresh":
 		refreshCmd()
 	default:
@@ -119,7 +131,12 @@ func printHelp() {
 	fmt.Fprintf(os.Stderr, "  test-tag-rule  Show which recent items a pattern would tag (dry run)\n")
 	fmt.Fprintf(os.Stderr, "  list-tag-rules List all tag rules\n")
 	fmt.Fprintf(os.Stderr, "  remove-tag-rule Remove a tag rule by ID\n")
-	fmt.Fprintf(os.Stderr, "  search         Full-text search stored items\n")
+	fmt.Fprintf(os.Stderr, "  list-views     List saved views (named feed filters)\n")
+	fmt.Fprintf(os.Stderr, "  add-view       Save a filter (search, source, tag, sort, unviewed) as a view\n")
+	fmt.Fprintf(os.Stderr, "  update-view    Change a view (only the given flags change)\n")
+	fmt.Fprintf(os.Stderr, "  remove-view    Remove a view by ID or name\n")
+	fmt.Fprintf(os.Stderr, "  reorder-views  Set the order of the views\n")
+	fmt.Fprintf(os.Stderr, "  search         Full-text search stored items (-view NAME runs a saved view)\n")
 	fmt.Fprintf(os.Stderr, "  refresh        Force immediate fetch of all sources (or one with -i)\n")
 	fmt.Fprintf(os.Stderr, "\nGlobal flags:\n")
 	fmt.Fprintf(os.Stderr, "  --socket PATH         Daemon Unix socket path or TCP address (default: /tmp/nyttig.sock)\n")
@@ -830,8 +847,10 @@ func searchCmd() {
 		sort     string
 		unviewed bool
 		exact    bool
+		viewRef  string
 	)
 
+	flags.StringVar(&viewRef, "view", "", "Run this saved view's filter (name or ID); flags you pass override its filter")
 	flags.StringVar(&query, "q", "", "Full-text search query (or pass it as trailing arguments)")
 	flags.StringVar(&query, "query", "", "Full-text search query (or pass it as trailing arguments)")
 	flags.Int64Var(&sourceID, "s", 0, "Only items from this source ID")
@@ -852,6 +871,7 @@ func searchCmd() {
 		os.Exit(0)
 	}
 	flags.Parse(args)
+	set := setFlagNames(flags)
 
 	if rest := flags.Args(); len(rest) > 0 {
 		if query != "" {
@@ -865,6 +885,36 @@ func searchCmd() {
 
 	ctx := context.Background()
 	var tagID int64
+	if viewRef != "" {
+		// The view supplies the filter; whatever was passed explicitly wins.
+		views, err := c.ListSavedViews(ctx)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+		v, err := findView(views.Views, viewRef)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+		if f := v.Filter; f != nil {
+			if query == "" {
+				query = f.Search
+			}
+			if !set["s"] && !set["source"] {
+				sourceID = f.SourceId
+			}
+			if tagRef == "" {
+				tagID = f.TagId
+			}
+			if !set["sort"] && f.Sort != "" {
+				sort = f.Sort
+			}
+			if !set["unviewed"] {
+				unviewed = f.UnviewedOnly
+			}
+		}
+	}
 	if tagRef != "" {
 		var err error
 		if tagID, err = resolveTagID(ctx, c, tagRef); err != nil {

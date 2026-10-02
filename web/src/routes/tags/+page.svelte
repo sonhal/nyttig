@@ -17,6 +17,7 @@
 	import TagFormPanel from '$lib/TagForm.svelte';
 	import { buildTree, flatten, orphansOnDelete } from '$lib/tagtree';
 	import type { Tag, TagRule } from '$lib/types';
+	import { usageWarning, viewsUsing } from '$lib/views';
 
 	const tools: Tool[] = [
 		{ type: 'add', label: 'add', key: 'a' },
@@ -132,6 +133,8 @@
 		if (orphans > 0) {
 			lines.push(`${orphans} child ${orphans === 1 ? 'tag becomes' : 'tags become'} top-level.`);
 		}
+		const w = usageWarning('tag', viewsUsing({ tag: p.tag.id ?? '' }, metadata.views).length);
+		if (w) lines.push(w);
 		lines.push('Use edit (e) instead to rename or recolor it.');
 		return lines;
 	}
@@ -164,14 +167,14 @@
 <svelte:head><title>tags · nyttig</title></svelte:head>
 
 <ManageView
-	view="tags"
+	page="tags"
 	items={rows}
 	key={(r) => r.key}
 	bind:cursor
 	panel={panel === null ? null : panel.kind === 'delete' ? 'confirm' : 'form'}
 	{tools}
 	note={note || (metadata.error ? 'error: ' + metadata.error : '')}
-	counts={{ sources: metadata.sources.length, tags: tags.length, rules: rules.length }}
+	counts={{ sources: metadata.sources.length, tags: tags.length, rules: rules.length, views: metadata.views.length }}
 	{loaded}
 	{onaction}
 >

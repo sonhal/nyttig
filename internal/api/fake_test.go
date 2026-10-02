@@ -39,6 +39,8 @@ type fakeClient struct {
 	lastReq  proto.Message
 	removed  []string
 
+	views []*pb.SavedView
+
 	// stream is returned by StreamItems; streamErr fails the call instead.
 	stream    *fakeStream
 	streamErr error
@@ -266,4 +268,47 @@ var errUnavailable = status.Error(codes.Unavailable, "connection refused")
 
 func discardLogger() *slog.Logger {
 	return slog.New(slog.NewTextHandler(io.Discard, nil))
+}
+
+func (f *fakeClient) ListSavedViews(context.Context, *emptypb.Empty, ...grpc.CallOption) (*pb.ListSavedViewsResponse, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	return &pb.ListSavedViewsResponse{Views: f.views}, nil
+}
+
+func (f *fakeClient) AddSavedView(_ context.Context, req *pb.AddSavedViewRequest, _ ...grpc.CallOption) (*pb.SavedView, error) {
+	f.record(req)
+	if f.err != nil {
+		return nil, f.err
+	}
+	return &pb.SavedView{Id: 6, Name: req.Name, Filter: req.Filter, Favorite: req.Favorite, Position: 2}, nil
+}
+
+func (f *fakeClient) UpdateSavedView(_ context.Context, req *pb.UpdateSavedViewRequest, _ ...grpc.CallOption) (*pb.SavedView, error) {
+	f.record(req)
+	if f.err != nil {
+		return nil, f.err
+	}
+	return &pb.SavedView{Id: req.Id, Name: req.GetName(), Filter: req.Filter, Favorite: req.GetFavorite()}, nil
+}
+
+func (f *fakeClient) RemoveSavedView(_ context.Context, req *pb.RemoveSavedViewRequest, _ ...grpc.CallOption) (*emptypb.Empty, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	f.recordRemove("view", req.Id)
+	return &emptypb.Empty{}, nil
+}
+
+func (f *fakeClient) ReorderSavedViews(_ context.Context, req *pb.ReorderSavedViewsRequest, _ ...grpc.CallOption) (*pb.ListSavedViewsResponse, error) {
+	f.record(req)
+	if f.err != nil {
+		return nil, f.err
+	}
+	resp := &pb.ListSavedViewsResponse{}
+	for i, id := range req.Ids {
+		resp.Views = append(resp.Views, &pb.SavedView{Id: id, Name: fmt.Sprintf("v%d", id), Position: int32(i)})
+	}
+	return resp, nil
 }

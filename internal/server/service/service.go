@@ -518,6 +518,190 @@ func (s *Service) ListTags(ctx context.Context, _ *emptypb.Empty) (*pb.ListTagsR
 	return resp, nil
 }
 
+// ── Saved views ────────────────────────────────────────────────────────────
+
+// AddSavedView creates a view at the end of the order.
+func (s *Service) AddSavedView(ctx context.Context, req *pb.AddSavedViewRequest) (*pb.SavedView, error) {
+	if err := firstErr(
+		validateName("name", req.Name, maxViewNameLen),
+		validateViewFilter(req.Filter),
+	); err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+	if err := s.checkViewRefs(req.Filter); err != nil {
+		return nil, err
+	}
+	n, err := db.CountSavedViews(s.db)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "count saved views: %v", err)
+	}
+	if n >= maxSavedViews {
+		return nil, status.Errorf(codes.FailedPrecondition, "at most %d saved views are allowed", maxSavedViews)
+	}
+
+	v := &db.SavedView{Name: req.Name, Favorite: req.Favorite}
+	applyViewFilter(v, req.Filter)
+	id, err := db.InsertSavedView(s.db, v)
+	if isUniqueViolation(err) {
+		return nil, status.Errorf(codes.AlreadyExists, "view %q already exists", req.Name)
+	}
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "insert saved view: %v", err)
+	}
+	created, err := db.GetSavedView(s.db, id)
+	if err != nil || created == nil {
+		return nil, status.Errorf(codes.Internal, "get created saved view: %v", err)
+	}
+	return dbSavedViewToProto(created), nil
+}
+
+// UpdateSavedView renames a view, replaces its filter and/or toggles its
+// favorite flag. Unset fields are unchanged.
+func (s *Service) UpdateSavedView(ctx context.Context, req *pb.UpdateSavedViewRequest) (*pb.SavedView, error) {
+	v, err := db.GetSavedView(s.db, req.Id)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "get saved view: %v", err)
+	}
+	if v == nil {
+		return nil, status.Errorf(codes.NotFound, "view %d not found", req.Id)
+	}
+
+	var errs []error
+	if req.Name != nil {
+		errs = append(errs, validateName("name", *req.Name, maxViewNameLen))
+		v.Name = *req.Name
+	}
+	if req.Filter != nil {
+		errs = append(errs, validateViewFilter(req.Filter))
+	}
+	if err := firstErr(errs...); err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+	if req.Filter != nil {
+		if err := s.checkViewRefs(req.Filter); err != nil {
+			return nil, err
+		}
+		applyViewFilter(v, req.Filter)
+	}
+	if req.Favorite != nil {
+		v.Favorite = *req.Favorite
+	}
+
+	_, err = db.UpdateSavedView(s.db, v)
+	if isUniqueViolation(err) {
+		return nil, status.Errorf(codes.AlreadyExists, "view %q already exists", v.Name)
+	}
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "update saved view: %v", err)
+	}
+	updated, err := db.GetSavedView(s.db, req.Id)
+	if err != nil || updated == nil {
+		return nil, status.Errorf(codes.Internal, "get updated saved view: %v", err)
+	}
+	return dbSavedViewToProto(updated), nil
+}
+
+// RemoveSavedView deletes a view. An unknown ID is NotFound.
+func (s *Service) RemoveSavedView(ctx context.Context, req *pb.RemoveSavedViewRequest) (*emptypb.Empty, error) {
+	deleted, err := db.DeleteSavedView(s.db, req.Id)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "delete saved view: %v", err)
+	}
+	if !deleted {
+		return nil, status.Errorf(codes.NotFound, "view %d not found", req.Id)
+	}
+	return &emptypb.Empty{}, nil
+}
+
+// ListSavedViews returns every view in display order.
+func (s *Service) ListSavedViews(ctx context.Context, _ *emptypb.Empty) (*pb.ListSavedViewsResponse, error) {
+	return s.savedViewsResponse()
+}
+
+// ReorderSavedViews sets the display order. ids must list every view exactly
+// once.
+func (s *Service) ReorderSavedViews(ctx context.Context, req *pb.ReorderSavedViewsRequest) (*pb.ListSavedViewsResponse, error) {
+	err := db.ReorderSavedViews(s.db, req.Ids)
+	if errors.Is(err, db.ErrViewOrder) {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "reorder saved views: %v", err)
+	}
+	return s.savedViewsResponse()
+}
+
+func (s *Service) savedViewsResponse() (*pb.ListSavedViewsResponse, error) {
+	views, err := db.ListSavedViews(s.db)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "list saved views: %v", err)
+	}
+	resp := &pb.ListSavedViewsResponse{Views: make([]*pb.SavedView, len(views))}
+	for i, v := range views {
+		resp.Views[i] = dbSavedViewToProto(v)
+	}
+	return resp, nil
+}
+
+// checkViewRefs reports NotFound for a source or tag the filter names that
+// does not exist.
+func (s *Service) checkViewRefs(f *pb.ViewFilter) error {
+	if f == nil {
+		return nil
+	}
+	if f.SourceId != 0 {
+		src, err := db.GetSource(s.db, f.SourceId)
+		if err != nil {
+			return status.Errorf(codes.Internal, "get source: %v", err)
+		}
+		if src == nil {
+			return status.Errorf(codes.NotFound, "source %d not found", f.SourceId)
+		}
+	}
+	if f.TagId != 0 {
+		tag, err := db.GetTag(s.db, f.TagId)
+		if err != nil {
+			return status.Errorf(codes.Internal, "get tag: %v", err)
+		}
+		if tag == nil {
+			return status.Errorf(codes.NotFound, "tag %d not found", f.TagId)
+		}
+	}
+	return nil
+}
+
+// applyViewFilter copies a (validated) proto filter onto v; nil clears it.
+func applyViewFilter(v *db.SavedView, f *pb.ViewFilter) {
+	v.Search, v.SourceID, v.TagID, v.Sort, v.UnviewedOnly = "", nil, nil, "newest", false
+	if f == nil {
+		return
+	}
+	v.Search = f.Search
+	if f.SourceId != 0 {
+		id := f.SourceId
+		v.SourceID = &id
+	}
+	if f.TagId != 0 {
+		id := f.TagId
+		v.TagID = &id
+	}
+	if f.Sort != "" {
+		v.Sort = f.Sort
+	}
+	v.UnviewedOnly = f.UnviewedOnly
+}
+
+func dbSavedViewToProto(v *db.SavedView) *pb.SavedView {
+	f := &pb.ViewFilter{Search: v.Search, Sort: v.Sort, UnviewedOnly: v.UnviewedOnly}
+	if v.SourceID != nil {
+		f.SourceId = *v.SourceID
+	}
+	if v.TagID != nil {
+		f.TagId = *v.TagID
+	}
+	return &pb.SavedView{Id: v.ID, Name: v.Name, Filter: f, Favorite: v.Favorite, Position: int32(v.Position)}
+}
+
 // ── Tag rules ──────────────────────────────────────────────────────────────
 
 // AddTagRule creates a new tag rule.

@@ -79,6 +79,7 @@
 		<a href="/sources" data-testid="manage-sources">sources</a>
 		<a href="/tags" data-testid="manage-tags">tags</a>
 		<a href="/rules" data-testid="manage-rules">rules</a>
+		<a href="/views" data-testid="manage-views">views</a>
 	</nav>
 	<button type="button" class="done" onclick={onclose}>done</button>
 </div>
@@ -125,7 +126,7 @@
 	}
 	.manage {
 		display: grid;
-		grid-template-columns: 10ch repeat(3, 1fr);
+		grid-template-columns: 10ch repeat(4, 1fr);
 		align-items: center;
 		gap: 8px;
 	}

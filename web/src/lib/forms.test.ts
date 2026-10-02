@@ -16,9 +16,13 @@ import {
 	validateRule,
 	validateSource,
 	validateTag,
+	validateView,
+	viewAddBody,
+	viewForm,
+	viewPatchBody,
 	type SourceForm
 } from './forms';
-import type { Source } from './types';
+import type { SavedView, Source, Tag } from './types';
 
 describe('parseInterval / formatInterval', () => {
 	it.each([
@@ -277,5 +281,66 @@ describe('rule form', () => {
 		expect(sameRule(r, { ...ruleForm(r), pattern: 'go ' })).toBe(false);
 		expect(sameRule(r, { ...ruleForm(r), source_id: '5' })).toBe(false);
 		expect(sameRule(r, { ...ruleForm(r), field: 'both' })).toBe(false);
+	});
+});
+
+describe('view forms', () => {
+	const sources: Source[] = [{ id: '5', name: 'Hacker News', abbreviation: 'HN' }];
+	const tags: Tag[] = [{ id: '4', name: 'cyber security' }];
+	const orig: SavedView = {
+		id: '1',
+		name: 'Security',
+		filter: { q: 'openssl', source: '5', tag: '4', sort: 'oldest', unviewed: true },
+		favorite: true,
+		position: 0
+	};
+
+	it('shows the filter as query text, and a new view is a favorite', () => {
+		expect(viewForm(orig, sources, tags)).toEqual({
+			name: 'Security',
+			query: 'openssl src:"Hacker News" tag:"cyber security" is:unviewed sort:oldest',
+			favorite: true
+		});
+		expect(viewForm()).toEqual({ name: '', query: '', favorite: true });
+		expect(viewForm({ id: '2', name: 'x' }, sources, tags)).toEqual({ name: 'x', query: '', favorite: false });
+	});
+
+	it('validates the name and the query', () => {
+		const ok = viewForm(orig, sources, tags);
+		expect(validateView(ok, sources, tags)).toEqual({});
+		expect(validateView({ ...ok, name: ' ' }, sources, tags).name).toContain('required');
+		expect(validateView({ ...ok, name: 'x'.repeat(65) }, sources, tags).name).toContain('64');
+		expect(validateView({ ...ok, name: 'x'.repeat(64) }, sources, tags)).toEqual({});
+		expect(validateView({ ...ok, query: 'tag:nope' }, sources, tags).query).toBe('unknown tag: nope');
+		expect(validateView({ ...ok, query: 'sort:sideways' }, sources, tags).query).toContain('sort');
+		expect(validateView({ ...ok, query: '' }, sources, tags)).toEqual({});
+	});
+
+	it('builds the add body from the query text', () => {
+		const f = { name: ' Sec ', query: 'openssl tag:"cyber security" is:unviewed', favorite: false };
+		expect(viewAddBody(f, sources, tags)).toEqual({
+			name: 'Sec',
+			filter: { q: 'openssl', tag: '4', unviewed: true },
+			favorite: false
+		});
+		expect(viewAddBody({ name: 'All', query: '', favorite: true }, sources, tags)).toEqual({
+			name: 'All',
+			filter: {},
+			favorite: true
+		});
+	});
+
+	it('patches only what changed, sending the whole filter when it does', () => {
+		const f = viewForm(orig, sources, tags);
+		expect(viewPatchBody(orig, f, sources, tags)).toEqual({});
+		expect(viewPatchBody(orig, { ...f, name: 'Sec' }, sources, tags)).toEqual({ name: 'Sec' });
+		expect(viewPatchBody(orig, { ...f, favorite: false }, sources, tags)).toEqual({ favorite: false });
+		expect(viewPatchBody(orig, { ...f, query: 'tag:"cyber security"' }, sources, tags)).toEqual({ filter: { tag: '4' } });
+		// Clearing the query clears the filter: an empty filter is sent, not omitted.
+		expect(viewPatchBody(orig, { ...f, query: '' }, sources, tags)).toEqual({ filter: {} });
+		// Respelling the same filter is no change.
+		expect(
+			viewPatchBody(orig, { ...f, query: 'sort:oldest is:unviewed tag:#4 src:HN openssl' }, sources, tags)
+		).toEqual({});
 	});
 });

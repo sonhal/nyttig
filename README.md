@@ -359,7 +359,13 @@ nyttig add-tag-rule    -tag <name|id> -p <regex> [-f title|description|both] [-s
 nyttig test-tag-rule   -p <regex> [-f title|description|both] [-s source_id] [-l limit]   # dry run
 nyttig list-tag-rules
 nyttig remove-tag-rule -id <rule_id>
-nyttig search          [-tag <name|id>] [-s source_id] [-l limit] [-offset N] [-sort newest|oldest] [-unviewed] [-exact] [query...]
+nyttig list-views                        # name, ★ for favorites, and the filter written like the web query bar
+nyttig add-view        -n <name> [-q <text>] [-source <name|id>] [-tag <name|id>] [-unviewed] [-sort newest|oldest] [-favorite]
+nyttig update-view     (-id <id> | -n <name>) [-rename <name>] [-q <text>] [-source <name|id> | -no-source]
+                       [-tag <name|id> | -no-tag] [-sort newest|oldest] [-unviewed[=false]] [-favorite[=false]]
+nyttig remove-view     (-id <id> | -n <name>)
+nyttig reorder-views   <id|name>...      # every view once, in the new order
+nyttig search          [-view <name|id>] [-tag <name|id>] [-s source_id] [-l limit] [-offset N] [-sort newest|oldest] [-unviewed] [-exact] [query...]
 nyttig refresh         [-id <source_id>]   # omit -id to refresh all
 ```
 
@@ -368,6 +374,17 @@ Each subcommand calls the corresponding gRPC RPC against the daemon. The daemon 
 `update-source` and `update-tag` change only the flags you pass. Pass
 `-color ''` or `-abbreviation ''` to clear a value. Changing a source's URL or
 refresh interval takes effect immediately and triggers a fetch.
+
+Saved views are named feed filters (search text, one source, one tag with its
+child tags, unviewed only, sort order) stored in the daemon, so every client
+shares them. `-favorite` marks a view for the tab bar of clients that have
+one. `update-view` changes only the flags you pass; any filter flag replaces
+the stored filter's matching part and keeps the rest, and `-no-source` /
+`-no-tag` drop that part. Deleting a source or tag keeps the views that used
+it and just stops filtering on it. Names are unique (case-insensitive), at
+most 64 characters, and there can be at most 100 views. `search -view NAME`
+runs a view's filter headless; flags passed explicitly (`-sort`, `-unviewed`,
+`-tag`, `-s`, a query) override the view's.
 
 Tag rules added with `add-tag-rule` apply to items fetched after the rule is
 created; existing items are not retagged. Use `test-tag-rule` first to see
@@ -566,7 +583,7 @@ to pick up config changes.
 
 The web client is the same feed view as the TUI in a browser: the filter
 bar, the table with the same columns and colors, live pushes, and view
-tracking. It also manages sources, tags and tag rules. It works with the
+tracking. It also manages sources, tags, tag rules and saved views. It works with the
 keyboard on a desktop and with touch on a phone. It has two parts behind one reverse proxy:
 
 - **The app, `nyttig-web`** (`web/`): a SvelteKit app, built with `vite build` and served
@@ -634,6 +651,8 @@ the keymap, so it is always current.
 | `/`                | Focus the query bar (see below); `Enter` applies it, `Esc` clears the search text |
 | `s`, `t`           | Cycle source / tag                                |
 | `S`, `T`           | Pick a source / tag by name (fuzzy, `Enter` picks, `Esc` closes) |
+| `1`-`9`, `0`       | Open favorite saved view 1-9 / the unfiltered feed (see [Saved views](#saved-views)) |
+| `v`                | Pick a saved view by name (fuzzy)                  |
 | `o`                | Toggle sort (newest / oldest)                     |
 | `F`                | Follow: jump to the newest and stick to it         |
 | `D`                | Relative ("12m ago") or absolute times; remembered in the browser |
@@ -664,15 +683,47 @@ rows; the list ends with `— end —`. A reconnect replaces the list with a
 fresh snapshot (the newest 200), dropping the older pages.
 
 **Command line** (`:`; `Tab` completes, again to cycle; `↑`/`↓` history;
-a unique prefix is enough): `:feed` `:sources` `:tags` `:rules` (`:q` is
+a unique prefix is enough): `:feed` `:sources` `:tags` `:rules` `:views` (`:q` is
 the feed), `:sort [newest|oldest]`, `:unviewed [on|off]`, `:src <name>|all`,
-`:tag <name>|all`, `:refresh [source]`, `:time [relative|absolute]`,
-`:follow`, `:help`. The filter commands also work from the management
-views, and go to the feed.
+`:tag <name>|all`, `:view <name>|all` (`:v`), `:save [name]`,
+`:refresh [source]`, `:time [relative|absolute]`, `:follow`, `:help`. The
+filter and view commands also work from the management pages, and go to the
+feed.
 
 On a phone (narrower than 720px) rows take two lines, a tap selects and
 expands a row (with an explicit "open ↗" link), `⚙` opens the filters
 (including the time format), `⟳` refreshes and `?` opens the help.
+
+#### Saved views
+
+A saved view is a named filter (search text, one source, one tag with its
+child tags, unviewed only, sort order) that the daemon stores, so the web
+app and the CLI (`nyttig list-views`, `add-view`, ...) share them. The
+favorite ones are tabs in a row above the filter bar:
+`all │ 1 security │ 2 linux* │ + save`. A tab is a link to
+`/?view=<id>&<the view's filter>`; the URL stays the source of truth for the
+filter, and `view` only says which tab is open. When you change the filter
+of an open view the tab shows `*`; `:save` writes the filter back into it,
+and picking the tab again resets the filter. On a phone the row scrolls
+sideways by itself and `+ save` opens the command line with `save ` typed.
+
+| Key / command   | Action                                                       |
+|-----------------|--------------------------------------------------------------|
+| `1`-`9`         | Open favorite view N (the tab's number); only the first nine favorites have a key |
+| `0`             | The unfiltered feed (the `all` tab)                          |
+| `v`, `:view <name>` | Pick a view by name (`:view all` is the unfiltered feed); favorites are listed first with a ★ |
+| `:save`         | Save the current filter into the open view                   |
+| `:save <name>`  | Save the current filter as a new favorite view and open it   |
+| `:views`        | Manage views (also the `views` tab, and "views" in the phone's `⚙` sheet) |
+
+The views page lists every view in display order, each with its filter
+written as query text. `a`/`e` open a form with a name, the filter as the
+`/` bar's syntax (parsed with the same parser, errors included) and a
+favorite checkbox; `Space` toggles favorite, `K`/`J` move the view up or
+down (the tabs follow), `x` deletes it. View names are unique (any case),
+at most 64 characters, and there can be 100 views. Deleting a source or tag
+keeps the views that filter on it, without that part of their filter; the
+delete confirmation says how many views it affects.
 
 #### Sources, tags and rules
 
@@ -814,6 +865,7 @@ as `sqlite_version`, and the daemon refuses to start if that library lacks FTS5.
 | `item_tags`   | Many-to-many join between items and tags          |
 | `tag_parents` | Tag tree: (child, parent) edges, a tag can have several parents |
 | `view_state`  | Per-item view tracking (row exists = viewed)      |
+| `saved_views` | Saved views: named filters, favorites and their order |
 | `items_fts`   | FTS5 virtual table for full-text search           |
 
 Item dates (`items.published`) are stored in UTC with whole seconds

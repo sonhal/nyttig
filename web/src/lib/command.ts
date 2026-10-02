@@ -1,6 +1,7 @@
-// The ":" command line. Views: ":feed", ":sources", ":tags", ":rules". Filter
-// shortcuts: ":sort", ":unviewed", ":src", ":tag". Also ":refresh", ":time",
-// ":follow" and ":help". A unique prefix is enough (":sor", ":un"); a few
+// The ":" command line. Pages: ":feed", ":sources", ":tags", ":rules",
+// ":views". Filter shortcuts: ":sort", ":unviewed", ":src", ":tag". Saved
+// views: ":view <name>|all" opens one, ":save [name]" saves the current
+// filter. Also ":refresh", ":time", ":follow" and ":help". A unique prefix is enough (":sor", ":un"); a few
 // short forms are fixed so they keep the meaning they had before the
 // longer commands existed (":s" sources, ":r" rules, ":f" feed, ":t" tags,
 // ":q" feed).
@@ -9,24 +10,30 @@
 // is given, so the result carries IDs and the caller only has to act.
 
 import { findSource, findTag } from './query';
-import type { Filter, Sort, Source, Tag } from './types';
+import type { Filter, SavedView, Sort, Source, Tag } from './types';
+import { findView } from './views';
 
-export type View = 'feed' | 'sources' | 'tags' | 'rules';
+export type Page = 'feed' | 'sources' | 'tags' | 'rules' | 'views';
 
-export const VIEWS: readonly View[] = ['feed', 'sources', 'tags', 'rules'];
+export const PAGES: readonly Page[] = ['feed', 'sources', 'tags', 'rules', 'views'];
 
-/** The route of each view. */
-export const VIEW_PATHS: Record<View, string> = {
+/** The route of each page. */
+export const PAGE_PATHS: Record<Page, string> = {
 	feed: '/',
 	sources: '/sources',
 	tags: '/tags',
-	rules: '/rules'
+	rules: '/rules',
+	views: '/views'
 };
 
 export type TimeMode = 'relative' | 'absolute';
 
 export type Command =
-	| { type: 'view'; view: View }
+	| { type: 'page'; page: Page }
+	/** Opens a saved view; id "" is the unfiltered feed. */
+	| { type: 'view'; id: string }
+	/** Saves the current filter: into the active view when name is "", else as a new view. */
+	| { type: 'save'; name: string }
 	| { type: 'sort'; sort: Sort | 'toggle' }
 	| { type: 'unviewed'; value: boolean | 'toggle' }
 	/** id "" is all sources. */
@@ -41,6 +48,8 @@ export type Command =
 export interface CommandContext {
 	sources: readonly Source[];
 	tags: readonly Tag[];
+	/** The saved views; left out, there are none. */
+	views?: readonly SavedView[];
 }
 
 export type CommandResult = { ok: true; cmd: Command } | { ok: false; error: string };
@@ -57,10 +66,13 @@ export const COMMANDS: readonly Spec[] = [
 	{ name: 'sources', desc: 'manage sources' },
 	{ name: 'tags', desc: 'manage tags' },
 	{ name: 'rules', desc: 'manage tag rules' },
+	{ name: 'views', desc: 'manage saved views' },
 	{ name: 'sort', args: '[newest|oldest]', desc: 'set the sort order, or toggle it' },
 	{ name: 'unviewed', args: '[on|off]', desc: 'show only unviewed items, or toggle it' },
 	{ name: 'src', args: '<name>|all', desc: 'filter by source (:src alone lists sources)' },
 	{ name: 'tag', args: '<name>|all', desc: 'filter by tag' },
+	{ name: 'view', args: '<name>|all', desc: 'open a saved view, or the unfiltered feed' },
+	{ name: 'save', args: '[name]', desc: 'save the filter into the active view, or as a new favorite view' },
 	{ name: 'refresh', args: '[source]', desc: 'fetch all sources now, or one' },
 	{ name: 'time', args: '[relative|absolute]', desc: 'how times are shown, or toggle it' },
 	{ name: 'follow', desc: 'jump to the newest and follow' },
@@ -79,6 +91,7 @@ const ALIASES: Record<string, string> = {
 	r: 'rules',
 	t: 'tags',
 	ta: 'tags',
+	v: 'view',
 	h: 'help',
 	'?': 'help'
 };
@@ -122,7 +135,18 @@ export function parseCommand(input: string, ctx: CommandContext = { sources: [],
 		case 'sources':
 		case 'tags':
 		case 'rules':
-			return arg ? fail(`${r.name} takes no argument`) : ok({ type: 'view', view: r.name });
+		case 'views':
+			return arg ? fail(`${r.name} takes no argument`) : ok({ type: 'page', page: r.name });
+		case 'view': {
+			if (!arg) return fail('view: a view name, or all');
+			const name = unquote(arg);
+			const views = ctx.views ?? [];
+			if (ALL.has(name.toLowerCase()) && findView(views, name) === undefined) return ok({ type: 'view', id: '' });
+			const v = findView(views, name);
+			return v?.id === undefined ? fail(`unknown view: ${name}`) : ok({ type: 'view', id: v.id });
+		}
+		case 'save':
+			return ok({ type: 'save', name: unquote(arg).trim() });
 		case 'help':
 			return arg ? fail('help takes no argument') : ok({ type: 'help' });
 		case 'follow':
@@ -145,7 +169,7 @@ export function parseCommand(input: string, ctx: CommandContext = { sources: [],
 		case 'src': {
 			// Before the filter shortcut existed, ":src" was a short form of
 			// ":sources"; it still is when it has no argument.
-			if (!arg) return ok({ type: 'view', view: 'sources' });
+			if (!arg) return ok({ type: 'page', page: 'sources' });
 			const name = unquote(arg);
 			if (ALL.has(name.toLowerCase()) && findSource(ctx.sources, name) === undefined) return ok({ type: 'source', id: '' });
 			const id = findSource(ctx.sources, name, false);
@@ -234,6 +258,9 @@ export function completeCommand(input: string, ctx: CommandContext): CommandComp
 			break;
 		case 'refresh':
 			list = names(ctx.sources);
+			break;
+		case 'view':
+			list = [...names(ctx.views ?? []), 'all'];
 			break;
 	}
 	return { from: argStart, candidates: startsWith(list, typed) };

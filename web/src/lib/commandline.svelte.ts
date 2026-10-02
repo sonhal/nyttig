@@ -2,33 +2,36 @@
 // views, running commands, and navigation between views.
 
 import { goto } from '$app/navigation';
+import * as api from './api';
 import {
 	applyToFilter,
 	COMMANDS,
 	commonPrefix,
 	completeCommand,
 	parseCommand,
-	VIEW_PATHS,
+	PAGE_PATHS,
 	type Command,
 	type CommandContext,
-	type View
+	type Page
 } from './command';
-import { filterFromParams, filterQuery } from './filter';
+import { filterFromParams } from './filter';
 import { History } from './history';
 import { metadata } from './metadata.svelte';
 import { prefs } from './prefs.svelte';
+import { oneLine } from './sanitize';
 import type { Filter } from './types';
+import { filterToViewBody, viewHref, viewSearch } from './views';
 
-/** The URL of a view; the feed keeps the filter it had last. */
-export function viewHref(v: View): string {
-	return v === 'feed' ? '/' + metadata.feedSearch : VIEW_PATHS[v];
+/** The URL of a page; the feed keeps the filter it had last. */
+export function pageHref(v: Page): string {
+	return v === 'feed' ? '/' + metadata.feedSearch : PAGE_PATHS[v];
 }
 
-export function goView(v: View): Promise<void> {
-	return goto(viewHref(v));
+export function goPage(v: Page): Promise<void> {
+	return goto(pageHref(v));
 }
 
-/** What a view has to provide to run commands that are about the view itself. */
+/** What a page has to provide to run commands that are about the page itself. */
 export interface CommandHost {
 	help(): void;
 	/** Shows a message in the view's status area. */
@@ -38,6 +41,8 @@ export interface CommandHost {
 	/** The filter the feed shows (or will show). */
 	filter(): Filter;
 	setFilter(f: Filter): void;
+	/** The ID of the saved view the feed has open, or "". */
+	activeView(): string;
 	follow(): void;
 }
 
@@ -48,8 +53,16 @@ export interface CommandHost {
  */
 export function execute(cmd: Command, host: CommandHost): void {
 	switch (cmd.type) {
-		case 'view':
-			void goView(cmd.view);
+		case 'page':
+			void goPage(cmd.page);
+			return;
+		case 'view': {
+			const v = metadata.views.find((x) => x.id === cmd.id);
+			void goto(v ? viewHref(v) : '/');
+			return;
+		}
+		case 'save':
+			void saveView(cmd.name, host);
 			return;
 		case 'help':
 			host.help();
@@ -73,6 +86,39 @@ export function execute(cmd: Command, host: CommandHost): void {
 	}
 }
 
+/**
+ * ":save": writes the filter into the active view, or, with a name, creates
+ * a favorite view from it and opens it.
+ */
+async function saveView(name: string, host: CommandHost): Promise<void> {
+	const filter = host.filter();
+	try {
+		if (name === '') {
+			const id = host.activeView();
+			const view = metadata.views.find((v) => v.id === id);
+			if (!view) {
+				host.flash('error: no view is open; use :save <name> to create one');
+				return;
+			}
+			await api.updateView(id, { filter: filterToViewBody(filter) });
+			await metadata.reloadViews();
+			host.flash(`saved ${oneLine(view.name)}`);
+			return;
+		}
+		const created = await api.addView({ name, filter: filterToViewBody(filter), favorite: true });
+		await metadata.reloadViews();
+		host.flash(`saved as ${oneLine(created.name)}`);
+		await goto(viewHref(created));
+	} catch (e) {
+		host.flash('error: ' + (e instanceof Error ? e.message : String(e)));
+	}
+}
+
+/** The view the feed has open, as the URL has it (for pages other than the feed). */
+export function feedViewId(): string {
+	return new URLSearchParams(metadata.feedSearch).get('view') ?? '';
+}
+
 /** The feed's current filter as the URL has it (for views other than the feed). */
 export function feedFilter(): Filter {
 	return filterFromParams(new URLSearchParams(metadata.feedSearch));
@@ -85,8 +131,10 @@ export function offFeedHost(flash: (msg: string) => void, refresh: (id?: string)
 		flash,
 		refresh,
 		filter: feedFilter,
-		setFilter: (f) => void goto('/' + filterQuery(f)),
-		follow: () => void goView('feed')
+		// The view stays open: its tab shows "*" when the filter differs.
+		setFilter: (f) => void goto('/' + viewSearch(feedViewId(), f)),
+		activeView: feedViewId,
+		follow: () => void goPage('feed')
 	};
 }
 
@@ -110,8 +158,9 @@ export class CommandLine {
 
 	private cycle: Cycle | null = null;
 
-	start(): void {
-		this.text = '';
+	/** Opens the line; initial prefills it (the "+ save" tab starts with "save "). */
+	start(initial = ''): void {
+		this.text = initial;
 		this.error = '';
 		this.hints = [];
 		this.cycle = null;

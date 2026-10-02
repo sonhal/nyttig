@@ -29,6 +29,10 @@ describe('keyAction in normal mode', () => {
 		['S', { type: 'pickSource' }],
 		['T', { type: 'pickTag' }],
 		['D', { type: 'toggleTime' }],
+		['v', { type: 'viewPicker' }],
+		['0', { type: 'viewTab', n: 0 }],
+		['1', { type: 'viewTab', n: 1 }],
+		['9', { type: 'viewTab', n: 9 }],
 		[':', { type: 'openCommand' }]
 	])('%j', (key, want) => {
 		expect(keyAction('normal', { key })).toEqual(want);
@@ -139,6 +143,8 @@ describe('manageKeyAction in normal mode', () => {
 		['Delete', { type: 'delete' }],
 		[' ', { type: 'toggle' }],
 		['r', { type: 'refresh' }],
+		['K', { type: 'moveUp' }],
+		['J', { type: 'moveDown' }],
 		['q', { type: 'feed' }]
 	])('%j', (key, want) => {
 		expect(manageKeyAction('normal', { key })).toEqual(want);
@@ -187,8 +193,9 @@ describe('help', () => {
 		expect(help.map((s) => s.title)).toEqual([
 			'Move',
 			'Filter',
+			'Saved views',
 			'Feed',
-			'Views',
+			'General',
 			'Query bar',
 			'Picker',
 			'Command line',
@@ -205,11 +212,25 @@ describe('help', () => {
 	it('drift check: every key the feed handles in normal mode is in the help', () => {
 		const listed = new Set(feedHelp().flatMap((s) => s.rows.flatMap((r) => r.keys)));
 		const label = (k: string) => ({ ArrowDown: '↓', ArrowUp: '↑', Escape: 'Esc', ' ': 'Space', PageDown: 'PgDn', PageUp: 'PgUp' })[k] ?? k;
-		const keys = ['j', 'k', 'g', 'G', 'd', 'u', '/', 's', 't', 'S', 'T', 'o', 'r', 'R', 'F', 'D', 'Enter', ' ', 'l', ':', '?', 'q', 'Escape', 'Home', 'End', 'PageDown', 'PageUp', 'ArrowDown', 'ArrowUp'];
+		const keys = ['j', 'k', 'g', 'G', 'd', 'u', '/', 's', 't', 'S', 'T', 'o', 'v', '0', '1', '5', '9', 'r', 'R', 'F', 'D', 'Enter', ' ', 'l', ':', '?', 'q', 'Escape', 'Home', 'End', 'PageDown', 'PageUp', 'ArrowDown', 'ArrowUp'];
 		for (const key of keys) {
 			expect(keyAction('normal', { key }), key).not.toBeNull();
 			expect(listed.has(label(key)), key).toBe(true);
 		}
+	});
+
+	it('lists the saved views keys', () => {
+		const help = feedHelp();
+		expect(find(help, /^go to favorite view/)?.keys).toEqual(['1', '2', '3', '4', '5', '6', '7', '8', '9']);
+		expect(find(help, /unfiltered feed/)?.keys).toEqual(['0']);
+		expect(find(help, /saved view by name/)?.keys).toEqual(['v']);
+	});
+
+	it('lists the view reordering keys only for pages that have the tools', () => {
+		const views = manageHelp(['add', 'edit', 'delete', 'toggle', 'moveUp', 'moveDown']);
+		expect(find(views, /move the selected view up/)?.keys).toEqual(['K']);
+		expect(find(views, /move the selected view down/)?.keys).toEqual(['J']);
+		expect(find(manageHelp(['add']), /move the selected view/)).toBeUndefined();
 	});
 
 	it('lists a management view by its tools', () => {

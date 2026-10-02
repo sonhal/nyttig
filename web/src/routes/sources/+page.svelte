@@ -17,6 +17,7 @@
 	import { oneLine, safeColor } from '$lib/sanitize';
 	import SourceFormPanel from '$lib/SourceForm.svelte';
 	import type { Source } from '$lib/types';
+	import { usageWarning, viewsUsing } from '$lib/views';
 
 	const POLL_MS = 5000;
 
@@ -181,6 +182,12 @@
 		return `its ${n} ${n === 1 ? one : many}`;
 	}
 
+	/** The saved views that filter on the source keep existing, without that part of their filter. */
+	function viewWarning(s: Source): string[] {
+		const w = usageWarning('source', viewsUsing({ source: s.id ?? '' }, metadata.views).length);
+		return w ? [w] : [];
+	}
+
 	// ── Row text ──────────────────────────────────────────────
 
 	function lastText(s: Source): string {
@@ -209,14 +216,14 @@
 <svelte:head><title>sources · nyttig</title></svelte:head>
 
 <ManageView
-	view="sources"
+	page="sources"
 	items={sources}
 	key={(s) => s.id ?? ''}
 	bind:cursor
 	panel={panel === null ? null : panel.kind === 'delete' ? 'confirm' : 'form'}
 	{tools}
 	note={note || (metadata.error ? 'error: ' + metadata.error : '')}
-	counts={{ sources: sources.length, tags: metadata.tags.length }}
+	counts={{ sources: sources.length, tags: metadata.tags.length, views: metadata.views.length }}
 	{loaded}
 	{onaction}
 >
@@ -251,7 +258,8 @@
 			<ConfirmPanel
 				title={`delete source ${oneLine(panel.source.name)}?`}
 				lines={[
-					`This also deletes ${plural(panel.items, 'item', 'items')} and ${plural(panel.rules, 'rule', 'rules')} for this source.`
+					`This also deletes ${plural(panel.items, 'item', 'items')} and ${plural(panel.rules, 'rule', 'rules')} for this source.`,
+					...viewWarning(panel.source)
 				]}
 				busy={panel.busy}
 				error={panel.error}
