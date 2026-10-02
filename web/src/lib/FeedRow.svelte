@@ -1,7 +1,8 @@
 <!--
 	One feed row. Desktop: a single 20px line, columns in the TUI's order
 	(unviewed dot, date, source, tags, title, description, domain). Mobile:
-	two lines in 44px, title on the second line, no description.
+	two lines in 44px, title on the second line, no description. Viewed
+	(read) rows are dimmed.
 
 	All feed text is rendered as text; colors are validated before use.
 -->
@@ -106,6 +107,14 @@
 			background: #262628;
 		}
 	}
+	/* Read rows are dimmed as a whole, colored chips included; the selected
+	   one less, so it stays comfortable to read. */
+	.row.viewed .cells {
+		opacity: 0.45;
+	}
+	.row.viewed.selected .cells {
+		opacity: 0.75;
+	}
 	.cells {
 		display: flex;
 		align-items: center;
@@ -185,9 +194,6 @@
 			flex: 1 0 100%;
 			max-width: 100%;
 			padding-left: 2ch;
-		}
-		.row.viewed .title {
-			color: #b8b8b8;
 		}
 	}
 </style>

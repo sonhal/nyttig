@@ -630,9 +630,13 @@ select it.
   fetched after it is added. Editing a rule adds the new rule and then
   removes the old one; deleting a rule leaves existing tags on items.
 
-Rows are marked viewed as they scroll into view, like in the TUI, and sent
-to the daemon about every 3 seconds; what is pending when you close the tab
-is sent with a beacon.
+Rows are marked viewed (read) as the cursor goes through them: the row you
+move to with `j`/`k`, click, tap, expand or open, and the row you step off.
+Scrolling alone marks nothing. Read rows are dimmed but stay in the list
+(`is:unviewed` hides them), so the rows that are still bright are the ones
+you haven't been through. The view state is the daemon's, shared with the TUI
+and other browsers; it is sent about every 3 seconds, and what is pending when
+you close the tab is sent with a beacon.
 
 ### Security
 

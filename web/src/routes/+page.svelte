@@ -170,35 +170,54 @@
 			void loadUnviewed();
 		},
 		(ids) => api.beaconViewed(ids),
+		// The rows were dimmed when they were read (markRead); the count follows the batch.
 		(ids) => {
-			stream.set(markViewed(stream.state, ids));
 			if (unviewedTotal !== null) unviewedTotal = Math.max(0, unviewedTotal - ids.size);
 		}
 	);
 
-	function onrange(first: number, last: number) {
-		// Only rows someone can actually see count: not before the snapshot
-		// has arrived, and not while the tab is in the background.
+	/**
+	 * Marks rows read: the rows the cursor is put on, not every row on
+	 * screen, so the dimmed rows are the ones gone through. They dim at
+	 * once; the daemon gets them with the next batch.
+	 */
+	function markRead(...indexes: number[]) {
+		const ids = new Set<string>();
+		for (const i of indexes) {
+			const it = stream.state.items[i];
+			if (it && !it.viewed) ids.add(it.id);
+		}
+		if (ids.size === 0) return;
+		tracker.see(ids);
+		stream.set(markViewed(stream.state, ids));
+	}
+
+	function onrange(_first: number, last: number) {
+		// Not before the snapshot has arrived, and not while the tab is in
+		// the background.
 		if (!feed.complete || document.visibilityState !== 'visible') return;
 		loadOlder(last);
-		const ids: string[] = [];
-		for (let i = first; i <= last; i++) {
-			const it = items[i];
-			if (it && !it.viewed) ids.push(it.id);
-		}
-		tracker.see(ids);
 	}
 
 	// ── Actions ───────────────────────────────────────────────
 
 	function select(i: number) {
 		stream.set(moveCursor(stream.state, i));
+		markRead(stream.state.cursor);
 		list?.ensureVisible(stream.state.cursor);
+	}
+
+	/** j/k: the row stepped off counts as read too (the first row the page opens on). */
+	function step(by: number) {
+		const from = cursor;
+		select(cursor + by);
+		markRead(from);
 	}
 
 	function toggleExpand() {
 		const it = items[cursor];
 		if (!it) return;
+		markRead(cursor);
 		expandedId = expandedId === it.id ? null : it.id;
 		queueMicrotask(() => list?.ensureVisible(cursor));
 	}
@@ -216,6 +235,7 @@
 	}
 
 	function openLink() {
+		markRead(cursor);
 		const link = safeLink(items[cursor]?.link);
 		if (link) window.open(link, '_blank', 'noopener,noreferrer');
 	}
@@ -330,7 +350,7 @@
 	function run(a: Action): boolean | void {
 		switch (a.type) {
 			case 'move':
-				return select(cursor + a.by);
+				return step(a.by);
 			case 'halfPage':
 				return select(cursor + a.dir * Math.max(1, Math.floor((list?.pageRows() ?? 2) / 2)));
 			case 'top':
@@ -461,7 +481,7 @@
 		const onPageHide = () => tracker.flushBeacon();
 		const onVisibility = () => {
 			if (document.visibilityState === 'hidden') tracker.flushBeacon();
-			// Rows that arrived while the tab was hidden are seen now.
+			// Older rows that were due while the tab was hidden load now.
 			else list?.reportRange();
 		};
 		window.addEventListener('pagehide', onPageHide);
