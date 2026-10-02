@@ -292,7 +292,7 @@ func TestParseBlueskyActor(t *testing.T) {
 
 func TestFetch_BlueskyRequestAndInsert(t *testing.T) {
 	database := setupDB(t)
-	defer database.Close()
+	defer func() { _ = database.Close() }()
 
 	var got *http.Request
 	client := doerFunc(func(req *http.Request) (*http.Response, error) {
@@ -339,7 +339,7 @@ func TestFetch_BlueskyRequestAndInsert(t *testing.T) {
 
 func TestFetch_BlueskyHandleURL(t *testing.T) {
 	database := setupDB(t)
-	defer database.Close()
+	defer func() { _ = database.Close() }()
 
 	var got *http.Request
 	client := doerFunc(func(req *http.Request) (*http.Response, error) {
@@ -359,7 +359,7 @@ func TestFetch_BlueskyHandleURL(t *testing.T) {
 
 func TestFetch_BlueskyBadActorIsFetchError(t *testing.T) {
 	database := setupDB(t)
-	defer database.Close()
+	defer func() { _ = database.Close() }()
 
 	called := false
 	client := doerFunc(func(*http.Request) (*http.Response, error) {
@@ -398,7 +398,7 @@ func TestFetch_BlueskyXRPCError(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			database := setupDB(t)
-			defer database.Close()
+			defer func() { _ = database.Close() }()
 			client := doerFunc(func(*http.Request) (*http.Response, error) { return jsonResponse(tt.status, tt.body), nil })
 			src := &db.Source{Name: "A", URL: "https://bsky.app/profile/" + bskyDID, Type: "bluesky", RefreshSec: 3600, Enabled: true}
 			src.ID, _ = db.InsertSource(database, src)
@@ -420,7 +420,7 @@ func TestFetch_BlueskyXRPCError(t *testing.T) {
 
 func TestFetch_BlueskyInvalidBody(t *testing.T) {
 	database := setupDB(t)
-	defer database.Close()
+	defer func() { _ = database.Close() }()
 	client := doerFunc(func(*http.Request) (*http.Response, error) { return jsonResponse(200, "<rss/>"), nil })
 	src := &db.Source{Name: "A", URL: "https://bsky.app/profile/" + bskyDID, Type: "bluesky", RefreshSec: 3600, Enabled: true}
 	src.ID, _ = db.InsertSource(database, src)

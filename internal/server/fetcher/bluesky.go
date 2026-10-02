@@ -181,7 +181,7 @@ func (r *BlueskyResolver) ResolveProfile(ctx context.Context, actor string) (*Bl
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		return nil, xrpcError(resp)
 	}
