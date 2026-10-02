@@ -709,6 +709,7 @@ func dbSourceToSchedulerSource(src *db.Source) scheduler.Source {
 		ID:         src.ID,
 		Name:       src.Name,
 		URL:        src.URL,
+		Type:       src.Type,
 		RefreshSec: int64(src.RefreshSec),
 		Enabled:    src.Enabled,
 	}
@@ -719,6 +720,7 @@ func schedulerSourceToDBSource(s scheduler.Source) *db.Source {
 		ID:         s.ID,
 		Name:       s.Name,
 		URL:        s.URL,
+		Type:       s.Type,
 		RefreshSec: int(s.RefreshSec),
 		Enabled:    s.Enabled,
 	}
