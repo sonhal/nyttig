@@ -32,8 +32,11 @@ follow.
 
 ## 1. Get a release (on your workstation)
 
-CI builds the release: pushing a `v*` tag runs the whole pipeline and, when it
-passes, publishes a GitHub Release with one bundle and its checksum:
+CI builds the release: a `v*` tag runs the whole pipeline and, when it
+passes, publishes a GitHub Release with one bundle and its checksum. Merges to
+`main` tag themselves when their commit titles call for a release (`feat:` a
+minor version, `fix:` or `perf:` a patch; see
+[Releases](../AGENT.md#releases)). To cut one by hand, push the tag:
 
 ```bash
 git tag v0.1.0 && git push origin v0.1.0     # a tag with a hyphen is a pre-release

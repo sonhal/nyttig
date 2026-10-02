@@ -7,6 +7,7 @@ on:
     # Release with the deployable bundle (the release job at the end).
     tags: ['v*']
   pull_request:
+  # Also how the Tag job starts the release run for the tag it pushes.
   workflow_dispatch:
 
 # Least privilege: jobs only need to read the repo. golangci-lint's
@@ -255,6 +256,61 @@ jobs:
           go-version-input: ""
           go-version-file: go.mod
           go-package: ./...
+
+  # Runs on pushes to main once everything else has passed. If the commits
+  # since the last release ask for one (scripts/next-version.sh reads their
+  # Conventional Commits subjects), it tags this commit and starts the release.
+  #
+  # A tag pushed with GITHUB_TOKEN doesn't trigger workflows, so the push
+  # alone would never reach the Release job. workflow_dispatch is the one
+  # event GITHUB_TOKEN may start, so the job dispatches this workflow on the
+  # new tag: that run has github.ref = refs/tags/vX.Y.Z, exactly like a tag
+  # pushed by hand.
+  tag:
+    name: Tag release
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    needs: [lint, generated, test, web, build, vulncheck]
+    # One at a time, so two quick merges can't compute the same version. A
+    # queued run that GitHub replaces with a newer one loses nothing: the
+    # newer run reads every commit since the last tag.
+    concurrency:
+      group: ${{ github.workflow }}-tag
+      cancel-in-progress: false
+    permissions:
+      contents: write   # push the tag
+      actions: write    # dispatch the release run
+    steps:
+      # Full history and tags (fetched now, after the concurrency wait, so a
+      # tag the previous run pushed is seen).
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Compute version
+        id: version
+        run: |
+          # Already released: tagged by hand, or a later commit's run got
+          # here first and its tag covers this commit.
+          if released=$(git tag --contains HEAD --list 'v*' | head -n 1) && [ -n "$released" ]; then
+            echo "Already released in $released"
+            exit 0
+          fi
+          version=$(scripts/next-version.sh)
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "### Release: ${version:-none}" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Push tag and start release
+        if: steps.version.outputs.version != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.version }}
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git tag -a "$TAG" -m "$TAG"
+          git push origin "refs/tags/$TAG"
+          gh workflow run ci.yml --ref "$TAG"
 
   # Runs only for a v* tag, after everything else has passed. Publishes one
   # bundle with everything the server needs, laid out for deploy/README.md:
