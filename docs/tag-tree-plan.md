@@ -1,6 +1,6 @@
 # Tag tree plan: parent tags
 
-Status: **in progress**. Phases 1 (schema + db layer), 2 (proto, service, Hub), 3 (config seeding, CLI), 4 (TUI) and 5 (web) done.
+Status: **implemented** (phases 1 to 6, one commit each on the feature branch), not yet merged. See Deviations.
 
 Tags can have parent tags. Filtering by a parent shows items tagged with the
 parent **or any tag below it**. Example:
@@ -313,6 +313,16 @@ parents = ["cyber security", "linux"]
 
 After phase 1 the backend does everything (edges can be added through the
 config in phase 3). The later phases only expose it in each client.
+
+## Deviations from this plan
+
+- **TUI indentation.** The filter bar shows one tag at a time (the `t` key
+  cycles), so there is no list to indent. The tags are in tree order and each
+  `TagInfo` carries its `Depth`, but the depth is only drawn in the CLI
+  tree and the web pickers.
+- **`UpdateTagAndParents`** (db) was added so `UpdateTag` writes the name,
+  color and parents in one transaction; `InsertTagWithParents` does the same
+  for `AddTag`.
 
 ## Out of scope (possible follow-ups)
 
