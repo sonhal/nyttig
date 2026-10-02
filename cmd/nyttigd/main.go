@@ -303,6 +303,12 @@ func main() {
 	sched.Stop()
 	logger.Info("scheduler stopped")
 
+	// End the StreamItems streams first. GracefulStop waits for running RPCs
+	// and a stream lasts until its client leaves, so with a TUI or browser
+	// connected it would always run into the timeout below. Clients see
+	// Unavailable and reconnect to the next daemon.
+	hub.Close()
+
 	// Graceful shutdown with timeout.
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()

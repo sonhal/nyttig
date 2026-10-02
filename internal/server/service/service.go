@@ -526,13 +526,32 @@ type sub struct {
 type Hub struct {
 	mu   sync.Mutex
 	subs map[*sub]struct{}
+
+	closeOnce sync.Once
+	done      chan struct{} // closed by Close
 }
 
 // NewHub creates a Hub.
 func NewHub() *Hub {
 	return &Hub{
 		subs: make(map[*sub]struct{}),
+		done: make(chan struct{}),
 	}
+}
+
+// Close ends every active StreamItems call, and any that starts later, with
+// codes.Unavailable. The daemon calls it before grpc.Server.GracefulStop:
+// GracefulStop waits for running RPCs, and a stream only ends when its
+// client leaves, so without Close a connected client holds up every
+// shutdown until the timeout. Clients reconnect on Unavailable. Close is
+// idempotent, and Push keeps working (it just has no one to deliver to).
+func (h *Hub) Close() {
+	h.closeOnce.Do(func() { close(h.done) })
+}
+
+// errHubClosed is what StreamItems returns once the hub is closed.
+func errHubClosed() error {
+	return status.Error(codes.Unavailable, "server shutting down")
 }
 
 // subscribe registers a new subscriber and returns its send channel.
@@ -580,6 +599,16 @@ func (h *Hub) Push(item *pb.Item) {
 //     Reset, re-sending matching items, then Complete.
 func (s *Service) StreamItems(stream pb.Nyttig_StreamItemsServer) error {
 	ctx := stream.Context()
+	hubDone := s.hub.done
+
+	// A stream that starts after Close ends at once. Checked up front
+	// because the selects below pick at random among ready cases.
+	select {
+	case <-hubDone:
+		return errHubClosed()
+	default:
+	}
+
 	sub := s.hub.subscribe(ctx)
 	defer s.hub.unsubscribe(sub)
 
@@ -615,6 +644,8 @@ func (s *Service) StreamItems(stream pb.Nyttig_StreamItemsServer) error {
 			return nil
 		}
 		return err
+	case <-hubDone:
+		return errHubClosed()
 	case <-ctx.Done():
 		return ctx.Err()
 	}
@@ -663,6 +694,9 @@ func (s *Service) StreamItems(stream pb.Nyttig_StreamItemsServer) error {
 				return nil
 			}
 			return err
+
+		case <-hubDone:
+			return errHubClosed()
 
 		case <-ctx.Done():
 			return ctx.Err()
