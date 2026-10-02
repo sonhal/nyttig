@@ -308,7 +308,7 @@ nyttig search          [-tag <name|id>] [-s source_id] [-l limit] [-offset N] [-
 nyttig refresh         [-id <source_id>]   # omit -id to refresh all
 ```
 
-Each subcommand calls the corresponding gRPC RPC against the daemon. The daemon must be running for these to work.
+Each subcommand calls the corresponding gRPC RPC against the daemon. The daemon must be running for these to work. The `remove-*` subcommands fail with a `NotFound` error (exit status 1) when the ID does not exist.
 
 `update-source` and `update-tag` change only the flags you pass. Pass
 `-color ''` or `-abbreviation ''` to clear a value. Changing a source's URL or
@@ -718,6 +718,17 @@ as `sqlite_version`, and the daemon refuses to start if that library lacks FTS5.
 | `view_state`  | Per-item view tracking (row exists = viewed)      |
 | `items_fts`   | FTS5 virtual table for full-text search           |
 
+Item dates (`items.published`) are stored in UTC with whole seconds
+(`YYYY-MM-DD HH:MM:SS+00:00`, whatever offset the feed used), because the
+newest-first ordering sorts that column as text. Two indexes serve the hot
+queries: `idx_items_published` on `items(published DESC, fetched_at DESC)`
+matches the feed's sort order, and `idx_item_tags_tag_id` on
+`item_tags(tag_id)` serves tag filters. (`UNIQUE(source_id, guid)` already
+indexes `source_id`.)
+
+Removing a source, tag or tag rule that does not exist fails with gRPC
+`NotFound`, which nyttig-api returns as HTTP 404.
+
 ## Technology Stack
 
 | Layer         | Technology                          |
@@ -730,7 +741,7 @@ as `sqlite_version`, and the daemon refuses to start if that library lacks FTS5.
 | Database      | SQLite with FTS5                    |
 | Migrations    | Embedded SQL files                  |
 | Configuration | TOML                                |
-| Feed parsing  | `encoding/xml` (RSS 2.0 / Atom)     |
+| Feed parsing  | `encoding/xml` (RSS 2.0 / Atom), any encoding the feed declares |
 | Logging       | `slog` with JSON output             |
 
 ## License

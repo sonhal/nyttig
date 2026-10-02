@@ -26,7 +26,8 @@ via a **bidirectional gRPC stream**.
 - TUI: **Bubble Tea** + **Lipgloss** (a custom table, not the bubbles table)
 - Wire: **Protocol Buffers (proto3)** + **gRPC** (bidi streaming)
 - Storage: **SQLite** with **FTS5** full-text search (cgo via mattn/go-sqlite3; see the build-tag note under [Build, test, run](#build-test-run))
-- Feed parsing: standard library `encoding/xml` (RSS 2.0 and Atom)
+- Feed parsing: standard library `encoding/xml` (RSS 2.0 and Atom), with
+  `golang.org/x/net/html/charset` for non-UTF-8 feeds
 - Config: **TOML**
 - Logging: `slog` with JSON output to stderr
 - Web client: **SvelteKit 2 + Svelte 5** (runes, TypeScript strict) on
@@ -92,6 +93,10 @@ docs/web-client-plan.md     Plan for the nyttig-api browser client (phases and d
   for slow subscribers (64-buffered channel). `StreamItems` re-filters pushed
   items per-subscriber against the current `StreamFilter`, including the
   search query (checked against `items_fts` with `db.ItemMatchesSearch`).
+  `Hub.Close` ends every active and later `StreamItems` call with
+  `codes.Unavailable`; the daemon calls it before `GracefulStop`, which would
+  otherwise wait out its timeout for streams that only end when the client
+  leaves. Clients reconnect.
 - **Adapters between layers** (e.g. `db.Source` ⇄ `scheduler.Source`,
   `db.TagRule` ⇄ `tagger.TagRule`) live in `cmd/nyttigd/main.go`. Each inner
   package defines its own store interfaces (`scheduler.SourceStore`,
@@ -117,6 +122,18 @@ docs/web-client-plan.md     Plan for the nyttig-api browser client (phases and d
   daemon also serves mTLS on that TCP address and keeps `socket` as a
   plaintext Unix socket (for nyttig-api); a TCP `socket` is then refused so
   no plaintext port opens by accident.
+- **Item dates are text in UTC.** `items.published` is sorted as text, so
+  every value must have one shape. The fetcher normalizes parsed dates to UTC
+  with whole seconds, `db.InsertItem` does it again for any caller, and
+  migration 3 rewrote older rows. The driver stores such a time as
+  `YYYY-MM-DD HH:MM:SS+00:00` (not `T...Z`); a test pins the migration's
+  output to what an insert writes, so keep them in step. Migration 4 adds the
+  indexes ListItems relies on.
+- **Fetch errors.** A failure to insert an item is reported as the source's
+  `fetch_error` (the first failure plus a count), and a clean fetch clears it.
+- **Removing** a source, tag or rule that does not exist is `codes.NotFound`
+  (the `db.Delete*` functions return whether a row was deleted); nyttig-api
+  maps it to 404.
 - **Dedup** is by `UNIQUE(source_id, guid)`. GUID is the feed `<guid>` if
   present, else SHA-256 of `<link>`.
 - **Search** input is wrapped by `ftsQuote` (`db/items.go`) so it is matched as
