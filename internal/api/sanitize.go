@@ -3,6 +3,9 @@ package api
 import (
 	"net/url"
 	"regexp"
+	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"google.golang.org/protobuf/proto"
 
@@ -46,7 +49,59 @@ func sanitizeItem(item *pb.Item) *pb.Item {
 	for _, t := range out.Tags {
 		t.Color = safeColor(t.Color)
 	}
+	for _, a := range out.Assessments {
+		sanitizeAssessment(a)
+	}
 	return out
+}
+
+// safeText cleans text that an assessor wrote or that names one. Notes can
+// repeat markup, links or instructions from the feed an LLM read, so the
+// browser renders them as text only; this removes what has no business in
+// plain text on the way out: invalid UTF-8, control characters other than
+// newline and tab, and the Unicode bidirectional overrides that can make
+// text read differently from how it is stored.
+func safeText(s string) string {
+	clean := true
+	for _, r := range s {
+		if !okTextRune(r) {
+			clean = false
+			break
+		}
+	}
+	if clean && utf8.ValidString(s) {
+		return s
+	}
+	var b strings.Builder
+	for _, r := range strings.ToValidUTF8(s, "\uFFFD") {
+		if okTextRune(r) {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
+func okTextRune(r rune) bool {
+	switch {
+	case r == '\n', r == '\t':
+		return true
+	case unicode.IsControl(r):
+		return false
+	case r >= 0x202A && r <= 0x202E, r >= 0x2066 && r <= 0x2069, r == 0x200E, r == 0x200F, r == 0x061C:
+		return false
+	}
+	return true
+}
+
+func sanitizeAssessment(a *pb.Assessment) {
+	a.AssessorName = safeText(a.AssessorName)
+	a.Note = safeText(a.Note)
+}
+
+func sanitizeAssessor(a *pb.Assessor) {
+	a.Name = safeText(a.Name)
+	a.Description = safeText(a.Description)
+	a.Color = safeColor(a.Color)
 }
 
 func sanitizeTag(t *pb.Tag) {

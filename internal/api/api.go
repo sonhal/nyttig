@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -130,6 +131,11 @@ type feedFilter struct {
 	TagID        int64
 	Sort         string
 	UnviewedOnly bool
+	// Assessment filters: AssessorID selects whose scores MinScore and
+	// sort=score use; the daemon rejects them without it.
+	AssessorID   int64
+	MinScore     *float64
+	UnassessedBy int64
 }
 
 func parseFeedFilter(v url.Values) (feedFilter, error) {
@@ -146,13 +152,26 @@ func parseFeedFilter(v url.Values) (feedFilter, error) {
 		return f, err
 	}
 	switch s := v.Get("sort"); s {
-	case "", "newest", "oldest":
+	case "", "newest", "oldest", "score":
 		f.Sort = s
 	default:
-		return f, fmt.Errorf("%w: sort must be newest or oldest", errBadParam)
+		return f, fmt.Errorf("%w: sort must be newest, oldest or score", errBadParam)
 	}
 	if f.UnviewedOnly, err = parseBool(v, "unviewed"); err != nil {
 		return f, err
+	}
+	if f.AssessorID, err = parseID(v, "assessor"); err != nil {
+		return f, err
+	}
+	if f.UnassessedBy, err = parseID(v, "unassessed"); err != nil {
+		return f, err
+	}
+	if s := v.Get("min_score"); s != "" {
+		x, err := strconv.ParseFloat(s, 64)
+		if err != nil || math.IsNaN(x) || math.IsInf(x, 0) || x < 0 || x > 1 {
+			return f, fmt.Errorf("%w: min_score must be a number from 0 to 1", errBadParam)
+		}
+		f.MinScore = &x
 	}
 	return f, nil
 }
@@ -270,6 +289,9 @@ func (a *handlers) items(w http.ResponseWriter, r *http.Request) {
 		TagExact:     tagExact,
 		Sort:         f.Sort,
 		UnviewedOnly: f.UnviewedOnly,
+		AssessorId:   f.AssessorID,
+		MinScore:     f.MinScore,
+		UnassessedBy: f.UnassessedBy,
 		Limit:        int32(limit),
 		Offset:       int32(offset),
 	})

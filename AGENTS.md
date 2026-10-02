@@ -136,7 +136,8 @@ internal/client/            gRPC client wrapper + StreamSub helper used by the T
 internal/mtls/              Mutual-TLS credential loading shared by daemon and client
 internal/tui/               Bubble Tea Model, filter bar, table, status bar, view tracking
 internal/api/               nyttig-api's HTTP API: routing (server.go), JSON handlers (api.go),
-                            source/tag/rule management (manage.go), SSE bridge (stream.go),
+                            source/tag/rule management (manage.go), assessors and
+                            assessments (assessments.go), SSE bridge (stream.go),
                             security middleware (security.go)
 cmd/nyttig-api/main.go      nyttig-api entrypoint: flags, listen-address guard, HTTP server
 web/                        The SvelteKit app (pnpm); "pnpm build" writes a Node server to web/build/
@@ -315,6 +316,11 @@ which phases are done and whether they are merged; keep it current.
   zero values are left out; the TypeScript types in `web/src/lib/types.ts`
   mirror that. `/api/stream` opens one `StreamItems` per SSE connection and
   never changes its filter: the browser reconnects instead.
+  Assessor and assessment bodies (`assessments.go`) follow the same pattern;
+  assessor and tag are ID strings, `/api/items` and `/api/stream` take
+  `assessor`, `min_score`, `unassessed` and `sort=score`, and the SSE bridge
+  sends `event: update` with `{matches, item}` for `item_update`. Notes and
+  assessor names go through `safeText` (`sanitize.go`).
   Management bodies (`manage.go`) are read member by member into a
   `jsonBody`, which keeps field presence for PATCH (absent = unchanged,
   mapped to the proto3 `optional` fields) and rejects unknown, duplicate

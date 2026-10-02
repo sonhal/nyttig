@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -27,6 +28,9 @@ import (
 //
 //	event: reset      a snapshot follows; the client starts a new buffer
 //	event: item       id: <item id>, data: protojson Item
+//	event: update     data: {"matches": bool, "item": protojson Item}; an item
+//	                  whose assessments changed. Replace the item if shown;
+//	                  insert it only when matches is true; never remove
 //	event: complete   the snapshot is done; later items are live pushes
 //	: ping            comment every pingInterval so proxies keep the line open
 //
@@ -79,6 +83,9 @@ func (h *streamHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		Search:       f.Query,
 		Sort:         f.Sort,
 		UnviewedOnly: f.UnviewedOnly,
+		AssessorId:   f.AssessorID,
+		MinScore:     f.MinScore,
+		UnassessedBy: f.UnassessedBy,
 	}}}); err != nil {
 		writeRPCError(w, recvError(stream, err))
 		return
@@ -267,6 +274,21 @@ func (s *sseWriter) message(m *pb.ServerMessage) {
 			return
 		}
 		s.event("item", strconv.FormatInt(item.Id, 10), b)
+	case *pb.ServerMessage_ItemUpdate:
+		item, err := marshaler.Marshal(sanitizeItem(v.ItemUpdate))
+		if err != nil {
+			s.err = fmt.Errorf("encode item update: %w", err)
+			return
+		}
+		b, err := json.Marshal(struct {
+			Matches bool            `json:"matches"`
+			Item    json.RawMessage `json:"item"`
+		}{m.UpdateMatches, item})
+		if err != nil {
+			s.err = fmt.Errorf("encode item update: %w", err)
+			return
+		}
+		s.event("update", "", b)
 	case *pb.ServerMessage_Reset_:
 		s.event("reset", "", []byte("{}"))
 	case *pb.ServerMessage_Complete:

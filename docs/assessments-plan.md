@@ -1,6 +1,6 @@
 # Assessments plan: scores and notes from external assessors
 
-Status: **phases 1–4 implemented, not yet merged** (database layer, proto and RPCs, live updates, CLI and config).
+Status: **phases 1–5 implemented, not yet merged** (database layer, proto and RPCs, live updates, CLI and config, HTTP API).
 
 Other systems can attach a judgement to a news item: an optional **score**
 from 0.0 to 1.0, an optional **note**, and the **assessor** that made it.
@@ -374,13 +374,14 @@ This is for the README too. An assessor is any program that:
 (PUT, POST, PATCH, DELETE) needs `Content-Type: application/json` and an
 `Origin` header equal to nyttig-api's `--origin`, in addition to the
 basic-auth credentials Caddy asks for. Without them the answer is 415 (wrong
-content type) or 403 (wrong origin). For example:
+content type) or 403 (wrong origin). The assessor and tag are IDs as strings,
+like every ID in this API (`GET /api/assessors`, `GET /api/tags`). For example:
 
 ```bash
 curl -u assessor:PASSWORD -X PUT https://news.example.com/api/items/123/assessments \
   -H 'Content-Type: application/json' \
   -H 'Origin: https://news.example.com' \
-  -d '{"assessor": "claude", "tag": "CVE", "score": 0.9, "note": "critical in Cisco IOS"}'
+  -d '{"assessor": "1", "tag": "5", "score": 0.9, "note": "critical in Cisco IOS"}'
 ```
 
 Re-assessing is just another `PutAssessment`.
@@ -536,6 +537,17 @@ govulncheck can't reach vuln.go.dev from the sandbox, so leave it to CI.
 
 ## Deviations from this plan
 
+- **Phase 5, IDs in request bodies.** `PUT /api/items/{id}/assessments` takes
+  `assessor` and `tag` as ID strings (the plan's `{assessor, tag?, score?,
+  note?}` did not say), like every other ID in nyttig-api and the view
+  filter keys. The curl example in "Writing an assessor" uses IDs.
+- **Phase 5, SSE update event.** `event: update` carries `{"matches": bool,
+  "item": <item>}` so the web client gets the daemon's `update_matches`
+  flag (see the phase 3 deviation).
+- **Phase 5, text sanitizing.** `safeText` in `sanitize.go` strips control
+  characters (except newline and tab), bidirectional overrides and invalid
+  UTF-8 from notes, assessor names and descriptions; markup is left as text
+  for the browser's text-only rendering.
 - **Phase 4, query syntax.** The CLI writes a view's `unassessed_by` as
   `unassessed:<assessor>` (and `score:<assessor>[>=N]`, `sort:score`); phase 6's
   `query.ts` must read and write the same. The plan listed only `score:` and
