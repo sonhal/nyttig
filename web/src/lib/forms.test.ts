@@ -172,14 +172,28 @@ describe('source form', () => {
 
 describe('tag form', () => {
 	it('validates and builds bodies', () => {
-		expect(validateTag({ name: 'rust', color: '#CE422B' })).toEqual({});
-		expect(Object.keys(validateTag({ name: '', color: '#abc' })).sort()).toEqual(['color', 'name']);
-		expect(validateTag({ name: 'x'.repeat(65), color: '' }).name).toBeDefined();
-		expect(tagAddBody({ name: ' rust ', color: '' })).toEqual({ name: 'rust' });
+		expect(validateTag({ name: 'rust', color: '#CE422B', parent_ids: [] })).toEqual({});
+		expect(Object.keys(validateTag({ name: '', color: '#abc', parent_ids: [] })).sort()).toEqual(['color', 'name']);
+		expect(validateTag({ name: 'x'.repeat(65), color: '', parent_ids: [] }).name).toBeDefined();
+		expect(tagAddBody({ name: ' rust ', color: '', parent_ids: [] })).toEqual({ name: 'rust' });
 		const orig = { id: '3', name: 'rust', color: '#CE422B' };
 		expect(tagPatchBody(orig, tagForm(orig))).toEqual({});
-		expect(tagPatchBody(orig, { name: 'rust', color: '#000000' })).toEqual({ color: '#000000' });
-		expect(tagPatchBody(orig, { name: 'rustlang', color: '' })).toEqual({ name: 'rustlang', color: '' });
+		expect(tagPatchBody(orig, { name: 'rust', color: '#000000', parent_ids: [] })).toEqual({ color: '#000000' });
+		expect(tagPatchBody(orig, { name: 'rustlang', color: '', parent_ids: [] })).toEqual({ name: 'rustlang', color: '' });
+	});
+
+	it('handles parents', () => {
+		expect(tagAddBody({ name: 'CVE', color: '', parent_ids: ['1', '2'] })).toEqual({ name: 'CVE', parent_ids: ['1', '2'] });
+		const many = Array.from({ length: 17 }, (_, i) => String(i + 1));
+		expect(validateTag({ name: 'x', color: '', parent_ids: many }).parent_ids).toBeDefined();
+
+		const orig = { id: '3', name: 'CVE', parent_ids: ['1', '2'] };
+		expect(tagForm(orig).parent_ids).toEqual(['1', '2']);
+		// Same set in another order: nothing to send.
+		expect(tagPatchBody(orig, { name: 'CVE', color: '', parent_ids: ['2', '1'] })).toEqual({});
+		expect(tagPatchBody(orig, { name: 'CVE', color: '', parent_ids: ['1'] })).toEqual({ parent_ids: ['1'] });
+		// Clearing sends [] so the daemon makes the tag top-level.
+		expect(tagPatchBody(orig, { name: 'CVE', color: '', parent_ids: [] })).toEqual({ parent_ids: [] });
 	});
 });
 

@@ -216,6 +216,71 @@ test('tags: add, recolor and delete, and the feed follows', async ({ page }) => 
 	}
 });
 
+test('tags: a parent tag shows its children\'s items, and deleting it keeps them', async ({ page }) => {
+	const parent = `e2e-parent-${test.info().project.name}`;
+	await openFeed(page);
+	await goTo(page, 'tags');
+
+	// Create the parent, then put the shared "linux" tag under it.
+	await act(page, 'add');
+	await page.getByTestId('tag-name').fill(parent);
+	await save(page, page.getByTestId('tag-name'));
+	const parentRow = listRow(page, 'tags', parent);
+	await expect(parentRow).toBeVisible();
+
+	const tagsJson = async () =>
+		((await (await page.request.get('/api/tags')).json()) as { tags: { id: string; name: string; parent_ids?: string[] }[] }).tags;
+	const linux = listRow(page, 'tags', 'linux');
+	try {
+		await pick(linux);
+		await act(page, 'edit');
+		// The tag itself is not offered as its own parent.
+		await expect(page.getByTestId('tag-parents').getByLabel('linux')).toHaveCount(0);
+		await page.getByTestId('tag-parents').getByLabel(parent).check();
+		await save(page, page.getByTestId('tag-name'));
+		await expect(page.getByTestId('tag-form')).toHaveCount(0);
+
+		// The list is a tree now: linux sits indented under its parent.
+		const rows = await listRows(page, 'tags').allTextContents();
+		const at = rows.findIndex((r) => r.includes(parent));
+		expect(rows[at + 1]).toContain('linux');
+
+		// Filtering by the parent shows the items of its child.
+		const all = await tagsJson();
+		const parentId = all.find((t) => t.name === parent)?.id;
+		expect(all.find((t) => t.name === 'linux')?.parent_ids).toEqual([parentId]);
+		await page.goto(`/?tag=${parentId}`);
+		await expect(page.getByTestId('status').locator('[data-status]')).toHaveAttribute('data-status', 'connected');
+		const row = (title: string) => page.locator('[role=row]').filter({ hasText: title });
+		await expect(row('Linux 6.18 released')).toBeVisible();
+		await expect(row('Go 1.26.8 security release')).toHaveCount(0);
+		// The chips are the item's own tags: no ancestor chip.
+		await expect(row('Linux 6.18 released').locator('.tags')).not.toContainText(parent);
+
+		// Deleting the parent counts only its own assignments (none), says
+		// its child becomes top-level, and keeps the child and its items.
+		await goTo(page, 'tags');
+		await pick(listRow(page, 'tags', parent).first());
+		await act(page, 'delete');
+		const confirm = page.getByTestId('confirm');
+		await expect(confirm).toContainText('removes it from 0 items');
+		await expect(confirm).toContainText('1 child tag becomes top-level');
+		await confirmDelete(page);
+		await expect(listRow(page, 'tags', parent)).toHaveCount(0);
+		await expect(linux).toHaveCount(1);
+		expect((await tagsJson()).find((t) => t.name === 'linux')?.parent_ids ?? []).toEqual([]);
+	} finally {
+		// Put the shared tag back if the test failed before the delete.
+		const all = await tagsJson();
+		const id = all.find((t) => t.name === 'linux')?.id;
+		if (id && (all.find((t) => t.name === 'linux')?.parent_ids ?? []).length > 0) {
+			await page.request.patch(`/api/tags/${id}`, { data: { parent_ids: [] }, headers: { Origin: BASE_URL } });
+		}
+		const leftover = all.find((t) => t.name === parent)?.id;
+		if (leftover) await page.request.delete(`/api/tags/${leftover}`, { headers: { Origin: BASE_URL } });
+	}
+});
+
 test('rules: live preview with Go syntax, add, edit and delete', async ({ page }) => {
 	const project = test.info().project.name;
 	await openFeed(page);

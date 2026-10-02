@@ -41,7 +41,7 @@ const KEY_ALIASES: Record<string, Key> = { tag: 'tag', src: 'src', source: 'src'
 
 /** The operators, for the help overlay. */
 export const QUERY_KEYS: readonly { usage: string; desc: string }[] = [
-	{ usage: 'tag:<name>', desc: 'only items with this tag (tag:rust, tag:"Release notes")' },
+	{ usage: 'tag:<name>', desc: 'only items with this tag or a child tag (tag:rust, tag:"Release notes")' },
 	{ usage: 'src:<name>', desc: 'only this source, by name or abbreviation' },
 	{ usage: 'is:unviewed', desc: 'only unviewed items' },
 	{ usage: 'sort:newest|oldest', desc: 'the sort order' },

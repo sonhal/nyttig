@@ -1,7 +1,8 @@
 <!--
 	Tags: add, rename or recolor (UpdateTag, which keeps rules and item
 	assignments), and delete (which takes the tag's rules and item
-	assignments with it).
+	assignments with it). Tags are listed as a tree: a tag with several
+	parents shows under each, the repeats muted.
 -->
 <script lang="ts">
 	import { onMount } from 'svelte';
@@ -14,6 +15,7 @@
 	import { metadata } from '$lib/metadata.svelte';
 	import { oneLine, safeColor } from '$lib/sanitize';
 	import TagFormPanel from '$lib/TagForm.svelte';
+	import { buildTree, flatten, orphansOnDelete } from '$lib/tagtree';
 	import type { Tag, TagRule } from '$lib/types';
 
 	const tools: Tool[] = [
@@ -36,7 +38,8 @@
 	let noteTimer: ReturnType<typeof setTimeout> | undefined;
 
 	const tags = $derived(metadata.tags);
-	const selected = $derived(tags[cursor]);
+	const rows = $derived(flatten(buildTree(tags), { repeats: true }));
+	const selected = $derived(rows[cursor]?.tag);
 	const ruleCounts = $derived.by(() => {
 		const m = new Map<string, number>();
 		for (const r of rules) if (r.tag_id) m.set(r.tag_id, (m.get(r.tag_id) ?? 0) + 1);
@@ -60,7 +63,7 @@
 	}
 
 	function selectId(id: string | undefined) {
-		const i = tags.findIndex((t) => t.id === id);
+		const i = rows.findIndex((r) => r.tag.id === id && !r.repeat);
 		if (i >= 0) cursor = i;
 	}
 
@@ -88,7 +91,9 @@
 		const p: Panel = { kind: 'delete', tag: t, items: null, error: '', busy: false };
 		panel = p;
 		try {
-			const page = await api.searchItems({ ...defaultFilter, tag: t.id ?? '' }, 1);
+			// Exact: the count is the assignments this delete removes, not the
+			// items the tag shows through its children.
+			const page = await api.searchItems({ ...defaultFilter, tag: t.id ?? '' }, 1, 0, true);
 			if (panel === p) panel = { ...p, items: page.total };
 		} catch {
 			// The confirmation says the count is unavailable.
@@ -120,10 +125,15 @@
 	function deleteLines(p: Extract<Panel, { kind: 'delete' }>): string[] {
 		const n = ruleCounts.get(p.tag.id ?? '') ?? 0;
 		const items = p.items === null ? 'every item that has it' : `${p.items} ${p.items === 1 ? 'item' : 'items'}`;
-		return [
-			`This also deletes its ${n} ${n === 1 ? 'rule' : 'rules'} and removes it from ${items}.`,
-			'Use edit (e) instead to rename or recolor it.'
+		const lines = [
+			`This also deletes its ${n} ${n === 1 ? 'rule' : 'rules'} and removes it from ${items}.`
 		];
+		const orphans = orphansOnDelete(tags, p.tag.id ?? '').length;
+		if (orphans > 0) {
+			lines.push(`${orphans} child ${orphans === 1 ? 'tag becomes' : 'tags become'} top-level.`);
+		}
+		lines.push('Use edit (e) instead to rename or recolor it.');
+		return lines;
 	}
 
 	function onaction(a: ManageAction) {
@@ -155,8 +165,8 @@
 
 <ManageView
 	view="tags"
-	items={tags}
-	key={(t) => t.id ?? ''}
+	items={rows}
+	key={(r) => r.key}
 	bind:cursor
 	panel={panel === null ? null : panel.kind === 'delete' ? 'confirm' : 'form'}
 	{tools}
@@ -165,17 +175,27 @@
 	{loaded}
 	{onaction}
 >
-	{#snippet row(t)}
-		<span class="chip">[<span style:color={safeColor(t.color)}>{oneLine(t.name)}</span>]</span>
-		<span class="color">{safeColor(t.color) ?? 'no color'}</span>
-		<span class="rules">{ruleCounts.get(t.id ?? '') ?? 0} rules</span>
+	{#snippet row(r)}
+		<span class="chip" class:repeat={r.repeat} style:padding-left="{r.depth * 2}ch"
+			>[<span style:color={safeColor(r.tag.color)}>{oneLine(r.tag.name)}</span>]</span
+		>
+		<span class="color">{safeColor(r.tag.color) ?? 'no color'}</span>
+		<span class="rules">{ruleCounts.get(r.tag.id ?? '') ?? 0} rules</span>
+		{#if r.repeat}<span class="also">also under another parent</span>{/if}
 	{/snippet}
 	{#snippet panelContent()}
 		{#if panel?.kind === 'add'}
-			<TagFormPanel initial={tagForm()} editing={false} onsave={save} oncancel={() => (panel = null)} />
+			<TagFormPanel initial={tagForm()} editing={false} {tags} onsave={save} oncancel={() => (panel = null)} />
 		{:else if panel?.kind === 'edit'}
 			{#key panel.tag.id}
-				<TagFormPanel initial={tagForm(panel.tag)} editing={true} onsave={save} oncancel={() => (panel = null)} />
+				<TagFormPanel
+					initial={tagForm(panel.tag)}
+					editing={true}
+					{tags}
+					selfId={panel.tag.id}
+					onsave={save}
+					oncancel={() => (panel = null)}
+				/>
 			{/key}
 		{:else if panel?.kind === 'delete'}
 			<ConfirmPanel
@@ -200,6 +220,14 @@
 		overflow: hidden;
 		text-overflow: ellipsis;
 		color: var(--dim);
+	}
+	.chip.repeat {
+		opacity: 0.55;
+	}
+	.also {
+		flex: none;
+		color: var(--dim);
+		opacity: 0.7;
 	}
 	.color {
 		flex: none;

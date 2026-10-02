@@ -132,7 +132,7 @@ func (f *fakeClient) AddTag(_ context.Context, req *pb.AddTagRequest, _ ...grpc.
 	if f.err != nil {
 		return nil, f.err
 	}
-	return &pb.Tag{Id: 5, Name: req.Name, Color: req.Color}, nil
+	return &pb.Tag{Id: 5, Name: req.Name, Color: req.Color, ParentIds: req.ParentIds}, nil
 }
 
 func (f *fakeClient) UpdateTag(_ context.Context, req *pb.UpdateTagRequest, _ ...grpc.CallOption) (*pb.Tag, error) {
@@ -140,7 +140,7 @@ func (f *fakeClient) UpdateTag(_ context.Context, req *pb.UpdateTagRequest, _ ..
 	if f.err != nil {
 		return nil, f.err
 	}
-	return &pb.Tag{Id: req.Id, Name: req.GetName(), Color: req.GetColor()}, nil
+	return &pb.Tag{Id: req.Id, Name: req.GetName(), Color: req.GetColor(), ParentIds: req.GetParents().GetIds()}, nil
 }
 
 func (f *fakeClient) RemoveTag(_ context.Context, req *pb.RemoveTagRequest, _ ...grpc.CallOption) (*emptypb.Empty, error) {

@@ -1,6 +1,6 @@
 # Tag tree plan: parent tags
 
-Status: **in progress**. Phases 1 (schema + db layer), 2 (proto, service, Hub), 3 (config seeding, CLI) and 4 (TUI) done.
+Status: **in progress**. Phases 1 (schema + db layer), 2 (proto, service, Hub), 3 (config seeding, CLI), 4 (TUI) and 5 (web) done.
 
 Tags can have parent tags. Filtering by a parent shows items tagged with the
 parent **or any tag below it**. Example:

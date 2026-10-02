@@ -65,6 +65,8 @@ export interface SourceBody {
 export interface TagBody {
 	name?: string;
 	color?: string;
+	/** On PATCH this replaces the parents; [] makes the tag top-level. */
+	parent_ids?: string[];
 }
 
 export interface RuleBody {
@@ -141,8 +143,13 @@ export interface Page {
 	total: number;
 }
 
-export async function searchItems(f: Filter, limit: number, offset = 0): Promise<Page> {
+/**
+ * With exact, a tag filter matches that tag only, not the tags below it
+ * (the tags view counts what deleting a tag removes this way).
+ */
+export async function searchItems(f: Filter, limit: number, offset = 0, exact = false): Promise<Page> {
 	const p = filterToParams(f);
+	if (exact && f.tag) p.set('tag_exact', '1');
 	p.set('limit', String(limit));
 	if (offset) p.set('offset', String(offset));
 	const r = await request<{ items?: Item[]; total?: number }>('GET', '/api/items?' + p.toString());

@@ -13,6 +13,7 @@ import type { RuleField, Source, Tag, TagRule } from './types';
 export const MAX_NAME = 200;
 export const MAX_ABBREVIATION = 16;
 export const MAX_TAG_NAME = 64;
+export const MAX_TAG_PARENTS = 16;
 export const MAX_URL_BYTES = 2048;
 export const MAX_PATTERN_BYTES = 1024;
 export const MIN_REFRESH_SEC = 60;
@@ -201,10 +202,12 @@ export function sourcePatchBody(orig: Source, f: SourceForm): SourceBody {
 export interface TagForm {
 	name: string;
 	color: string;
+	/** IDs of the parent tags. */
+	parent_ids: string[];
 }
 
 export function tagForm(t?: Tag): TagForm {
-	return { name: t?.name ?? '', color: t?.color ?? '' };
+	return { name: t?.name ?? '', color: t?.color ?? '', parent_ids: [...(t?.parent_ids ?? [])] };
 }
 
 export function validateTag(f: TagForm): Errors<TagForm> {
@@ -213,12 +216,14 @@ export function validateTag(f: TagForm): Errors<TagForm> {
 	if (name) e.name = name;
 	const color = colorError(f.color.trim());
 	if (color) e.color = color;
+	if (f.parent_ids.length > MAX_TAG_PARENTS) e.parent_ids = `at most ${MAX_TAG_PARENTS} parents`;
 	return e;
 }
 
 export function tagAddBody(f: TagForm): TagBody {
 	const body: TagBody = { name: f.name.trim() };
 	if (f.color.trim()) body.color = f.color.trim();
+	if (f.parent_ids.length > 0) body.parent_ids = [...f.parent_ids];
 	return body;
 }
 
@@ -226,6 +231,9 @@ export function tagPatchBody(orig: Tag, f: TagForm): TagBody {
 	const p: TagBody = {};
 	if (f.name.trim() !== (orig.name ?? '')) p.name = f.name.trim();
 	if (f.color.trim() !== (orig.color ?? '')) p.color = f.color.trim();
+	const was = [...(orig.parent_ids ?? [])].sort();
+	const now = [...f.parent_ids].sort();
+	if (was.length !== now.length || was.some((id, i) => id !== now[i])) p.parent_ids = [...f.parent_ids];
 	return p;
 }
 

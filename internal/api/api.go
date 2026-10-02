@@ -255,12 +255,19 @@ func (a *handlers) items(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	// tag=ID matches the tag and every tag below it; tag_exact=1 only the tag.
+	tagExact, err := parseBool(v, "tag_exact")
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	ctx, cancel := a.rpcContext(r)
 	defer cancel()
 	resp, err := a.client.Search(ctx, &pb.SearchRequest{
 		Query:        f.Query,
 		SourceId:     f.SourceID,
 		TagId:        f.TagID,
+		TagExact:     tagExact,
 		Sort:         f.Sort,
 		UnviewedOnly: f.UnviewedOnly,
 		Limit:        int32(limit),

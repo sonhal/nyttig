@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ApiError, isNotFound, removeRule, removeSource, removeTag } from './api';
+import { ApiError, isNotFound, removeRule, removeSource, removeTag, searchItems } from './api';
+import { defaultFilter } from './filter';
 
 function stubFetch(status: number, body?: unknown) {
 	const fn = vi.fn(async () =>
@@ -36,5 +37,29 @@ describe('removing something that does not exist', () => {
 		const err = await removeTag('7').catch((e: unknown) => e);
 		expect(isNotFound(err)).toBe(false);
 		expect(isNotFound(new Error('x'))).toBe(false);
+	});
+});
+
+describe('searchItems', () => {
+	const urlOf = (fn: ReturnType<typeof stubFetch>) => String((fn.mock.calls[0] as unknown[])[0]);
+
+	it('asks for a tag and its child tags by default', async () => {
+		const fn = stubFetch(200, { total: 3 });
+		await expect(searchItems({ ...defaultFilter, tag: '4' }, 1)).resolves.toEqual({ items: [], total: 3 });
+		const u = new URL(urlOf(fn), 'http://x');
+		expect(u.searchParams.get('tag')).toBe('4');
+		expect(u.searchParams.has('tag_exact')).toBe(false);
+	});
+
+	it('exact asks for the tag alone', async () => {
+		const fn = stubFetch(200, {});
+		await searchItems({ ...defaultFilter, tag: '4' }, 1, 0, true);
+		expect(new URL(urlOf(fn), 'http://x').searchParams.get('tag_exact')).toBe('1');
+	});
+
+	it('exact without a tag sends nothing extra', async () => {
+		const fn = stubFetch(200, {});
+		await searchItems(defaultFilter, 1, 0, true);
+		expect(new URL(urlOf(fn), 'http://x').searchParams.has('tag_exact')).toBe(false);
 	});
 });
