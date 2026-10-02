@@ -4,10 +4,6 @@ updates:
     directory: /
     schedule:
       interval: weekly
-    ignore:
-      # Replaced by the patched copy in third_party/ (see AGENT.md); a bump
-      # here would change nothing that gets built.
-      - dependency-name: github.com/mattn/go-sqlite3
     groups:
       go-dependencies:
         patterns: ["*"]

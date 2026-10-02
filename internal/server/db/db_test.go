@@ -2,6 +2,7 @@ package db
 
 import (
 	"path/filepath"
+	"regexp"
 	"testing"
 )
 
@@ -34,5 +35,27 @@ func TestOpen_MigratesAndSearches(t *testing.T) {
 	}
 	if total != 1 || len(items) != 1 || items[0].Title != "SQLite 3.47 released" {
 		t.Fatalf("SearchItems(sqlite) = %d items (total %d), want the SQLite item", len(items), total)
+	}
+}
+
+// TestOpen_ReportsFTS5AndVersion checks the startup probes Open relies on:
+// the compile-option query finds FTS5 in the library this test binary was
+// built against, and the version query returns a SQLite 3.x version.
+func TestOpen_ReportsFTS5AndVersion(t *testing.T) {
+	database, err := Open(filepath.Join(t.TempDir(), "nyttig.db"))
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer func() { _ = database.Close() }()
+
+	if err := requireFTS5(database); err != nil {
+		t.Fatalf("requireFTS5: %v", err)
+	}
+	v, err := SQLiteVersion(database)
+	if err != nil {
+		t.Fatalf("SQLiteVersion: %v", err)
+	}
+	if !regexp.MustCompile(`^3\.\d+\.\d+$`).MatchString(v) {
+		t.Fatalf("SQLiteVersion = %q, want 3.x.y", v)
 	}
 }

@@ -144,10 +144,24 @@ func UpdateSource(db *sql.DB, s *Source) error {
 	return err
 }
 
-// DeleteSource removes a source and all its related data (cascading).
-func DeleteSource(db *sql.DB, id int64) error {
-	_, err := db.Exec(`DELETE FROM sources WHERE id = ?`, id)
-	return err
+// DeleteSource removes a source and all its related data (cascading). It
+// reports whether a source with that ID existed.
+func DeleteSource(db *sql.DB, id int64) (bool, error) {
+	return deleteByID(db, `DELETE FROM sources WHERE id = ?`, id)
+}
+
+// deleteByID runs a DELETE with one ID argument and reports whether it
+// removed a row.
+func deleteByID(db *sql.DB, query string, id int64) (bool, error) {
+	res, err := db.Exec(query, id)
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	return n > 0, nil
 }
 
 // UpdateSourceLastFetch updates the last_fetch timestamp for a source.

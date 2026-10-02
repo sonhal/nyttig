@@ -4,6 +4,7 @@
 package fetcher
 
 import (
+	"bytes"
 	"database/sql"
 	"encoding/xml"
 	"fmt"
@@ -14,6 +15,8 @@ import (
 	"strings"
 	"time"
 	"unicode"
+
+	"golang.org/x/net/html/charset"
 
 	"github.com/sonhal/nyttig/internal/server/db"
 )
@@ -173,6 +176,7 @@ func fetchInternal(database *sql.DB, src *db.Source, client doer) (*FetchResult,
 	}
 
 	// 5. Insert new items with deduplication.
+	var insertErrs []string
 	for _, entry := range entries {
 		if entry.GUID == "" && entry.Link == "" {
 			continue
@@ -201,8 +205,9 @@ func fetchInternal(database *sql.DB, src *db.Source, client doer) (*FetchResult,
 
 		id, inserted, err := db.InsertItem(database, item)
 		if err != nil {
-			// Log but continue processing remaining entries.
-			result.FetchError = fmt.Sprintf("insert item %q: %v", dedupKey, err)
+			// Keep going so one bad entry doesn't drop the rest; the
+			// failure is reported through the source's fetch_error below.
+			insertErrs = append(insertErrs, fmt.Sprintf("insert item %q: %v", dedupKey, err))
 			continue
 		}
 		if inserted {
@@ -211,9 +216,17 @@ func fetchInternal(database *sql.DB, src *db.Source, client doer) (*FetchResult,
 		}
 	}
 
-	// 6. Update source fetch status.
+	if len(insertErrs) > 0 {
+		result.FetchError = insertErrs[0]
+		if len(insertErrs) > 1 {
+			result.FetchError += fmt.Sprintf(" (and %d more)", len(insertErrs)-1)
+		}
+	}
+
+	// 6. Update source fetch status. FetchError is empty when every entry
+	// was handled, which clears an earlier error.
 	_ = db.UpdateSourceLastFetch(database, src.ID, time.Now())
-	_ = db.UpdateSourceFetchError(database, src.ID, "")
+	_ = db.UpdateSourceFetchError(database, src.ID, result.FetchError)
 
 	return result, nil
 }
@@ -251,10 +264,20 @@ func parseFeed(body []byte) ([]parsedEntry, error) {
 	return nil, fmt.Errorf("unrecognized feed format")
 }
 
+// decodeXML is xml.Unmarshal with support for the encoding named in the XML
+// declaration. Plain Unmarshal fails on anything but UTF-8 ("encoding
+// ISO-8859-1 declared but Decoder.CharsetReader is nil"), and plenty of
+// feeds still declare ISO-8859-1 or windows-1252.
+func decodeXML(body []byte, v any) error {
+	dec := xml.NewDecoder(bytes.NewReader(body))
+	dec.CharsetReader = charset.NewReaderLabel
+	return dec.Decode(v)
+}
+
 // parseRSS parses an RSS 2.0 XML feed into normalized entries.
 func parseRSS(body []byte) ([]parsedEntry, error) {
 	var feed rssFeed
-	if err := xml.Unmarshal(body, &feed); err != nil {
+	if err := decodeXML(body, &feed); err != nil {
 		return nil, fmt.Errorf("rss parse: %w", err)
 	}
 
@@ -281,7 +304,7 @@ func parseRSS(body []byte) ([]parsedEntry, error) {
 // parseAtom parses an Atom 1.0 XML feed into normalized entries.
 func parseAtom(body []byte) ([]parsedEntry, error) {
 	var feed atomFeed
-	if err := xml.Unmarshal(body, &feed); err != nil {
+	if err := decodeXML(body, &feed); err != nil {
 		return nil, fmt.Errorf("atom parse: %w", err)
 	}
 
@@ -342,11 +365,21 @@ var rssDateFormats = []string{
 	"Mon, 2 Jan 2006 15:04:05 -0700",
 }
 
+// normalizeTime converts a parsed feed date to UTC and drops sub-second
+// precision. The database stores times as text and sorts them as text, so
+// every stored value must have the same shape: the driver writes a time in
+// its own UTC offset and with however many fractional digits it has, which
+// would make "10:00:00+02:00" sort above "09:00:00+00:00" and
+// "09:00:00.5+00:00" below "09:00:00+00:00".
+func normalizeTime(t time.Time) time.Time {
+	return t.UTC().Truncate(time.Second)
+}
+
 func parseRSSDate(s string) (time.Time, error) {
 	s = strings.TrimSpace(s)
 	for _, layout := range rssDateFormats {
 		if t, err := time.Parse(layout, s); err == nil {
-			return t, nil
+			return normalizeTime(t), nil
 		}
 	}
 	return time.Time{}, fmt.Errorf("unrecognized RSS date %q", s)
@@ -364,7 +397,7 @@ func parseAtomDate(s string) (time.Time, error) {
 	s = strings.TrimSpace(s)
 	for _, layout := range atomDateFormats {
 		if t, err := time.Parse(layout, s); err == nil {
-			return t, nil
+			return normalizeTime(t), nil
 		}
 	}
 	return time.Time{}, fmt.Errorf("unrecognized Atom date %q", s)

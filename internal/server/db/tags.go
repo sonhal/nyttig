@@ -74,10 +74,10 @@ func ListTags(db *sql.DB) ([]*Tag, error) {
 	return tags, rows.Err()
 }
 
-// DeleteTag removes a tag and all its associated rules and item_tags (cascading).
-func DeleteTag(db *sql.DB, id int64) error {
-	_, err := db.Exec(`DELETE FROM tags WHERE id = ?`, id)
-	return err
+// DeleteTag removes a tag and all its associated rules and item_tags
+// (cascading). It reports whether a tag with that ID existed.
+func DeleteTag(db *sql.DB, id int64) (bool, error) {
+	return deleteByID(db, `DELETE FROM tags WHERE id = ?`, id)
 }
 
 // ── Tag Rules ───────────────────────────────────────────────
@@ -152,10 +152,10 @@ func ListTagRules(db *sql.DB, sourceID *int64) ([]*TagRule, error) {
 	return rules, rows.Err()
 }
 
-// DeleteTagRule removes a tag rule by ID.
-func DeleteTagRule(db *sql.DB, id int64) error {
-	_, err := db.Exec(`DELETE FROM tag_rules WHERE id = ?`, id)
-	return err
+// DeleteTagRule removes a tag rule by ID. It reports whether a rule with
+// that ID existed.
+func DeleteTagRule(db *sql.DB, id int64) (bool, error) {
+	return deleteByID(db, `DELETE FROM tag_rules WHERE id = ?`, id)
 }
 
 // ── Item-Tag Association ────────────────────────────────────

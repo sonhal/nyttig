@@ -134,15 +134,28 @@ func (s *Service) AddSource(ctx context.Context, req *pb.AddSourceRequest) (*pb.
 	return dbSourceToProto(created), nil
 }
 
-// RemoveSource deletes a feed source and all its related data.
+// RemoveSource deletes a feed source and all its related data. An unknown
+// ID is NotFound.
 func (s *Service) RemoveSource(ctx context.Context, req *pb.RemoveSourceRequest) (*emptypb.Empty, error) {
+	existing, err := db.GetSource(s.db, req.Id)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "get source: %v", err)
+	}
+	if existing == nil {
+		return nil, status.Errorf(codes.NotFound, "source %d not found", req.Id)
+	}
+
 	// Notify scheduler before deleting from DB.
 	if s.onSourceRemoved != nil {
 		s.onSourceRemoved(req.Id)
 	}
 
-	if err := db.DeleteSource(s.db, req.Id); err != nil {
+	deleted, err := db.DeleteSource(s.db, req.Id)
+	if err != nil {
 		return nil, status.Errorf(codes.Internal, "delete source: %v", err)
+	}
+	if !deleted { // removed by another call since the lookup
+		return nil, status.Errorf(codes.NotFound, "source %d not found", req.Id)
 	}
 	return &emptypb.Empty{}, nil
 }
@@ -323,9 +336,14 @@ func (s *Service) UpdateTag(ctx context.Context, req *pb.UpdateTagRequest) (*pb.
 }
 
 // RemoveTag deletes a tag and all its associated rules and item associations.
+// An unknown ID is NotFound.
 func (s *Service) RemoveTag(ctx context.Context, req *pb.RemoveTagRequest) (*emptypb.Empty, error) {
-	if err := db.DeleteTag(s.db, req.Id); err != nil {
+	deleted, err := db.DeleteTag(s.db, req.Id)
+	if err != nil {
 		return nil, status.Errorf(codes.Internal, "delete tag: %v", err)
+	}
+	if !deleted {
+		return nil, status.Errorf(codes.NotFound, "tag %d not found", req.Id)
 	}
 	return &emptypb.Empty{}, nil
 }
@@ -383,10 +401,14 @@ func (s *Service) AddTagRule(ctx context.Context, req *pb.AddTagRuleRequest) (*p
 	return dbTagRuleToProto(created), nil
 }
 
-// RemoveTagRule deletes a tag rule by ID.
+// RemoveTagRule deletes a tag rule by ID. An unknown ID is NotFound.
 func (s *Service) RemoveTagRule(ctx context.Context, req *pb.RemoveTagRuleRequest) (*emptypb.Empty, error) {
-	if err := db.DeleteTagRule(s.db, req.Id); err != nil {
+	deleted, err := db.DeleteTagRule(s.db, req.Id)
+	if err != nil {
 		return nil, status.Errorf(codes.Internal, "delete tag rule: %v", err)
+	}
+	if !deleted {
+		return nil, status.Errorf(codes.NotFound, "tag rule %d not found", req.Id)
 	}
 	return &emptypb.Empty{}, nil
 }
@@ -526,13 +548,32 @@ type sub struct {
 type Hub struct {
 	mu   sync.Mutex
 	subs map[*sub]struct{}
+
+	closeOnce sync.Once
+	done      chan struct{} // closed by Close
 }
 
 // NewHub creates a Hub.
 func NewHub() *Hub {
 	return &Hub{
 		subs: make(map[*sub]struct{}),
+		done: make(chan struct{}),
 	}
+}
+
+// Close ends every active StreamItems call, and any that starts later, with
+// codes.Unavailable. The daemon calls it before grpc.Server.GracefulStop:
+// GracefulStop waits for running RPCs, and a stream only ends when its
+// client leaves, so without Close a connected client holds up every
+// shutdown until the timeout. Clients reconnect on Unavailable. Close is
+// idempotent, and Push keeps working (it just has no one to deliver to).
+func (h *Hub) Close() {
+	h.closeOnce.Do(func() { close(h.done) })
+}
+
+// errHubClosed is what StreamItems returns once the hub is closed.
+func errHubClosed() error {
+	return status.Error(codes.Unavailable, "server shutting down")
 }
 
 // subscribe registers a new subscriber and returns its send channel.
@@ -580,6 +621,16 @@ func (h *Hub) Push(item *pb.Item) {
 //     Reset, re-sending matching items, then Complete.
 func (s *Service) StreamItems(stream pb.Nyttig_StreamItemsServer) error {
 	ctx := stream.Context()
+	hubDone := s.hub.done
+
+	// A stream that starts after Close ends at once. Checked up front
+	// because the selects below pick at random among ready cases.
+	select {
+	case <-hubDone:
+		return errHubClosed()
+	default:
+	}
+
 	sub := s.hub.subscribe(ctx)
 	defer s.hub.unsubscribe(sub)
 
@@ -615,6 +666,8 @@ func (s *Service) StreamItems(stream pb.Nyttig_StreamItemsServer) error {
 			return nil
 		}
 		return err
+	case <-hubDone:
+		return errHubClosed()
 	case <-ctx.Done():
 		return ctx.Err()
 	}
@@ -663,6 +716,9 @@ func (s *Service) StreamItems(stream pb.Nyttig_StreamItemsServer) error {
 				return nil
 			}
 			return err
+
+		case <-hubDone:
+			return errHubClosed()
 
 		case <-ctx.Done():
 			return ctx.Err()

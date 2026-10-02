@@ -1,0 +1,2 @@
+-- No-op: the original UTC offsets and fractional seconds are not recoverable,
+-- and the normalized values are still valid timestamps.

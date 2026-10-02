@@ -245,12 +245,12 @@ func TestFetch_Atom_Feed(t *testing.T) {
 		t.Fatalf("expected 2 items in DB, got %d", n)
 	}
 
-	// Verify GUID-based dedup (Atom uses <id> element which gofeed maps to GUID).
+	// Verify GUID-based dedup (Atom's <id> element is the GUID).
 	first, err := db.GetItem(database, result.NewItems[0].ID)
 	if err != nil {
 		t.Fatalf("GetItem: %v", err)
 	}
-	// Atom GUIDs (UUIDs) should be used directly by gofeed.
+	// Atom GUIDs (UUIDs) should be used directly.
 	if first.GUID == "" {
 		t.Error("expected non-empty GUID from Atom id element")
 	}
@@ -764,5 +764,232 @@ newlines&#155;31m</title><link>http://x/1</link><guid>1</guid>
 	}
 	if want := "ab"; e.Author != want {
 		t.Errorf("Author = %q, want %q", e.Author, want)
+	}
+}
+
+func TestParseDates_NormalizedToUTCWholeSeconds(t *testing.T) {
+	want := time.Date(2024, time.June, 15, 8, 30, 0, 0, time.UTC)
+
+	rss := []struct{ name, in string }{
+		{"RFC1123Z offset", "Sat, 15 Jun 2024 10:30:00 +0200"},
+		{"RFC1123 GMT", "Sat, 15 Jun 2024 08:30:00 GMT"},
+		{"RFC822Z", "15 Jun 24 10:30 +0200"},
+	}
+	for _, tc := range rss {
+		t.Run("rss/"+tc.name, func(t *testing.T) {
+			got, err := parseRSSDate(tc.in)
+			if err != nil {
+				t.Fatalf("parseRSSDate: %v", err)
+			}
+			if got.Location() != time.UTC {
+				t.Errorf("location = %v, want UTC", got.Location())
+			}
+			if !got.Equal(want) {
+				t.Errorf("got %v, want %v", got, want)
+			}
+		})
+	}
+
+	atom := []struct{ name, in string }{
+		{"offset", "2024-06-15T10:30:00+02:00"},
+		{"zulu", "2024-06-15T08:30:00Z"},
+		{"fraction", "2024-06-15T08:30:00.75Z"},
+		{"fraction with offset", "2024-06-15T10:30:00.999+02:00"},
+		{"no zone", "2024-06-15T08:30:00"},
+	}
+	for _, tc := range atom {
+		t.Run("atom/"+tc.name, func(t *testing.T) {
+			got, err := parseAtomDate(tc.in)
+			if err != nil {
+				t.Fatalf("parseAtomDate: %v", err)
+			}
+			if got.Location() != time.UTC {
+				t.Errorf("location = %v, want UTC", got.Location())
+			}
+			if got.Nanosecond() != 0 {
+				t.Errorf("nanoseconds = %d, want 0", got.Nanosecond())
+			}
+			if !got.Equal(want) {
+				t.Errorf("got %v, want %v", got, want)
+			}
+		})
+	}
+}
+
+// TestFetch_StoresPublishedInUTC checks the text that reaches the database:
+// feeds in different time zones must produce values that sort chronologically
+// as text.
+func TestFetch_StoresPublishedInUTC(t *testing.T) {
+	database := setupDB(t)
+	defer func() { _ = database.Close() }()
+
+	feed := `<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <entry><title>plus two</title><id>a</id><link href="https://example.com/a"/><published>2024-06-15T10:00:00+02:00</published></entry>
+  <entry><title>zulu</title><id>b</id><link href="https://example.com/b"/><published>2024-06-15T09:00:00.5Z</published></entry>
+</feed>`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(feed))
+	}))
+	defer srv.Close()
+
+	src := insertTestSource(t, database, "Zones", srv.URL)
+	if res, err := Fetch(database, src); err != nil || res.FetchError != "" {
+		t.Fatalf("Fetch: %v / %q", err, res.FetchError)
+	}
+
+	// published || '' drops the column type, so the driver returns the stored text.
+	rows, err := database.Query(`SELECT title, published || '' FROM items ORDER BY published DESC`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = rows.Close() }()
+	var titles, stored []string
+	for rows.Next() {
+		var title, pub string
+		if err := rows.Scan(&title, &pub); err != nil {
+			t.Fatal(err)
+		}
+		titles = append(titles, title)
+		stored = append(stored, pub)
+	}
+	if got := strings.Join(titles, ","); got != "zulu,plus two" {
+		t.Errorf("order = %s, want zulu,plus two (09:00Z is newer than 08:00Z)", got)
+	}
+	for _, s := range stored {
+		if !strings.HasSuffix(s, "+00:00") || strings.Contains(s, ".") {
+			t.Errorf("stored published %q is not UTC with whole seconds", s)
+		}
+	}
+}
+
+// TestFetch_InsertFailureIsRecorded: an insert that fails must stay visible
+// as the source's fetch_error instead of being cleared by the status update
+// that follows the loop.
+func TestFetch_InsertFailureIsRecorded(t *testing.T) {
+	database := setupDB(t)
+	defer func() { _ = database.Close() }()
+
+	// Make every insert into items fail. RAISE(ABORT) is not suppressed by
+	// INSERT OR IGNORE.
+	if _, err := database.Exec(`CREATE TRIGGER reject_items BEFORE INSERT ON items
+		BEGIN SELECT RAISE(ABORT, 'disk full'); END`); err != nil {
+		t.Fatalf("create trigger: %v", err)
+	}
+
+	feed := `<?xml version="1.0"?><rss version="2.0"><channel><title>T</title>
+<item><title>One</title><link>https://example.com/1</link><guid>1</guid></item>
+<item><title>Two</title><link>https://example.com/2</link><guid>2</guid></item>
+</channel></rss>`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(feed))
+	}))
+	defer srv.Close()
+
+	src := insertTestSource(t, database, "Failing", srv.URL)
+	// A stale error from an earlier fetch must be replaced, not kept or cleared.
+	if err := db.UpdateSourceFetchError(database, src.ID, "old error"); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := Fetch(database, src)
+	if err != nil {
+		t.Fatalf("Fetch: %v", err)
+	}
+	if !strings.Contains(result.FetchError, "disk full") || !strings.Contains(result.FetchError, "and 1 more") {
+		t.Errorf("result.FetchError = %q, want the first insert error and a count", result.FetchError)
+	}
+	if len(result.NewItems) != 0 {
+		t.Errorf("NewItems = %d, want 0", len(result.NewItems))
+	}
+
+	updated, err := db.GetSource(database, src.ID)
+	if err != nil {
+		t.Fatalf("GetSource: %v", err)
+	}
+	if updated.FetchError == nil || *updated.FetchError != result.FetchError {
+		t.Errorf("source fetch_error = %v, want %q", updated.FetchError, result.FetchError)
+	}
+
+	// Once inserts work again, the next fetch clears the error.
+	if _, err := database.Exec(`DROP TRIGGER reject_items`); err != nil {
+		t.Fatal(err)
+	}
+	result, err = Fetch(database, src)
+	if err != nil || result.FetchError != "" || len(result.NewItems) != 2 {
+		t.Fatalf("second Fetch = %+v, %v", result, err)
+	}
+	updated, err = db.GetSource(database, src.ID)
+	if err != nil {
+		t.Fatalf("GetSource: %v", err)
+	}
+	if updated.FetchError != nil && *updated.FetchError != "" {
+		t.Errorf("source fetch_error = %q after a clean fetch, want empty", *updated.FetchError)
+	}
+}
+
+// TestParseFeed_NonUTF8Encodings feeds bodies whose bytes are not UTF-8.
+func TestParseFeed_NonUTF8Encodings(t *testing.T) {
+	tests := []struct {
+		name  string
+		body  []byte
+		title string
+	}{
+		{
+			name:  "RSS ISO-8859-1",
+			body:  []byte("<?xml version=\"1.0\" encoding=\"ISO-8859-1\"?><rss version=\"2.0\"><channel><title>T</title><item><title>Caf\xe9 \xc5rhus</title><link>http://x/1</link><guid>1</guid></item></channel></rss>"),
+			title: "Café Århus",
+		},
+		{
+			name:  "Atom windows-1252",
+			body:  []byte("<?xml version=\"1.0\" encoding=\"windows-1252\"?><feed xmlns=\"http://www.w3.org/2005/Atom\"><entry><title>Caf\xe9 \x93quoted\x94</title><id>1</id><link href=\"http://x/1\"/></entry></feed>"),
+			title: "Café “quoted”",
+		},
+		{
+			name:  "RSS UTF-8 still works",
+			body:  []byte("<?xml version=\"1.0\" encoding=\"UTF-8\"?><rss version=\"2.0\"><channel><title>T</title><item><title>Café</title><link>http://x/1</link><guid>1</guid></item></channel></rss>"),
+			title: "Café",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			entries, err := parseFeed(tc.body)
+			if err != nil {
+				t.Fatalf("parseFeed: %v", err)
+			}
+			if len(entries) != 1 || entries[0].Title != tc.title {
+				t.Fatalf("entries = %+v, want one titled %q", entries, tc.title)
+			}
+		})
+	}
+
+	if _, err := parseFeed([]byte(`<?xml version="1.0" encoding="no-such-charset"?><rss version="2.0"><channel></channel></rss>`)); err == nil {
+		t.Error("an unknown encoding should be an error, not silently accepted")
+	}
+}
+
+// TestFetch_ISO88591Feed runs a Latin-1 feed through the whole fetch path.
+func TestFetch_ISO88591Feed(t *testing.T) {
+	database := setupDB(t)
+	defer func() { _ = database.Close() }()
+
+	body := []byte("<?xml version=\"1.0\" encoding=\"ISO-8859-1\"?><rss version=\"2.0\"><channel><title>T</title><item><title>Caf\xe9</title><link>http://x/1</link><guid>1</guid></item></channel></rss>")
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/rss+xml; charset=ISO-8859-1")
+		_, _ = w.Write(body)
+	}))
+	defer srv.Close()
+
+	src := insertTestSource(t, database, "Latin", srv.URL)
+	result, err := Fetch(database, src)
+	if err != nil || result.FetchError != "" {
+		t.Fatalf("Fetch = %v, %q", err, result.FetchError)
+	}
+	if len(result.NewItems) != 1 || result.NewItems[0].Title != "Café" {
+		t.Fatalf("NewItems = %+v, want title Café", result.NewItems)
+	}
+	item, err := db.GetItem(database, result.NewItems[0].ID)
+	if err != nil || item.Title != "Café" {
+		t.Errorf("stored title = %v (%v), want Café", item, err)
 	}
 }

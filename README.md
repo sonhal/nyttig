@@ -26,17 +26,25 @@ nyttig-web       web client app — the SvelteKit app in web/, served by Node
 ```bash
 git clone https://github.com/sonhal/nyttig.git
 cd nyttig
-go install ./cmd/nyttigd ./cmd/nyttig
+go install -tags sqlite_fts5 ./cmd/nyttigd ./cmd/nyttig
 ```
 
-Requires Go 1.26+ and a C compiler (cgo), since SQLite is compiled in.
-The web client's app also needs Node.js 22+ (and pnpm to build it); see
-[Web Client](#web-client).
+Requires Go 1.26+ and a C compiler, since the SQLite driver uses cgo. The
+`sqlite_fts5` build tag is required: it compiles the driver's bundled SQLite
+with the FTS5 extension the schema needs. Without it the binary builds, but
+the daemon stops at startup with a message saying so. The web client's app
+also needs Node.js 22+ (and pnpm to build it); see [Web Client](#web-client).
 
-`go install github.com/sonhal/nyttig/cmd/...@latest` does not work: the module
-uses a `replace` directive for its vendored SQLite driver, which Go refuses for
-remote installs. FTS5 is enabled in that driver by default, so no build tags are
-needed.
+A remote install works the same way:
+
+```bash
+go install -tags sqlite_fts5 github.com/sonhal/nyttig/cmd/...@latest
+```
+
+To link the operating system's SQLite instead of the bundled copy, build with
+`-tags libsqlite3` (it needs the `libsqlite3-dev` headers). The release
+bundles are built that way so the server's package manager keeps SQLite
+patched; see [SQLite](deploy/README.md#sqlite) in the deploy guide.
 
 ## Quick Start
 
@@ -300,7 +308,7 @@ nyttig search          [-tag <name|id>] [-s source_id] [-l limit] [-offset N] [-
 nyttig refresh         [-id <source_id>]   # omit -id to refresh all
 ```
 
-Each subcommand calls the corresponding gRPC RPC against the daemon. The daemon must be running for these to work.
+Each subcommand calls the corresponding gRPC RPC against the daemon. The daemon must be running for these to work. The `remove-*` subcommands fail with a `NotFound` error (exit status 1) when the ID does not exist.
 
 `update-source` and `update-tag` change only the flags you pass. Pass
 `-color ''` or `-abbreviation ''` to clear a value. Changing a source's URL or
@@ -694,6 +702,10 @@ port 9090, backups and upgrades), see [`deploy/README.md`](deploy/README.md).
 
 Nyttig uses SQLite with FTS5 for full-text search. The default database path is `~/.local/share/nyttig/nyttig.db`. The database is created and migrated automatically on first daemon start.
 
+Which SQLite library the daemon runs with is decided at build time (see
+[Install](#install)); the startup log line `database opened` shows its version
+as `sqlite_version`, and the daemon refuses to start if that library lacks FTS5.
+
 ### Schema
 
 | Table         | Purpose                                           |
@@ -705,6 +717,17 @@ Nyttig uses SQLite with FTS5 for full-text search. The default database path is 
 | `item_tags`   | Many-to-many join between items and tags          |
 | `view_state`  | Per-item view tracking (row exists = viewed)      |
 | `items_fts`   | FTS5 virtual table for full-text search           |
+
+Item dates (`items.published`) are stored in UTC with whole seconds
+(`YYYY-MM-DD HH:MM:SS+00:00`, whatever offset the feed used), because the
+newest-first ordering sorts that column as text. Two indexes serve the hot
+queries: `idx_items_published` on `items(published DESC, fetched_at DESC)`
+matches the feed's sort order, and `idx_item_tags_tag_id` on
+`item_tags(tag_id)` serves tag filters. (`UNIQUE(source_id, guid)` already
+indexes `source_id`.)
+
+Removing a source, tag or tag rule that does not exist fails with gRPC
+`NotFound`, which nyttig-api returns as HTTP 404.
 
 ## Technology Stack
 
@@ -718,7 +741,7 @@ Nyttig uses SQLite with FTS5 for full-text search. The default database path is 
 | Database      | SQLite with FTS5                    |
 | Migrations    | Embedded SQL files                  |
 | Configuration | TOML                                |
-| Feed parsing  | `encoding/xml` (RSS 2.0 / Atom)     |
+| Feed parsing  | `encoding/xml` (RSS 2.0 / Atom), any encoding the feed declares |
 | Logging       | `slog` with JSON output             |
 
 ## License

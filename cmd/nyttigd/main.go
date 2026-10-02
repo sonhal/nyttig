@@ -138,7 +138,12 @@ func main() {
 		os.Exit(1)
 	}
 	defer database.Close()
-	logger.Info("database opened", "dsn", dsn)
+	sqliteVersion, err := db.SQLiteVersion(database)
+	if err != nil {
+		logger.Error("cannot read sqlite version", "error", err)
+		os.Exit(1)
+	}
+	logger.Info("database opened", "dsn", dsn, "sqlite_version", sqliteVersion)
 
 	// ── Seed from config ─────────────────────────────────────────────────
 	// Idempotently insert sources/tags/tag_rules declared in the config file.
@@ -297,6 +302,12 @@ func main() {
 	// Stop the scheduler (cancels all source goroutines).
 	sched.Stop()
 	logger.Info("scheduler stopped")
+
+	// End the StreamItems streams first. GracefulStop waits for running RPCs
+	// and a stream lasts until its client leaves, so with a TUI or browser
+	// connected it would always run into the timeout below. Clients see
+	// Unavailable and reconnect to the next daemon.
+	hub.Close()
 
 	// Graceful shutdown with timeout.
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

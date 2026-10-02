@@ -14,6 +14,11 @@ export class ApiError extends Error {
 	}
 }
 
+/** True when the daemon says the thing (source, tag, rule) does not exist. */
+export function isNotFound(e: unknown): boolean {
+	return e instanceof ApiError && e.status === 404;
+}
+
 async function request<T>(method: string, path: string, body?: unknown, signal?: AbortSignal): Promise<T> {
 	const init: RequestInit = { method, headers: { Accept: 'application/json' }, cache: 'no-store', signal };
 	if (method !== 'GET') {
