@@ -252,8 +252,9 @@ why `go install github.com/sonhal/nyttig/cmd/...@latest` doesn't work.
 
 ### CI
 
-`.github/workflows/ci.yml` runs on pull requests and on pushes to `main`, all
-on `ubuntu-latest`, with the Go version taken from `go.mod`:
+`.github/workflows/ci.yml` runs on pull requests, on pushes to `main` and on
+`v*` tags, on `ubuntu-latest` (the Build job in a `golang:1.26-trixie`
+container), with the Go version taken from `go.mod`:
 
 | Job | What it checks |
 |---|---|
@@ -261,8 +262,9 @@ on `ubuntu-latest`, with the Go version taken from `go.mod`:
 | Generated code | `buf generate` leaves `internal/proto` unchanged |
 | Test | `go test -race -shuffle=on` with coverage |
 | Web | `pnpm install --frozen-lockfile`, svelte-check, vitest, vite build, Playwright end-to-end; uploads the app build (`nyttig-web`) |
-| Build | Builds the three binaries; runs only after Lint, Test and Web pass |
+| Build | Builds the three binaries in Debian trixie (glibc of the servers, see `deploy/README.md`); runs only after Lint, Test and Web pass; stamps a `v*` tag into `internal/version.Version` with `-ldflags -X` (other builds report the git pseudo-version); uploads `nyttig-linux-amd64` |
 | Vulnerability check | `govulncheck ./...` against the code paths the binaries call |
+| Release | `v*` tags only, after every other job passes: bundles the binaries, the app build, `deploy/` and `sample_config.toml` into `nyttig-<tag>-linux-amd64.tar.gz`, adds `SHA256SUMS` and a build provenance attestation, and publishes a GitHub Release (a tag with a hyphen is a pre-release) |
 
 - golangci-lint runs with `only-new-issues: true` because the code has a
   backlog of existing findings (mostly unchecked `Close()` errors). Don't add
@@ -271,6 +273,11 @@ on `ubuntu-latest`, with the Go version taken from `go.mod`:
 - The govulncheck job sets `go-version-input: ""`. Without it the action uses
   the latest stable Go instead of `go.mod`'s, so it would scan a different
   standard library from the one the binaries are built with.
+- The Build job's `golang:1.26-trixie` image only supplies Debian's glibc and
+  gcc; the Go version still comes from `go.mod`'s `toolchain` line. Change
+  the image when the servers move to a newer Debian release, and never to a
+  newer one than they run: a cgo binary needs the glibc it was built against
+  or newer.
 
 ### Regenerating protobuf code
 

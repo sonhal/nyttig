@@ -21,6 +21,7 @@ import (
 	"github.com/sonhal/nyttig/internal/api"
 	"github.com/sonhal/nyttig/internal/client"
 	pb "github.com/sonhal/nyttig/internal/proto/nyttig/v1"
+	"github.com/sonhal/nyttig/internal/version"
 )
 
 func main() {
@@ -36,6 +37,7 @@ type options struct {
 	allowPublicListen bool
 	origin            string
 	logLevel          string
+	showVersion       bool
 	client            client.Options
 }
 
@@ -51,8 +53,12 @@ func parseFlags(args []string) (options, error) {
 	fs.StringVar(&o.client.TLSKey, "tls-key", "", "Client TLS private key (PEM)")
 	fs.StringVar(&o.client.TLSCA, "tls-ca", "", "CA bundle (PEM) used to verify the daemon's certificate")
 	fs.StringVar(&o.client.ServerName, "tls-server-name", "", "Override the name verified against the daemon's certificate")
+	fs.BoolVar(&o.showVersion, "version", false, "Print the version and exit")
 	if err := fs.Parse(args); err != nil {
 		return o, err
+	}
+	if o.showVersion {
+		return o, nil
 	}
 	if fs.NArg() > 0 {
 		return o, fmt.Errorf("unexpected arguments: %v", fs.Args())
@@ -76,6 +82,10 @@ func run(args []string) error {
 			return nil
 		}
 		return err
+	}
+	if o.showVersion {
+		fmt.Println(version.String())
+		return nil
 	}
 
 	var level slog.Level
@@ -121,7 +131,7 @@ func run(args []string) error {
 	// connections. Request bodies are size-capped and SSE writes carry
 	// their own deadline instead.
 
-	logger.Info("nyttig-api listening", "addr", ln.Addr().String(), "origin", o.origin, "daemon", o.client.Addr)
+	logger.Info("nyttig-api listening", "version", version.String(), "addr", ln.Addr().String(), "origin", o.origin, "daemon", o.client.Addr)
 
 	errCh := make(chan error, 1)
 	go func() { errCh <- srv.Serve(ln) }()
