@@ -375,8 +375,6 @@ pattern for new update RPCs rather than treating zero values as "unset".
   the ticker exists yet, and `fakeClock.deliverAllN` only reaches tickers that
   already exist. Call `clock.waitForTickers(t, n)` before `deliverAllN`, or the
   test will be flaky.
-- A few comments in `fetcher/fetch_test.go` still mention gofeed; the project
-  doesn't use it (parsing is `encoding/xml`).
 - The end-to-end tests share one daemon across both viewports, so the
   management tests (`e2e/manage.spec.ts`) create their own sources, tags
   and rules (named after the Playwright project) and delete them again,

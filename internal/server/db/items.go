@@ -46,10 +46,19 @@ type ItemFilter struct {
 
 // InsertItem inserts a new item. Returns (itemID, inserted, error).
 // inserted is false when the item already exists (UNIQUE constraint).
+//
+// Published is stored in UTC with whole seconds, whatever the caller passes.
+// ListItems sorts the column as text, which is only chronological when every
+// value has the same shape ("YYYY-MM-DD HH:MM:SS+00:00"; see migration 3).
 func InsertItem(db *sql.DB, item *Item) (int64, bool, error) {
+	var published *time.Time
+	if item.Published != nil {
+		p := item.Published.UTC().Truncate(time.Second)
+		published = &p
+	}
 	result, err := db.Exec(`INSERT OR IGNORE INTO items (source_id, guid, link, title, description, author, published)
 		VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		item.SourceID, item.GUID, item.Link, item.Title, item.Description, item.Author, item.Published)
+		item.SourceID, item.GUID, item.Link, item.Title, item.Description, item.Author, published)
 	if err != nil {
 		return 0, false, err
 	}

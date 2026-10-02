@@ -245,12 +245,12 @@ func TestFetch_Atom_Feed(t *testing.T) {
 		t.Fatalf("expected 2 items in DB, got %d", n)
 	}
 
-	// Verify GUID-based dedup (Atom uses <id> element which gofeed maps to GUID).
+	// Verify GUID-based dedup (Atom's <id> element is the GUID).
 	first, err := db.GetItem(database, result.NewItems[0].ID)
 	if err != nil {
 		t.Fatalf("GetItem: %v", err)
 	}
-	// Atom GUIDs (UUIDs) should be used directly by gofeed.
+	// Atom GUIDs (UUIDs) should be used directly.
 	if first.GUID == "" {
 		t.Error("expected non-empty GUID from Atom id element")
 	}
@@ -764,5 +764,101 @@ newlines&#155;31m</title><link>http://x/1</link><guid>1</guid>
 	}
 	if want := "ab"; e.Author != want {
 		t.Errorf("Author = %q, want %q", e.Author, want)
+	}
+}
+
+func TestParseDates_NormalizedToUTCWholeSeconds(t *testing.T) {
+	want := time.Date(2024, time.June, 15, 8, 30, 0, 0, time.UTC)
+
+	rss := []struct{ name, in string }{
+		{"RFC1123Z offset", "Sat, 15 Jun 2024 10:30:00 +0200"},
+		{"RFC1123 GMT", "Sat, 15 Jun 2024 08:30:00 GMT"},
+		{"RFC822Z", "15 Jun 24 10:30 +0200"},
+	}
+	for _, tc := range rss {
+		t.Run("rss/"+tc.name, func(t *testing.T) {
+			got, err := parseRSSDate(tc.in)
+			if err != nil {
+				t.Fatalf("parseRSSDate: %v", err)
+			}
+			if got.Location() != time.UTC {
+				t.Errorf("location = %v, want UTC", got.Location())
+			}
+			if !got.Equal(want) {
+				t.Errorf("got %v, want %v", got, want)
+			}
+		})
+	}
+
+	atom := []struct{ name, in string }{
+		{"offset", "2024-06-15T10:30:00+02:00"},
+		{"zulu", "2024-06-15T08:30:00Z"},
+		{"fraction", "2024-06-15T08:30:00.75Z"},
+		{"fraction with offset", "2024-06-15T10:30:00.999+02:00"},
+		{"no zone", "2024-06-15T08:30:00"},
+	}
+	for _, tc := range atom {
+		t.Run("atom/"+tc.name, func(t *testing.T) {
+			got, err := parseAtomDate(tc.in)
+			if err != nil {
+				t.Fatalf("parseAtomDate: %v", err)
+			}
+			if got.Location() != time.UTC {
+				t.Errorf("location = %v, want UTC", got.Location())
+			}
+			if got.Nanosecond() != 0 {
+				t.Errorf("nanoseconds = %d, want 0", got.Nanosecond())
+			}
+			if !got.Equal(want) {
+				t.Errorf("got %v, want %v", got, want)
+			}
+		})
+	}
+}
+
+// TestFetch_StoresPublishedInUTC checks the text that reaches the database:
+// feeds in different time zones must produce values that sort chronologically
+// as text.
+func TestFetch_StoresPublishedInUTC(t *testing.T) {
+	database := setupDB(t)
+	defer database.Close()
+
+	feed := `<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <entry><title>plus two</title><id>a</id><link href="https://example.com/a"/><published>2024-06-15T10:00:00+02:00</published></entry>
+  <entry><title>zulu</title><id>b</id><link href="https://example.com/b"/><published>2024-06-15T09:00:00.5Z</published></entry>
+</feed>`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(feed))
+	}))
+	defer srv.Close()
+
+	src := insertTestSource(t, database, "Zones", srv.URL)
+	if res, err := Fetch(database, src); err != nil || res.FetchError != "" {
+		t.Fatalf("Fetch: %v / %q", err, res.FetchError)
+	}
+
+	// published || '' drops the column type, so the driver returns the stored text.
+	rows, err := database.Query(`SELECT title, published || '' FROM items ORDER BY published DESC`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	var titles, stored []string
+	for rows.Next() {
+		var title, pub string
+		if err := rows.Scan(&title, &pub); err != nil {
+			t.Fatal(err)
+		}
+		titles = append(titles, title)
+		stored = append(stored, pub)
+	}
+	if got := strings.Join(titles, ","); got != "zulu,plus two" {
+		t.Errorf("order = %s, want zulu,plus two (09:00Z is newer than 08:00Z)", got)
+	}
+	for _, s := range stored {
+		if !strings.HasSuffix(s, "+00:00") || strings.Contains(s, ".") {
+			t.Errorf("stored published %q is not UTC with whole seconds", s)
+		}
 	}
 }

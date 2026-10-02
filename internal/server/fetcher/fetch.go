@@ -342,11 +342,21 @@ var rssDateFormats = []string{
 	"Mon, 2 Jan 2006 15:04:05 -0700",
 }
 
+// normalizeTime converts a parsed feed date to UTC and drops sub-second
+// precision. The database stores times as text and sorts them as text, so
+// every stored value must have the same shape: the driver writes a time in
+// its own UTC offset and with however many fractional digits it has, which
+// would make "10:00:00+02:00" sort above "09:00:00+00:00" and
+// "09:00:00.5+00:00" below "09:00:00+00:00".
+func normalizeTime(t time.Time) time.Time {
+	return t.UTC().Truncate(time.Second)
+}
+
 func parseRSSDate(s string) (time.Time, error) {
 	s = strings.TrimSpace(s)
 	for _, layout := range rssDateFormats {
 		if t, err := time.Parse(layout, s); err == nil {
-			return t, nil
+			return normalizeTime(t), nil
 		}
 	}
 	return time.Time{}, fmt.Errorf("unrecognized RSS date %q", s)
@@ -364,7 +374,7 @@ func parseAtomDate(s string) (time.Time, error) {
 	s = strings.TrimSpace(s)
 	for _, layout := range atomDateFormats {
 		if t, err := time.Parse(layout, s); err == nil {
-			return t, nil
+			return normalizeTime(t), nil
 		}
 	}
 	return time.Time{}, fmt.Errorf("unrecognized Atom date %q", s)
