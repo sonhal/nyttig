@@ -59,6 +59,9 @@ type Source struct {
 type Tag struct {
 	Name  string `toml:"name"`
 	Color string `toml:"color"`
+	// Parents are the names of this tag's parent tags. They may be declared
+	// anywhere in the file; a name that is not declared is created.
+	Parents []string `toml:"parents"`
 }
 
 // TagRule is an auto-tagging rule declared in the config file. Source is the

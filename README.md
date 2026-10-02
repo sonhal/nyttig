@@ -95,6 +95,20 @@ color = "#336791"
 name = "linux"
 color = "#FCC624"
 
+# Tags can have parents: "cyber security" also shows CVE and linux security
+# items, and "linux" also shows linux security items.
+[[tags]]
+name = "cyber security"
+color = "#D7263D"
+
+[[tags]]
+name = "CVE"
+parents = ["cyber security"]
+
+[[tags]]
+name = "linux security"
+parents = ["cyber security", "linux"]
+
 [[tag_rules]]
 tag = "rust"
 pattern = "(?i)\\brust\\b"
@@ -113,6 +127,16 @@ field = "both"
 [[tag_rules]]
 tag = "linux"
 pattern = "(?i)\\blinux\\b"
+field = "both"
+
+[[tag_rules]]
+tag = "CVE"
+pattern = "(?i)\\bCVE-\\d{4}-\\d{4,}\\b"
+field = "both"
+
+[[tag_rules]]
+tag = "linux security"
+pattern = "(?i)\\blinux\\b.*\\b(vulnerabilit|exploit|privilege escalation)"
 field = "both"
 ```
 
@@ -206,6 +230,7 @@ clients such as nyttig-api; `socket` must then be a Unix socket path.
 |---------|----------|---------|-------------------------------------------|
 | `name`  | yes      | —       | Tag name (unique)                         |
 | `color` | no       | —       | Hex color for TUI chip, e.g. `"#FF6B35"`  |
+| `parents` | no     | —       | Names of parent tags (see [Tag tree](#tag-tree)); may be declared later in the file, an unknown name is created |
 
 ### `[[tag_rules]]`
 
@@ -296,15 +321,15 @@ nyttig list-sources
 nyttig update-source   -id <source_id> [-n <name>] [-u <url>] [-t rss|atom] [-r refresh_sec]
                        [-enable|-disable] [-color <hex>] [-abbreviation <short>]
 nyttig remove-source   -id <source_id>
-nyttig add-tag         -n <name> [-c <hex_color>]
-nyttig list-tags
-nyttig update-tag      -id <tag_id> [-n <name>] [-c <hex_color>]   # keeps rules and item assignments
+nyttig add-tag         -n <name> [-c <hex_color>] [-parent <name|id>]...
+nyttig list-tags                         # a tree: child tags are indented under their parents
+nyttig update-tag      -id <tag_id> [-n <name>] [-c <hex_color>] [-parent <name|id>]... [-no-parents]   # keeps rules and item assignments
 nyttig remove-tag      -id <tag_id>      # also removes the tag's rules and item assignments
 nyttig add-tag-rule    -tag <name|id> -p <regex> [-f title|description|both] [-s source_id] [-priority N]
 nyttig test-tag-rule   -p <regex> [-f title|description|both] [-s source_id] [-l limit]   # dry run
 nyttig list-tag-rules
 nyttig remove-tag-rule -id <rule_id>
-nyttig search          [-tag <name|id>] [-s source_id] [-l limit] [-offset N] [-sort newest|oldest] [-unviewed] [query...]
+nyttig search          [-tag <name|id>] [-s source_id] [-l limit] [-offset N] [-sort newest|oldest] [-unviewed] [-exact] [query...]
 nyttig refresh         [-id <source_id>]   # omit -id to refresh all
 ```
 
@@ -368,6 +393,18 @@ Tags are applied automatically via regex rules evaluated when items are fetched:
 - **Field scoping**: Rules can match against `title`, `description`, or `both`.
 
 Tags are purely rule-based in v1. No manual tagging UI.
+
+### Tag tree
+
+A tag can have parent tags, several if you like (`add-tag -parent`,
+`update-tag -parent ... | -no-parents`, or `parents` in `[[tags]]`). Filtering
+by a tag shows items tagged with it **or any tag below it**: with `cyber
+security` above `CVE` and `linux security`, `-tag "cyber security"` lists
+items tagged with any of the three, and `-tag CVE` only CVE items. `search
+-exact` matches the tag alone. Item chips show only the tags a rule assigned.
+The daemon rejects a parent that would make a cycle. Deleting a tag keeps its
+children; one with no other parent becomes top-level. Config seeding only adds
+parents and never removes them, so a parent set in the UI survives a restart.
 
 ## Deduplication
 
