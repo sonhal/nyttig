@@ -49,7 +49,12 @@ jobs:
       - name: go vet
         run: go vet ./...
 
+      # Skipped for v* tags: only-new-issues needs a baseline (the PR base or
+      # the push's previous commit), and a new tag has none, so the action
+      # would lint the whole codebase and fail on the existing backlog. The
+      # tagged commit was already linted on its PR and its push to main.
       - name: golangci-lint
+        if: github.ref_type != 'tag'
         uses: golangci/golangci-lint-action@v9
         with:
           version: latest
