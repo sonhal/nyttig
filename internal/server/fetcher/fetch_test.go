@@ -821,7 +821,7 @@ func TestParseDates_NormalizedToUTCWholeSeconds(t *testing.T) {
 // as text.
 func TestFetch_StoresPublishedInUTC(t *testing.T) {
 	database := setupDB(t)
-	defer database.Close()
+	defer func() { _ = database.Close() }()
 
 	feed := `<?xml version="1.0" encoding="UTF-8"?>
 <feed xmlns="http://www.w3.org/2005/Atom">
@@ -829,7 +829,7 @@ func TestFetch_StoresPublishedInUTC(t *testing.T) {
   <entry><title>zulu</title><id>b</id><link href="https://example.com/b"/><published>2024-06-15T09:00:00.5Z</published></entry>
 </feed>`
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte(feed))
+		_, _ = w.Write([]byte(feed))
 	}))
 	defer srv.Close()
 
@@ -843,7 +843,7 @@ func TestFetch_StoresPublishedInUTC(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var titles, stored []string
 	for rows.Next() {
 		var title, pub string
@@ -860,5 +860,70 @@ func TestFetch_StoresPublishedInUTC(t *testing.T) {
 		if !strings.HasSuffix(s, "+00:00") || strings.Contains(s, ".") {
 			t.Errorf("stored published %q is not UTC with whole seconds", s)
 		}
+	}
+}
+
+// TestFetch_InsertFailureIsRecorded: an insert that fails must stay visible
+// as the source's fetch_error instead of being cleared by the status update
+// that follows the loop.
+func TestFetch_InsertFailureIsRecorded(t *testing.T) {
+	database := setupDB(t)
+	defer func() { _ = database.Close() }()
+
+	// Make every insert into items fail. RAISE(ABORT) is not suppressed by
+	// INSERT OR IGNORE.
+	if _, err := database.Exec(`CREATE TRIGGER reject_items BEFORE INSERT ON items
+		BEGIN SELECT RAISE(ABORT, 'disk full'); END`); err != nil {
+		t.Fatalf("create trigger: %v", err)
+	}
+
+	feed := `<?xml version="1.0"?><rss version="2.0"><channel><title>T</title>
+<item><title>One</title><link>https://example.com/1</link><guid>1</guid></item>
+<item><title>Two</title><link>https://example.com/2</link><guid>2</guid></item>
+</channel></rss>`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(feed))
+	}))
+	defer srv.Close()
+
+	src := insertTestSource(t, database, "Failing", srv.URL)
+	// A stale error from an earlier fetch must be replaced, not kept or cleared.
+	if err := db.UpdateSourceFetchError(database, src.ID, "old error"); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := Fetch(database, src)
+	if err != nil {
+		t.Fatalf("Fetch: %v", err)
+	}
+	if !strings.Contains(result.FetchError, "disk full") || !strings.Contains(result.FetchError, "and 1 more") {
+		t.Errorf("result.FetchError = %q, want the first insert error and a count", result.FetchError)
+	}
+	if len(result.NewItems) != 0 {
+		t.Errorf("NewItems = %d, want 0", len(result.NewItems))
+	}
+
+	updated, err := db.GetSource(database, src.ID)
+	if err != nil {
+		t.Fatalf("GetSource: %v", err)
+	}
+	if updated.FetchError == nil || *updated.FetchError != result.FetchError {
+		t.Errorf("source fetch_error = %v, want %q", updated.FetchError, result.FetchError)
+	}
+
+	// Once inserts work again, the next fetch clears the error.
+	if _, err := database.Exec(`DROP TRIGGER reject_items`); err != nil {
+		t.Fatal(err)
+	}
+	result, err = Fetch(database, src)
+	if err != nil || result.FetchError != "" || len(result.NewItems) != 2 {
+		t.Fatalf("second Fetch = %+v, %v", result, err)
+	}
+	updated, err = db.GetSource(database, src.ID)
+	if err != nil {
+		t.Fatalf("GetSource: %v", err)
+	}
+	if updated.FetchError != nil && *updated.FetchError != "" {
+		t.Errorf("source fetch_error = %q after a clean fetch, want empty", *updated.FetchError)
 	}
 }

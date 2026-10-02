@@ -173,6 +173,7 @@ func fetchInternal(database *sql.DB, src *db.Source, client doer) (*FetchResult,
 	}
 
 	// 5. Insert new items with deduplication.
+	var insertErrs []string
 	for _, entry := range entries {
 		if entry.GUID == "" && entry.Link == "" {
 			continue
@@ -201,8 +202,9 @@ func fetchInternal(database *sql.DB, src *db.Source, client doer) (*FetchResult,
 
 		id, inserted, err := db.InsertItem(database, item)
 		if err != nil {
-			// Log but continue processing remaining entries.
-			result.FetchError = fmt.Sprintf("insert item %q: %v", dedupKey, err)
+			// Keep going so one bad entry doesn't drop the rest; the
+			// failure is reported through the source's fetch_error below.
+			insertErrs = append(insertErrs, fmt.Sprintf("insert item %q: %v", dedupKey, err))
 			continue
 		}
 		if inserted {
@@ -211,9 +213,17 @@ func fetchInternal(database *sql.DB, src *db.Source, client doer) (*FetchResult,
 		}
 	}
 
-	// 6. Update source fetch status.
+	if len(insertErrs) > 0 {
+		result.FetchError = insertErrs[0]
+		if len(insertErrs) > 1 {
+			result.FetchError += fmt.Sprintf(" (and %d more)", len(insertErrs)-1)
+		}
+	}
+
+	// 6. Update source fetch status. FetchError is empty when every entry
+	// was handled, which clears an earlier error.
 	_ = db.UpdateSourceLastFetch(database, src.ID, time.Now())
-	_ = db.UpdateSourceFetchError(database, src.ID, "")
+	_ = db.UpdateSourceFetchError(database, src.ID, result.FetchError)
 
 	return result, nil
 }
