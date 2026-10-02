@@ -1,5 +1,5 @@
 import { safeColor } from './sanitize';
-import type { Source, Tag } from './types';
+import type { Assessor, Source, Tag } from './types';
 
 /** How a source is shown in a row: its abbreviation (or name) and color. */
 export interface SourceDisplay {
@@ -31,6 +31,21 @@ export function tagDisplays(tags: Tag[]): Map<string, TagDisplay> {
 	const m = new Map<string, TagDisplay>();
 	for (const t of tags) {
 		if (t.id) m.set(t.id, { name: t.name ?? '', color: safeColor(t.color) });
+	}
+	return m;
+}
+
+/** How an assessor is shown on a score chip: its current name and color. */
+export interface AssessorDisplay {
+	name: string;
+	color: string | undefined;
+}
+
+/** Assessors by ID; rows prefer these over the name an assessment carries. */
+export function assessorDisplays(assessors: Assessor[]): Map<string, AssessorDisplay> {
+	const m = new Map<string, AssessorDisplay>();
+	for (const a of assessors) {
+		if (a.id) m.set(a.id, { name: a.name ?? '', color: safeColor(a.color) });
 	}
 	return m;
 }

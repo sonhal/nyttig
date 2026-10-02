@@ -338,7 +338,7 @@ test('help: opens and closes, listing the keys of the view', async ({ page }) =>
 	await expect(help).toBeVisible();
 	await expect(help).toContainText('follow: jump to the newest and stick to it');
 	await expect(help).toContainText('tag:<name>');
-	await expect(help).toContainText(':sort [newest|oldest]');
+	await expect(help).toContainText(':sort [newest|oldest|score]');
 	if (!isMobile(page)) {
 		// The feed's keys do nothing underneath the overlay.
 		await page.keyboard.press('o');
@@ -413,7 +413,7 @@ test.describe('command line', () => {
 		await expect(page.getByTestId('command-line')).toContainText('unknown tag: nope');
 		await page.getByTestId('command').fill('sort sideways');
 		await page.keyboard.press('Enter');
-		await expect(page.getByTestId('command-line')).toContainText('sort: newest or oldest');
+		await expect(page.getByTestId('command-line')).toContainText('sort: newest, oldest or score');
 		await page.getByTestId('command').fill('help');
 		await page.keyboard.press('Enter');
 		await expect(page.getByRole('dialog', { name: 'Keys: feed' })).toBeVisible();

@@ -4,17 +4,26 @@
 -->
 <script lang="ts">
 	import Highlight from './Highlight.svelte';
-	import type { SourceDisplay } from './meta';
+	import { formatRelative } from './format';
+	import type { AssessorDisplay, SourceDisplay, TagDisplay } from './meta';
 	import { htmlToText, oneLine, safeLink } from './sanitize';
+	import { formatScore } from './scores';
 	import type { Item } from './types';
 
 	interface Props {
 		item: Item;
 		source: SourceDisplay | undefined;
 		terms?: readonly string[];
+		/** Current assessors and tags by ID, for the names the assessments show. */
+		assessors?: Map<string, AssessorDisplay>;
+		tagNames?: Map<string, TagDisplay>;
+		/** The current time, for the age of an assessment. */
+		now?: number;
 	}
 
-	let { item, source, terms = [] }: Props = $props();
+	let { item, source, terms = [], assessors = new Map(), tagNames = new Map(), now = 0 }: Props = $props();
+
+	const assessments = $derived(item.assessments ?? []);
 
 	const link = $derived(safeLink(item.link));
 	const desc = $derived(htmlToText(item.description));
@@ -48,6 +57,21 @@
 			<span class="link"><span class="k">link=</span>{link}</span>
 		</div>
 	{/if}
+	{#if assessments.length}
+		<ul class="assessments" aria-label="assessments" data-testid="assessments">
+			{#each assessments as a (a.id ?? `${a.assessor_id}/${a.tag_id}`)}
+				{@const cur = a.assessor_id ? assessors.get(a.assessor_id) : undefined}
+				<!-- The assessor's name and the note are untrusted: text only. -->
+				<li data-testid="assessment">
+					<span class="k">assessor=</span><span style:color={cur?.color}>{oneLine(cur?.name || a.assessor_name) || '-'}</span>
+					<span class="k">tag=</span>{a.tag_id ? oneLine(tagNames.get(a.tag_id)?.name) || '#' + a.tag_id : '-'}
+					<span class="k">score=</span>{typeof a.score === 'number' ? formatScore(a.score) : '-'}
+					<span class="k">age=</span>{formatRelative(a.updated_at, now) || '-'}
+					{#if a.note}<span class="note"><span class="k">note=</span>{htmlToText(a.note)}</span>{/if}
+				</li>
+			{/each}
+		</ul>
+	{/if}
 	{#if desc}<p class="desc"><Highlight text={desc} {terms} /></p>{/if}
 </div>
 
@@ -71,6 +95,17 @@
 	}
 	.open {
 		white-space: nowrap;
+	}
+	.assessments {
+		margin: 4px 0 0;
+		padding: 0;
+		list-style: none;
+	}
+	.assessments li {
+		overflow-wrap: anywhere;
+	}
+	.note {
+		color: var(--desc);
 	}
 	.desc {
 		margin: 4px 0 0;

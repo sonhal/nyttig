@@ -143,13 +143,13 @@ cmd/nyttig-api/main.go      nyttig-api entrypoint: flags, listen-address guard, 
 web/                        The SvelteKit app (pnpm); "pnpm build" writes a Node server to web/build/
 web/src/lib/                Pure modules (reducer, keymap, filter, query, command, highlight,
                             fuzzy, history, help, sanitize, viewed, forms, latest, meta,
-                            format, tagtree, views) with Vitest tests next to them, plus the
+                            format, tagtree, views, scores) with Vitest tests next to them, plus the
                             Svelte components (ViewTabs.svelte is the saved views' tab row above
                             the filter bar); metadata.svelte.ts holds the sources, tags and
                             saved views every page shares, prefs.svelte.ts the time format
                             (localStorage)
-web/src/routes/             / is the feed; sources/, tags/, rules/ and views/ are the management
-                            pages (ManageView.svelte is their shared frame)
+web/src/routes/             / is the feed; sources/, tags/, rules/, views/ and assessors/ are the
+                            management pages (ManageView.svelte is their shared frame)
 web/e2e/                    Playwright tests; stack.mjs starts a feed server, nyttigd, nyttig-api,
                             the app server and a Caddy-like proxy (proxy.mjs)
 internal/server/service/    gRPC service impl + Hub (broadcasts pushed items to subscribers);
@@ -349,6 +349,18 @@ which phases are done and whether they are merged; keep it current.
   `policy.test.ts` fails on `{@html}`. The e2e feed server has bulk feeds
   (`/bulk/<name>.xml?n=230`, push with `/add?feed=bulk/<name>`) for the tests
   that need long lists; they add their own source and delete it.
+- **Web assessments** (phase 6). `Filter` has `assessor`, `minScore` and
+  `unassessed` next to `sort: 'score'`; `filter.ts` drops a minimum score or
+  the score sort that has no assessor, as the daemon would refuse them.
+  `query.ts` reads `score:<assessor>[>=0.7]`, `unassessed:<assessor>` and
+  `sort:score` (an error without a `score:` term), and quotes an assessor name
+  that contains `>`. `scores.ts` is the one place that decides which assessments
+  count (`inScope`, `scoreOf`) and which chips a row shows. The reducer handles
+  `update` events (replace in place, insert when the daemon says it matches,
+  never remove) and orders by `state.score` under `sort: 'score'`, new items
+  last. `a` / `A` pick and clear the assessor (`1`-`9`, `0`, `v` are saved views).
+  Notes and assessor names are untrusted: render them with `htmlToText` /
+  `oneLine`, never `{@html}`.
 - **Feed content in the browser is untrusted.** Never use `{@html}`; render
   text only (`htmlToText` in `web/src/lib/sanitize.ts`), links through
   `safeLink`, colors through `safeColor`, and don't load feed images. The

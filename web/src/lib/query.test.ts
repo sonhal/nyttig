@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { defaultFilter } from './filter';
 import { applyCompletion, complete, format, parse } from './query';
-import type { Filter, Source, Tag } from './types';
+import type { Assessor, Filter, Source, Tag } from './types';
 
 const sources: Source[] = [
 	{ id: '1', name: 'Alpha News', abbreviation: 'ALP' },
@@ -81,7 +81,7 @@ describe('parse', () => {
 			'unknown tag: nope',
 			'unknown source: No Such',
 			'unknown is: value: old (try unviewed)',
-			'unknown sort: sideways (newest or oldest)'
+			'unknown sort: sideways (newest, oldest or score)'
 		]);
 		const first = r.errors[0]!;
 		expect('kernel tag:nope src:"No Such"'.slice(first.start, first.end)).toBe('tag:nope');
@@ -94,7 +94,7 @@ describe('parse', () => {
 		expect(parse('tag:', sources, tags).errors[0]?.message).toBe('tag: needs a tag name');
 		expect(parse('src:', sources, tags).errors[0]?.message).toBe('src: needs a source name');
 		expect(parse('is:', sources, tags).errors[0]?.message).toContain('needs a value');
-		expect(parse('sort:', sources, tags).errors[0]?.message).toContain('needs newest or oldest');
+		expect(parse('sort:', sources, tags).errors[0]?.message).toContain('needs newest, oldest or score');
 	});
 
 	it('repeated keys: the same value is fine, a different one is an error', () => {
@@ -189,7 +189,8 @@ describe('complete', () => {
 		expect(at('src:hack')?.candidates.map((c) => c.insert)).toEqual(['src:"Hacker News"']);
 		expect(at('src:news')?.candidates.map((c) => c.label)).toEqual(['Alpha News', 'Hacker News']);
 		expect(at('is:')?.candidates.map((c) => c.insert)).toEqual(['is:unviewed']);
-		expect(at('sort:o')?.candidates.map((c) => c.insert)).toEqual(['sort:oldest']);
+		expect(at('sort:o')?.candidates.map((c) => c.insert)).toEqual(['sort:oldest', 'sort:score']);
+		expect(at('sort:sc')?.candidates.map((c) => c.insert)).toEqual(['sort:score']);
 	});
 
 	it('carries the color for the list', () => {
@@ -220,5 +221,97 @@ describe('complete', () => {
 	it('limits the list', () => {
 		const many: Tag[] = Array.from({ length: 30 }, (_, i) => ({ id: String(i + 1), name: 'tag' + i }));
 		expect(complete('tag:', 4, [], many)?.candidates).toHaveLength(8);
+	});
+});
+
+describe('assessor terms', () => {
+	const assessors: Assessor[] = [
+		{ id: '1', name: 'claude', color: '#D97757' },
+		{ id: '2', name: 'CVSS reader' },
+		{ id: '3', name: 'a>b' }
+	];
+	const p = (text: string) => parse(text, sources, tags, assessors);
+	const pf = (text: string) => {
+		const r = p(text);
+		expect(r.errors).toEqual([]);
+		return r.filter;
+	};
+
+	it('reads score: with and without a minimum, and unassessed:', () => {
+		expect(pf('score:claude')).toEqual(f({ assessor: '1' }));
+		expect(pf('score:claude>=0.7')).toEqual(f({ assessor: '1', minScore: 0.7 }));
+		expect(pf('score:Claude>=0')).toEqual(f({ assessor: '1', minScore: 0 }));
+		expect(pf('score:"CVSS reader">=0.5 sort:score')).toEqual(f({ assessor: '2', minScore: 0.5, sort: 'score' }));
+		expect(pf('score:#2>=.25')).toEqual(f({ assessor: '2', minScore: 0.25 }));
+		expect(pf('unassessed:claude tag:linux')).toEqual(f({ unassessed: '1', tag: '1' }));
+		expect(pf('score:claude unassessed:"CVSS reader" kernel')).toEqual(f({ assessor: '1', unassessed: '2', q: 'kernel' }));
+	});
+
+	it('sort:score needs a score: term', () => {
+		const r = p('kernel sort:score');
+		expect(r.errors.map((e) => e.message)).toEqual(['sort:score needs a score:<assessor> term']);
+		expect('kernel sort:score'.slice(r.errors[0]!.start, r.errors[0]!.end)).toBe('sort:score');
+		// unassessed: alone does not count.
+		expect(p('unassessed:claude sort:score').errors).toHaveLength(1);
+		expect(p('sort:score score:claude').errors).toEqual([]);
+	});
+
+	it('reports unknown assessors and bad minimums', () => {
+		expect(p('score:nobody').errors[0]?.message).toBe('unknown assessor: nobody');
+		expect(p('unassessed:nobody').errors[0]?.message).toBe('unknown assessor: nobody');
+		expect(p('score:').errors[0]?.message).toBe('score: needs an assessor name');
+		expect(p('score:#abc').errors[0]?.message).toBe('bad assessor id: #abc');
+		for (const bad of ['x', '1.5', '-1', '', 'NaN']) {
+			expect(p(`score:claude>=${bad}`).errors[0]?.message, bad).toContain('the minimum must be a number from 0 to 1');
+		}
+		expect(p('score:claude score:"CVSS reader"').errors[0]?.message).toContain('only one score: assessor');
+		// Without assessors, nothing resolves.
+		expect(parse('score:claude', sources, tags).errors[0]?.message).toBe('unknown assessor: claude');
+	});
+
+	it('score: and unassessed: in quotes are free text', () => {
+		expect(pf('"score:claude" "unassessed:x"')).toEqual(f({ q: 'score:claude unassessed:x' }));
+	});
+
+	it('formats them, and format and parse are inverses', () => {
+		const cases: Partial<Filter>[] = [
+			{ assessor: '1' },
+			{ assessor: '1', minScore: 0.7 },
+			{ assessor: '1', minScore: 0 },
+			{ assessor: '2', minScore: 0.25, sort: 'score', tag: '3' },
+			{ unassessed: '2', unviewed: true },
+			{ assessor: '3', minScore: 0.5 },
+			{ assessor: '1', sort: 'score', unassessed: '2', q: 'kernel panic' }
+		];
+		for (const c of cases) {
+			const text = format(f(c), sources, tags, assessors);
+			expect(p(text).errors, text).toEqual([]);
+			expect(p(text).filter, text).toEqual(f(c));
+		}
+		expect(format(f({ assessor: '1', minScore: 0.7 }), sources, tags, assessors)).toBe('score:claude>=0.7');
+		expect(format(f({ assessor: '2', minScore: 0.5, sort: 'score' }), sources, tags, assessors)).toBe('score:"CVSS reader">=0.5 sort:score');
+		// A name with ">" is quoted so the minimum cannot be confused with it.
+		expect(format(f({ assessor: '3', minScore: 0.5 }), sources, tags, assessors)).toBe('score:"a>b">=0.5');
+		expect(format(f({ unassessed: '1' }), sources, tags, assessors)).toBe('unassessed:claude');
+		// An unknown assessor is written as its ID, which reads back.
+		expect(format(f({ assessor: '9', minScore: 0.1 }), sources, tags, assessors)).toBe('score:#9>=0.1');
+		expect(p('score:#9>=0.1').filter).toEqual(f({ assessor: '9', minScore: 0.1 }));
+	});
+
+	it('quotes free words that look like these operators', () => {
+		const text = format(f({ q: 'score:x unassessed:y' }), sources, tags, assessors);
+		expect(text).toBe('"score:x" "unassessed:y"');
+		expect(p(text).filter.q).toBe('score:x unassessed:y');
+	});
+
+	it('completes assessor names, and the name only', () => {
+		const at = (text: string, caret = text.length) => complete(text, caret, sources, tags, assessors);
+		expect(at('score:cl')?.candidates.map((c) => c.insert)).toEqual(['score:claude']);
+		expect(at('score:')?.candidates.map((c) => c.label)).toEqual(['claude', 'CVSS reader', 'a>b']);
+		expect(at('score:cv')?.candidates.map((c) => c.insert)).toEqual(['score:"CVSS reader"']);
+		expect(at('score:a')?.candidates.map((c) => c.insert)).toContain('score:"a>b"');
+		expect(at('unassessed:cl')?.candidates.map((c) => c.insert)).toEqual(['unassessed:claude']);
+		expect(at('score:claude>=0.')).toBeNull();
+		expect(at('score:cl')?.candidates[0]?.color).toBe('#D97757');
 	});
 });

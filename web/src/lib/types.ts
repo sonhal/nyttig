@@ -25,6 +25,38 @@ export interface Item {
 	fetched_at?: string;
 	tags?: Tag[];
 	viewed?: boolean;
+	/** Every assessor's assessment of the item, by assessor name. */
+	assessments?: Assessment[];
+}
+
+/** A system (a model, a CVE reader, you) that scores items. */
+export interface Assessor {
+	id?: string;
+	name?: string;
+	/** What the assessor's score means. */
+	description?: string;
+	color?: string;
+	created_at?: string;
+}
+
+/**
+ * One assessor's judgement on an item: an optional score from 0 to 1 and an
+ * optional note, for one tag or for the item as a whole. The note and the
+ * assessor's name are untrusted text (an LLM's note can repeat the markup or
+ * instructions of the feed it read): render them as text only.
+ */
+export interface Assessment {
+	id?: string;
+	item_id?: string;
+	assessor_id?: string;
+	assessor_name?: string;
+	/** Absent for the item as a whole. */
+	tag_id?: string;
+	/** Absent for no score; 0 is a score. */
+	score?: number;
+	note?: string;
+	/** RFC 3339 timestamp. */
+	updated_at?: string;
 }
 
 export interface Source {
@@ -41,7 +73,7 @@ export interface Source {
 	abbreviation?: string;
 }
 
-export type Sort = 'newest' | 'oldest';
+export type Sort = 'newest' | 'oldest' | 'score';
 
 /** The feed filter: mirrors the query parameters of /api/stream and /api/items. */
 export interface Filter {
@@ -52,6 +84,12 @@ export interface Filter {
 	tag: string;
 	sort: Sort;
 	unviewed: boolean;
+	/** Assessor ID, "" = none: whose scores minScore and sort "score" use, and which is shown first. */
+	assessor: string;
+	/** Only items the assessor scored at least this (0 to 1); null = no minimum. Needs assessor. */
+	minScore: number | null;
+	/** Assessor ID, "" = none: only items this assessor has not assessed. */
+	unassessed: string;
 }
 
 export type RuleField = 'title' | 'description' | 'both';
@@ -86,6 +124,9 @@ export interface ViewFilter {
 	tag?: string;
 	sort?: string;
 	unviewed?: boolean;
+	assessor?: string;
+	min_score?: number;
+	unassessed?: string;
 }
 
 /** A saved view. Unlike the other types this is not protojson: see viewJSON in internal/api/manage.go. */

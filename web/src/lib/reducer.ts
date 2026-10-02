@@ -7,6 +7,16 @@
 //     it is still there.
 //  4. item after complete (live push): dedupe by ID, insert by sort order.
 //  5. A reconnect sends reset + a new snapshot, so replays are idempotent.
+//  6. update (an item whose assessments changed): replace it where it is if
+//     it is shown; insert it like a live push when the daemon says it
+//     matches the filter; otherwise ignore it. It never removes an item, and
+//     never moves one: a reset or a reload resyncs. This keeps the ranked
+//     invariant below intact.
+//
+// With sort "score" the list is ordered by the selected assessor's highest
+// in-scope score (state.score), items without one last, newest first among
+// themselves, like the daemon. New items arrive without assessments, so they
+// belong at the end; an update that starts matching is placed by its score.
 //
 // Load older (see appendOlder) and follow mode live in the same state:
 //
@@ -31,6 +41,7 @@
 //    and nothing is counted. Otherwise pushes are counted in pending
 //    ("↑ N new") and the view stays where it is.
 
+import { scoreOf, type ScoreScope } from './scores';
 import type { Item, Sort } from './types';
 
 export interface FeedState {
@@ -58,9 +69,16 @@ export interface FeedState {
 	epoch: number;
 	/** The filter is unviewed-only, so marking items viewed shrinks ranked. */
 	unviewedOnly: boolean;
+	/** Whose scores sort "score" uses; null for the other sorts. */
+	score: ScoreScope | null;
 }
 
-export type StreamEvent = { type: 'reset' } | { type: 'item'; item: Item } | { type: 'complete' };
+export type StreamEvent =
+	| { type: 'reset' }
+	| { type: 'item'; item: Item }
+	/** matches: the daemon says the item matches the stream's filter. */
+	| { type: 'update'; item: Item; matches: boolean }
+	| { type: 'complete' };
 
 /** Rows per older page. The API allows 500. */
 export const PAGE_SIZE = 100;
@@ -73,7 +91,7 @@ export const PAGE_SIZE = 100;
  */
 export const SNAPSHOT_LIMIT = 200;
 
-export function initialState(sort: Sort = 'newest'): FeedState {
+export function initialState(sort: Sort = 'newest', score: ScoreScope | null = null): FeedState {
 	return {
 		items: [],
 		buffer: null,
@@ -87,7 +105,8 @@ export function initialState(sort: Sort = 'newest'): FeedState {
 		end: false,
 		loading: false,
 		epoch: 0,
-		unviewedOnly: false
+		unviewedOnly: false,
+		score
 	};
 }
 
@@ -101,7 +120,17 @@ function time(ts: string | undefined): number | null {
  * Orders items like the daemon: by published time (missing last), then by
  * fetch time. Negative when a sorts before b.
  */
-export function compareItems(a: Item, b: Item, sort: Sort): number {
+export function compareItems(a: Item, b: Item, sort: Sort, score: ScoreScope | null = null): number {
+	if (sort === 'score') {
+		const sa = score ? scoreOf(a, score) : null;
+		const sb = score ? scoreOf(b, score) : null;
+		if (sa !== sb) {
+			if (sa === null) return 1;
+			if (sb === null) return -1;
+			return sb - sa;
+		}
+		return compareItems(a, b, 'newest');
+	}
 	const dir = sort === 'newest' ? -1 : 1;
 	const pa = time(a.published);
 	const pb = time(b.published);
@@ -116,16 +145,18 @@ export function compareItems(a: Item, b: Item, sort: Sort): number {
 }
 
 /** Index at which item belongs in sorted items (after equal items). */
-function insertionIndex(items: Item[], item: Item, sort: Sort): number {
+function insertionIndex(items: Item[], item: Item, sort: Sort, score: ScoreScope | null): number {
 	// Live pushes are almost always newer than everything shown, so look
-	// from the end the new item most likely belongs at.
+	// from the end the new item most likely belongs at: the top when newest
+	// first, the bottom otherwise (a new item has no score, so it is last
+	// under the score sort).
 	if (sort === 'newest') {
 		let i = 0;
 		while (i < items.length && compareItems(items[i]!, item, sort) <= 0) i++;
 		return i;
 	}
 	let i = items.length;
-	while (i > 0 && compareItems(items[i - 1]!, item, sort) > 0) i--;
+	while (i > 0 && compareItems(items[i - 1]!, item, sort, score) > 0) i--;
 	return i;
 }
 
@@ -152,21 +183,31 @@ export function reduce(state: FeedState, ev: StreamEvent): FeedState {
 				items[existing] = item;
 				return { ...state, items };
 			}
-			const at = insertionIndex(state.items, item, state.sort);
-			const items = state.items.slice();
-			items.splice(at, 0, item);
-			const newest = state.sort === 'newest';
-			// Following, the cursor on the newest item stays on the newest.
-			// Otherwise keep the selection on the same item.
-			const stick = state.follow && newest && at === 0 && state.cursor === 0;
-			const cursor = state.items.length > 0 && at <= state.cursor && !stick ? state.cursor + 1 : state.cursor;
-			return {
-				...state,
-				items,
-				cursor,
-				ranked: at < state.ranked ? state.ranked + 1 : state.ranked,
-				pending: newest && !state.follow ? state.pending + 1 : state.pending
-			};
+			return insertLive(state, item);
+		}
+
+		case 'update': {
+			const { item } = ev;
+			if (state.buffer && state.bufferIds) {
+				// A snapshot is being received: keep what it has up to date, and
+				// let it take an item that now matches, in order.
+				const at = state.buffer.findIndex((it) => it.id === item.id);
+				if (at >= 0) state.buffer[at] = item;
+				else if (ev.matches) {
+					state.bufferIds.add(item.id);
+					state.buffer.splice(insertionIndex(state.buffer, item, state.sort, state.score), 0, item);
+				}
+				return state;
+			}
+			const existing = state.items.findIndex((it) => it.id === item.id);
+			if (existing >= 0) {
+				// Replace in place: the viewed state is the browser's own (rows are
+				// dimmed when read, before the daemon hears of it), so keep it.
+				const items = state.items.slice();
+				items[existing] = { ...item, viewed: item.viewed || state.items[existing]!.viewed };
+				return { ...state, items };
+			}
+			return ev.matches ? insertLive(state, item) : state;
 		}
 
 		case 'complete': {
@@ -190,6 +231,25 @@ export function reduce(state: FeedState, ev: StreamEvent): FeedState {
 			};
 		}
 	}
+}
+
+/** Inserts an item that is not in the list in its sort position (a live push or an update that now matches). */
+function insertLive(state: FeedState, item: Item): FeedState {
+	const at = insertionIndex(state.items, item, state.sort, state.score);
+	const items = state.items.slice();
+	items.splice(at, 0, item);
+	const newest = state.sort === 'newest';
+	// Following, the cursor on the newest item stays on the newest.
+	// Otherwise keep the selection on the same item.
+	const stick = state.follow && newest && at === 0 && state.cursor === 0;
+	const cursor = state.items.length > 0 && at <= state.cursor && !stick ? state.cursor + 1 : state.cursor;
+	return {
+		...state,
+		items,
+		cursor,
+		ranked: at < state.ranked ? state.ranked + 1 : state.ranked,
+		pending: newest && !state.follow ? state.pending + 1 : state.pending
+	};
 }
 
 /** Marks the given IDs viewed. Returns the same state if nothing changed. */
@@ -282,7 +342,7 @@ export function appendOlder(
 	while (i < fresh.length || j < tail.length) {
 		const f = fresh[i];
 		const t = tail[j];
-		if (f && (!t || compareItems(f, t, state.sort) <= 0)) {
+		if (f && (!t || compareItems(f, t, state.sort, state.score) <= 0)) {
 			merged.push(f);
 			i++;
 		} else if (t) {

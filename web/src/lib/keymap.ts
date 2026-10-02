@@ -39,6 +39,9 @@ export type Action =
 	| { type: 'cycleTag' }
 	| { type: 'pickSource' }
 	| { type: 'pickTag' }
+	/** a: pick the assessor whose scores to show and use; A: none. */
+	| { type: 'pickAssessor' }
+	| { type: 'clearAssessor' }
 	/** 1-9: the nth favorite view; 0: the unfiltered feed. */
 	| { type: 'viewTab'; n: number }
 	| { type: 'viewPicker' }
@@ -116,6 +119,8 @@ const NORMAL: FeedBinding[] = [
 	b('Filter', ['t'], { type: 'cycleTag' }, 'cycle the tag'),
 	b('Filter', ['S'], { type: 'pickSource' }, 'pick a source by name'),
 	b('Filter', ['T'], { type: 'pickTag' }, 'pick a tag by name'),
+	b('Filter', ['a'], { type: 'pickAssessor' }, 'pick an assessor by name (its scores are shown first)'),
+	b('Filter', ['A'], { type: 'clearAssessor' }, 'clear the assessor (and the minimum score)'),
 	b('Filter', ['o'], { type: 'toggleSort' }, 'toggle newest/oldest first'),
 	b('Saved views', ['1'], { type: 'viewTab', n: 1 }, 'go to favorite view 1-9'),
 	b('Saved views', ['2'], { type: 'viewTab', n: 2 }, 'go to favorite view 1-9'),

@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
+	assessorAddBody,
+	assessorForm,
+	assessorPatchBody,
 	formatInterval,
 	hasErrors,
 	parseInterval,
@@ -13,6 +16,7 @@ import {
 	tagForm,
 	tagPatchBody,
 	urlError,
+	validateAssessor,
 	validateRule,
 	validateSource,
 	validateTag,
@@ -22,7 +26,7 @@ import {
 	viewPatchBody,
 	type SourceForm
 } from './forms';
-import type { SavedView, Source, Tag } from './types';
+import type { Assessor, SavedView, Source, Tag } from './types';
 
 describe('parseInterval / formatInterval', () => {
 	it.each([
@@ -342,5 +346,78 @@ describe('view forms', () => {
 		expect(
 			viewPatchBody(orig, { ...f, query: 'sort:oldest is:unviewed tag:#4 src:HN openssl' }, sources, tags)
 		).toEqual({});
+	});
+});
+
+describe('assessor form', () => {
+	const orig: Assessor = { id: '3', name: 'claude', description: 'importance for the tag, 0-1', color: '#D97757' };
+
+	it('starts empty, or from the assessor', () => {
+		expect(assessorForm()).toEqual({ name: '', description: '', color: '' });
+		expect(assessorForm(orig)).toEqual({ name: 'claude', description: 'importance for the tag, 0-1', color: '#D97757' });
+	});
+
+	it("validates like the daemon", () => {
+		const ok = assessorForm(orig);
+		expect(validateAssessor(ok)).toEqual({});
+		expect(validateAssessor({ ...ok, name: ' ' }).name).toContain('required');
+		expect(validateAssessor({ ...ok, name: 'x'.repeat(65) }).name).toContain('64');
+		expect(validateAssessor({ ...ok, name: 'x'.repeat(64) })).toEqual({});
+		expect(validateAssessor({ ...ok, name: 'a\tb' }).name).toContain('control');
+		expect(validateAssessor({ ...ok, color: 'red' }).color).toContain('hex');
+		expect(validateAssessor({ ...ok, color: '' })).toEqual({});
+		expect(validateAssessor({ ...ok, description: 'é'.repeat(500) })).toEqual({});
+		expect(validateAssessor({ ...ok, description: 'x'.repeat(501) }).description).toContain('500');
+		expect(validateAssessor({ ...ok, description: 'a\nb' }).description).toContain('control');
+	});
+
+	it('builds the add body, leaving empty fields out', () => {
+		expect(assessorAddBody({ name: ' claude ', description: ' d ', color: ' #112233 ' })).toEqual({
+			name: 'claude',
+			description: 'd',
+			color: '#112233'
+		});
+		expect(assessorAddBody({ name: 'cvss', description: '', color: '' })).toEqual({ name: 'cvss' });
+	});
+
+	it('patches only what changed; clearing sends ""', () => {
+		const f = assessorForm(orig);
+		expect(assessorPatchBody(orig, f)).toEqual({});
+		expect(assessorPatchBody(orig, { ...f, name: 'claude-2' })).toEqual({ name: 'claude-2' });
+		expect(assessorPatchBody(orig, { ...f, description: '', color: '' })).toEqual({ description: '', color: '' });
+	});
+});
+
+describe('view forms with assessors', () => {
+	const assessors: Assessor[] = [{ id: '3', name: 'claude' }];
+	const orig: SavedView = {
+		id: '1',
+		name: 'Important',
+		filter: { sort: 'score', assessor: '3', min_score: 0.7 },
+		favorite: true
+	};
+
+	it('shows and parses the assessor terms', () => {
+		const f = viewForm(orig, [], [], assessors);
+		expect(f.query).toBe('score:claude>=0.7 sort:score');
+		expect(validateView(f, [], [], assessors)).toEqual({});
+		expect(validateView({ ...f, query: 'sort:score' }, [], [], assessors).query).toBe('sort:score needs a score:<assessor> term');
+		expect(validateView({ ...f, query: 'score:nobody' }, [], [], assessors).query).toBe('unknown assessor: nobody');
+		expect(viewAddBody({ name: 'v', query: 'score:claude>=0 unassessed:claude', favorite: true }, [], [], assessors)).toEqual({
+			name: 'v',
+			filter: { assessor: '3', min_score: 0, unassessed: '3' },
+			favorite: true
+		});
+	});
+
+	it('patches the whole filter when the sort or minimum changes', () => {
+		const f = viewForm(orig, [], [], assessors);
+		expect(viewPatchBody(orig, f, [], [], assessors)).toEqual({});
+		expect(viewPatchBody(orig, { ...f, query: 'score:claude>=0.7' }, [], [], assessors)).toEqual({
+			filter: { assessor: '3', min_score: 0.7 }
+		});
+		expect(viewPatchBody(orig, { ...f, query: 'score:claude>=0.8 sort:score' }, [], [], assessors)).toEqual({
+			filter: { assessor: '3', min_score: 0.8, sort: 'score' }
+		});
 	});
 });

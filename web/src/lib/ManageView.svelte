@@ -144,7 +144,7 @@
 			case 'openCommand':
 				return cl.start();
 			case 'runCommand': {
-				const cmd = cl.run({ sources: metadata.sources, tags: metadata.tags, views: metadata.views });
+				const cmd = cl.run({ sources: metadata.sources, tags: metadata.tags, views: metadata.views, assessors: metadata.assessors });
 				if (!cmd) return;
 				list?.focus({ preventScroll: true });
 				return execute(cmd, host);
@@ -154,7 +154,7 @@
 				list?.focus({ preventScroll: true });
 				return;
 			case 'completeCommand':
-				return cl.complete({ sources: metadata.sources, tags: metadata.tags, views: metadata.views });
+				return cl.complete({ sources: metadata.sources, tags: metadata.tags, views: metadata.views, assessors: metadata.assessors });
 			case 'historyPrev':
 				return cl.historyPrev();
 			case 'historyNext':

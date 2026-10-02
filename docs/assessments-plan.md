@@ -1,6 +1,6 @@
 # Assessments plan: scores and notes from external assessors
 
-Status: **phases 1–5 implemented, not yet merged** (database layer, proto and RPCs, live updates, CLI and config, HTTP API).
+Status: **phases 1–6 implemented, not yet merged** (database layer, proto and RPCs, live updates, CLI and config, HTTP API, web app).
 
 Other systems can attach a judgement to a news item: an optional **score**
 from 0.0 to 1.0, an optional **note**, and the **assessor** that made it.
@@ -537,6 +537,22 @@ govulncheck can't reach vuln.go.dev from the sandbox, so leave it to CI.
 
 ## Deviations from this plan
 
+- **Phase 6, the mobile filter sheet.** It gets `score` and `unassessed`
+  selects (when assessors exist) and a `score` sort option once an assessor is
+  chosen; a minimum score is typed in the query bar. The desktop filter bar
+  has a `score:` chip (click or `a` picks the assessor) and shows
+  `unassessed:` when set.
+- **Phase 6, notes as text.** `htmlToText` reads markup in a note as text
+  (`<b>x</b>` shows as `x`), the same as for feed descriptions; the markup
+  is never rendered or run.
+- **Phase 6, commands.** Besides `:assessors`, `:sort score`, `:score
+  <assessor>|all [min]` and `:unassessed <assessor>|all`, the short forms
+  `:u` and `:un` are now fixed to `:unviewed` (`unassessed` made them
+  ambiguous).
+- **Phase 6, update and ordering.** An `update` replaces an item in place and
+  never moves it, even under `sort:score` where its score changed. The scope
+  of the score sort comes from the tag tree the browser has loaded
+  (`stream.setScore`).
 - **Phase 5, IDs in request bodies.** `PUT /api/items/{id}/assessments` takes
   `assessor` and `tag` as ID strings (the plan's `{assessor, tag?, score?,
   note?}` did not say), like every other ID in nyttig-api and the view

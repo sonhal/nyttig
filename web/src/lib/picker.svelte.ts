@@ -1,4 +1,4 @@
-// State of the S/T/v fuzzy picker: a list of sources, tags or saved views, filtered as you
+// State of the S/T/v/a fuzzy picker: a list of sources, tags, saved views or assessors, filtered as you
 // type. Enter picks the highlighted entry, Esc closes.
 
 import { fuzzyFilter } from './fuzzy';
@@ -12,7 +12,7 @@ export interface PickOption {
 	depth?: number;
 }
 
-export type PickKind = 'source' | 'tag' | 'view';
+export type PickKind = 'source' | 'tag' | 'view' | 'assessor';
 
 export class Picker {
 	kind: PickKind | null = $state(null);

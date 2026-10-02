@@ -80,6 +80,10 @@ export function execute(cmd: Command, host: CommandHost): void {
 			return;
 		}
 		default: {
+			if (cmd.type === 'sort' && cmd.sort === 'score' && !host.filter().assessor) {
+				host.flash('error: sort score needs an assessor: :score <name> first');
+				return;
+			}
 			const f = applyToFilter(cmd, host.filter());
 			if (f) host.setFilter(f);
 		}

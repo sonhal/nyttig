@@ -30,7 +30,7 @@ const views = [security, linux, misc, nofilter];
 
 describe('viewToFilter / filterToViewBody', () => {
 	it('fills in the defaults the API leaves out', () => {
-		expect(viewToFilter(security)).toEqual({ q: 'openssl', source: '5', tag: '4', sort: 'oldest', unviewed: true });
+		expect(viewToFilter(security)).toEqual({ ...defaultFilter, q: 'openssl', source: '5', tag: '4', sort: 'oldest', unviewed: true });
 		expect(viewToFilter(linux)).toEqual({ ...defaultFilter, tag: '7' });
 		expect(viewToFilter(misc)).toEqual(defaultFilter);
 		expect(viewToFilter(nofilter)).toEqual(defaultFilter);
@@ -131,5 +131,56 @@ describe('moved', () => {
 		expect(moved(['a', 'b', 'c'], 2, 5)).toEqual(['a', 'b', 'c']);
 		expect(moved(['a', 'b', 'c'], 0, 9)).toEqual(['b', 'c', 'a']);
 		expect(moved([], 0, 1)).toEqual([]);
+	});
+});
+
+describe('assessor fields of a view', () => {
+	const important: SavedView = {
+		id: '9',
+		name: 'Important',
+		filter: { tag: '4', sort: 'score', assessor: '3', min_score: 0.7, unassessed: '5' }
+	};
+
+	it('reads them, and keeps the sort', () => {
+		expect(viewToFilter(important)).toEqual({
+			...defaultFilter,
+			tag: '4',
+			sort: 'score',
+			assessor: '3',
+			minScore: 0.7,
+			unassessed: '5'
+		});
+	});
+
+	it('leaves a score sort and a minimum without an assessor out', () => {
+		expect(viewToFilter({ filter: { sort: 'score' } }).sort).toBe('newest');
+		expect(viewToFilter({ filter: { min_score: 0.5 } }).minScore).toBeNull();
+		expect(viewToFilter({ filter: { unassessed: '5' } }).unassessed).toBe('5');
+	});
+
+	it('writes them with the API keys, defaults left out, a minimum of 0 kept', () => {
+		expect(filterToViewBody(viewToFilter(important))).toEqual(important.filter);
+		expect(filterToViewBody({ ...defaultFilter, assessor: '3', minScore: 0 })).toEqual({ assessor: '3', min_score: 0 });
+		expect(filterToViewBody({ ...defaultFilter, minScore: 0.5 })).toEqual({});
+	});
+
+	it('round-trips, and the URL carries the order', () => {
+		expect(viewToFilter({ filter: filterToViewBody(viewToFilter(important)) })).toEqual(viewToFilter(important));
+		expect(viewHref(important)).toBe('/?view=9&tag=4&sort=score&assessor=3&min_score=0.7&unassessed=5');
+	});
+
+	it('a changed sort or minimum marks the view modified', () => {
+		const f = viewToFilter(important);
+		expect(isModified(important, f)).toBe(false);
+		expect(isModified(important, { ...f, sort: 'newest' })).toBe(true);
+		expect(isModified(important, { ...f, minScore: 0.9 })).toBe(true);
+	});
+
+	it('counts the views that use an assessor, by score or by unassessed', () => {
+		const other: SavedView = { id: '10', name: 'Work', filter: { unassessed: '3' } };
+		const plain: SavedView = { id: '11', name: 'Plain', filter: { assessor: '8' } };
+		expect(viewsUsing({ assessor: '3' }, [important, other, plain]).map((v) => v.id)).toEqual(['9', '10']);
+		expect(usageWarning('assessor', 2)).toBe('2 views filter on this assessor; they will stop filtering on it.');
+		expect(usageWarning('assessor', 1)).toBe('1 view filters on this assessor; it will stop filtering on it.');
 	});
 });

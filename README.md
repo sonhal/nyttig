@@ -685,6 +685,7 @@ the keymap, so it is always current.
 | `S`, `T`           | Pick a source / tag by name (fuzzy, `Enter` picks, `Esc` closes) |
 | `1`-`9`, `0`       | Open favorite saved view 1-9 / the unfiltered feed (see [Saved views](#saved-views)) |
 | `v`                | Pick a saved view by name (fuzzy)                  |
+| `a`, `A`           | Pick an assessor by name (its scores are shown first, see [Assessments](#assessments)) / clear it |
 | `o`                | Toggle sort (newest / oldest)                     |
 | `F`                | Follow: jump to the newest and stick to it         |
 | `D`                | Relative ("12m ago") or absolute times; remembered in the browser |
@@ -697,8 +698,11 @@ the keymap, so it is always current.
 
 **Query bar.** `kernel tag:rust src:"Hacker News" is:unviewed sort:oldest`:
 `tag:` (also matches child tags), `src:` (a name or abbreviation, any case), `is:unviewed` and
-`sort:newest|oldest` set the filter; every other word is the full-text
-search. Names with spaces are quoted. Names are completed as you type
+`sort:newest|oldest|score` set the filter; `score:<assessor>` picks an
+assessor whose scores are shown first, `score:claude>=0.7` keeps only items it
+scored at least that, `unassessed:<assessor>` keeps items it has not assessed,
+and `sort:score` orders by the assessor's scores (it needs a `score:` term).
+Every other word is the full-text search. Names with spaces are quoted. Names are completed as you type
 (`Tab` accepts, `↑`/`↓` choose; on a phone tap a suggestion), and an
 unknown name is an error under the bar instead of being ignored. The bar
 always shows the current filter in this syntax. Matching words are
@@ -716,8 +720,8 @@ fresh snapshot (the newest 200), dropping the older pages.
 
 **Command line** (`:`; `Tab` completes, again to cycle; `↑`/`↓` history;
 a unique prefix is enough): `:feed` `:sources` `:tags` `:rules` `:views` (`:q` is
-the feed), `:sort [newest|oldest]`, `:unviewed [on|off]`, `:src <name>|all`,
-`:tag <name>|all`, `:view <name>|all` (`:v`), `:save [name]`,
+the feed), `:assessors`, `:sort [newest|oldest|score]`, `:unviewed [on|off]`, `:src <name>|all`,
+`:tag <name>|all`, `:score <assessor>|all [min]`, `:unassessed <assessor>|all`, `:view <name>|all` (`:v`), `:save [name]`,
 `:refresh [source]`, `:time [relative|absolute]`, `:follow`, `:help`. The
 filter and view commands also work from the management pages, and go to the
 feed.
@@ -756,6 +760,21 @@ down (the tabs follow), `x` deletes it. View names are unique (any case),
 at most 64 characters, and there can be 100 views. Deleting a source or tag
 keeps the views that filter on it, without that part of their filter; the
 delete confirmation says how many views it affects.
+
+#### Assessments in the web app
+
+Each row shows one chip per assessor that scored the item, `[claude 0.9]` in
+the assessor's color (its highest score for the item, the selected assessor
+first). The expanded row lists every assessment: assessor, tag, score, age and
+the note. Notes and assessor names are untrusted, so they are shown as text
+only (markup in a note is read as text, like a feed description), never as
+HTML or Markdown. New scores arrive live; an item that starts matching the
+filter is added in its sort position, and one that stops matching stays until
+the next reload. A view saves its assessor, minimum score, "not assessed by"
+and its sort, `score` included, so opening it restores the order. The
+`:assessors` page (also the tab and the phone's `⚙` sheet) adds, edits and
+deletes assessors; deleting one deletes its assessments, and the confirmation
+says how many views stop filtering on it.
 
 #### Sources, tags and rules
 
