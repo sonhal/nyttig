@@ -139,6 +139,14 @@
 			flash(`deleted ${oneLine(p.source.name)}`);
 			await reload();
 		} catch (e) {
+			if (api.isNotFound(e)) {
+				// Another client removed it first: the goal is met, and the list
+				// is stale, so refresh it instead of leaving the error up.
+				panel = null;
+				flash(`already deleted ${oneLine(p.source.name)}`);
+				await reload();
+				return;
+			}
 			panel = { ...p, busy: false, error: errMsg(e) };
 		}
 	}

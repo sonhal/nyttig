@@ -134,15 +134,28 @@ func (s *Service) AddSource(ctx context.Context, req *pb.AddSourceRequest) (*pb.
 	return dbSourceToProto(created), nil
 }
 
-// RemoveSource deletes a feed source and all its related data.
+// RemoveSource deletes a feed source and all its related data. An unknown
+// ID is NotFound.
 func (s *Service) RemoveSource(ctx context.Context, req *pb.RemoveSourceRequest) (*emptypb.Empty, error) {
+	existing, err := db.GetSource(s.db, req.Id)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "get source: %v", err)
+	}
+	if existing == nil {
+		return nil, status.Errorf(codes.NotFound, "source %d not found", req.Id)
+	}
+
 	// Notify scheduler before deleting from DB.
 	if s.onSourceRemoved != nil {
 		s.onSourceRemoved(req.Id)
 	}
 
-	if err := db.DeleteSource(s.db, req.Id); err != nil {
+	deleted, err := db.DeleteSource(s.db, req.Id)
+	if err != nil {
 		return nil, status.Errorf(codes.Internal, "delete source: %v", err)
+	}
+	if !deleted { // removed by another call since the lookup
+		return nil, status.Errorf(codes.NotFound, "source %d not found", req.Id)
 	}
 	return &emptypb.Empty{}, nil
 }
@@ -323,9 +336,14 @@ func (s *Service) UpdateTag(ctx context.Context, req *pb.UpdateTagRequest) (*pb.
 }
 
 // RemoveTag deletes a tag and all its associated rules and item associations.
+// An unknown ID is NotFound.
 func (s *Service) RemoveTag(ctx context.Context, req *pb.RemoveTagRequest) (*emptypb.Empty, error) {
-	if err := db.DeleteTag(s.db, req.Id); err != nil {
+	deleted, err := db.DeleteTag(s.db, req.Id)
+	if err != nil {
 		return nil, status.Errorf(codes.Internal, "delete tag: %v", err)
+	}
+	if !deleted {
+		return nil, status.Errorf(codes.NotFound, "tag %d not found", req.Id)
 	}
 	return &emptypb.Empty{}, nil
 }
@@ -383,10 +401,14 @@ func (s *Service) AddTagRule(ctx context.Context, req *pb.AddTagRuleRequest) (*p
 	return dbTagRuleToProto(created), nil
 }
 
-// RemoveTagRule deletes a tag rule by ID.
+// RemoveTagRule deletes a tag rule by ID. An unknown ID is NotFound.
 func (s *Service) RemoveTagRule(ctx context.Context, req *pb.RemoveTagRuleRequest) (*emptypb.Empty, error) {
-	if err := db.DeleteTagRule(s.db, req.Id); err != nil {
+	deleted, err := db.DeleteTagRule(s.db, req.Id)
+	if err != nil {
 		return nil, status.Errorf(codes.Internal, "delete tag rule: %v", err)
+	}
+	if !deleted {
+		return nil, status.Errorf(codes.NotFound, "tag rule %d not found", req.Id)
 	}
 	return &emptypb.Empty{}, nil
 }

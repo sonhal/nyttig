@@ -465,3 +465,62 @@ func TestSourceColorSurvivesWire(t *testing.T) {
 		t.Fatalf("after round trip color=%q abbreviation=%q, want #FF6600/HN", out.Color, out.Abbreviation)
 	}
 }
+
+// ── Removing things that don't exist ───────────────────────────────────────
+
+func TestRemove_UnknownIDIsNotFound(t *testing.T) {
+	svc, _ := newTestService(t)
+	ctx := context.Background()
+
+	removedFromScheduler := false
+	svc.OnSourceRemoved(func(int64) { removedFromScheduler = true })
+
+	_, err := svc.RemoveSource(ctx, &pb.RemoveSourceRequest{Id: 999})
+	wantCode(t, err, codes.NotFound)
+	if removedFromScheduler {
+		t.Error("scheduler was told to remove a source that does not exist")
+	}
+	_, err = svc.RemoveTag(ctx, &pb.RemoveTagRequest{Id: 999})
+	wantCode(t, err, codes.NotFound)
+	_, err = svc.RemoveTagRule(ctx, &pb.RemoveTagRuleRequest{Id: 999})
+	wantCode(t, err, codes.NotFound)
+}
+
+func TestRemove_ExistingThenAgainIsNotFound(t *testing.T) {
+	svc, _ := newTestService(t)
+	ctx := context.Background()
+
+	src := addSource(t, svc, "feed", "https://example.com/feed.xml")
+	tag, err := svc.AddTag(ctx, &pb.AddTagRequest{Name: "rust"})
+	if err != nil {
+		t.Fatalf("AddTag: %v", err)
+	}
+	rule, err := svc.AddTagRule(ctx, &pb.AddTagRuleRequest{TagId: tag.Id, Field: "title", Pattern: "rust"})
+	if err != nil {
+		t.Fatalf("AddTagRule: %v", err)
+	}
+
+	removed := 0
+	svc.OnSourceRemoved(func(int64) { removed++ })
+
+	if _, err := svc.RemoveTagRule(ctx, &pb.RemoveTagRuleRequest{Id: rule.Id}); err != nil {
+		t.Fatalf("RemoveTagRule: %v", err)
+	}
+	if _, err := svc.RemoveTag(ctx, &pb.RemoveTagRequest{Id: tag.Id}); err != nil {
+		t.Fatalf("RemoveTag: %v", err)
+	}
+	if _, err := svc.RemoveSource(ctx, &pb.RemoveSourceRequest{Id: src.Id}); err != nil {
+		t.Fatalf("RemoveSource: %v", err)
+	}
+	if removed != 1 {
+		t.Errorf("scheduler notified %d times, want 1", removed)
+	}
+
+	// The second delete of each is NotFound.
+	_, err = svc.RemoveTagRule(ctx, &pb.RemoveTagRuleRequest{Id: rule.Id})
+	wantCode(t, err, codes.NotFound)
+	_, err = svc.RemoveTag(ctx, &pb.RemoveTagRequest{Id: tag.Id})
+	wantCode(t, err, codes.NotFound)
+	_, err = svc.RemoveSource(ctx, &pb.RemoveSourceRequest{Id: src.Id})
+	wantCode(t, err, codes.NotFound)
+}

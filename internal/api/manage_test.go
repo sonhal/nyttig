@@ -310,3 +310,30 @@ func TestManageRPCErrors(t *testing.T) {
 		}
 	}
 }
+
+// A delete of an ID the daemon doesn't know is a 404 with the daemon's
+// message, not a 204.
+func TestRemoveUnknownIsNotFound(t *testing.T) {
+	for _, tc := range []struct {
+		target string
+		msg    string
+	}{
+		{"/api/sources/42", "source 42 not found"},
+		{"/api/tags/42", "tag 42 not found"},
+		{"/api/rules/42", "tag rule 42 not found"},
+	} {
+		fc := &fakeClient{err: status.Error(codes.NotFound, tc.msg)}
+		th := newTestHandler(t, fc)
+		rec := th.do("DELETE", tc.target, "", nil)
+		if rec.Code != http.StatusNotFound {
+			t.Errorf("DELETE %s: status %d %s, want 404", tc.target, rec.Code, rec.Body)
+			continue
+		}
+		if got := decode(t, rec)["error"]; got != tc.msg {
+			t.Errorf("DELETE %s: error %q, want %q", tc.target, got, tc.msg)
+		}
+		if len(fc.removed) != 0 {
+			t.Errorf("DELETE %s: recorded removals %v on a failed call", tc.target, fc.removed)
+		}
+	}
+}
