@@ -2,7 +2,7 @@
 // types.ts. Mutations send JSON with the page's own Origin, which is what
 // nyttig-api's CSRF check requires.
 
-import { filterToParams } from './filter';
+import { apiParams } from './filter';
 import type { Assessment, Assessor, Filter, Item, RuleTest, SavedView, Source, Tag, TagRule, ViewFilter } from './types';
 
 export class ApiError extends Error {
@@ -217,9 +217,12 @@ export interface Page {
 /**
  * With exact, a tag filter matches that tag only, not the tags below it
  * (the tags view counts what deleting a tag removes this way).
+ *
+ * after is the absolute cutoff of the feed's snapshot in unix seconds (see
+ * apiParams); f.since itself is never sent.
  */
-export async function searchItems(f: Filter, limit: number, offset = 0, exact = false): Promise<Page> {
-	const p = filterToParams(f);
+export async function searchItems(f: Filter, limit: number, offset = 0, exact = false, after?: number): Promise<Page> {
+	const p = apiParams(f, after);
 	if (exact && f.tag) p.set('tag_exact', '1');
 	p.set('limit', String(limit));
 	if (offset) p.set('offset', String(offset));

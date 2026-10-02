@@ -53,10 +53,17 @@ type ItemFilter struct {
 	// changes nothing on its own. An assessment is in scope when the filter
 	// has no tag, the assessment has no tag, or its tag is in TagID's subtree
 	// (TagID itself with TagExact).
-	AssessorID   int64    // 0 = none
-	MinScore     *float64 // an in-scope score from AssessorID of at least this
-	UnassessedBy int64    // no in-scope assessment (scored or not) by this assessor
+	AssessorID   int64     // 0 = none
+	MinScore     *float64  // an in-scope score from AssessorID of at least this
+	UnassessedBy int64     // no in-scope assessment (scored or not) by this assessor
+	After        time.Time // zero = no window; else only items dated at or after it
 }
+
+// dateCutoffLayout is the shape After is bound with. items.published is
+// stored as "YYYY-MM-DD HH:MM:SS+00:00" and fetched_at as
+// "YYYY-MM-DD HH:MM:SS"; both compare correctly as text against a bound
+// without a suffix, including within the cutoff second.
+const dateCutoffLayout = "2006-01-02 15:04:05"
 
 // InsertItem inserts a new item. Returns (itemID, inserted, error).
 // inserted is false when the item already exists (UNIQUE constraint).
@@ -187,6 +194,11 @@ func ListItems(db *sql.DB, filter ItemFilter) ([]*Item, int, error) {
 	}
 	if filter.UnviewedOnly {
 		conditions = append(conditions, "i.id NOT IN (SELECT item_id FROM view_state)")
+	}
+	if !filter.After.IsZero() {
+		// The date the feed sorts by: published, else when it was fetched.
+		conditions = append(conditions, "COALESCE(i.published, i.fetched_at) >= ?")
+		args = append(args, filter.After.UTC().Format(dateCutoffLayout))
 	}
 	scope, scopeArgs := assessmentScopeSQL(filter)
 	if filter.MinScore != nil {

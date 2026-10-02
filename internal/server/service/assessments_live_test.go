@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"google.golang.org/protobuf/types/known/timestamppb"
+
 	pb "github.com/sonhal/nyttig/internal/proto/nyttig/v1"
 	"github.com/sonhal/nyttig/internal/server/db"
 )
@@ -285,5 +287,76 @@ func TestHub_NewItemsUnderMinScore(t *testing.T) {
 	}
 	if !svc.itemMatchesFilter(p, &pb.StreamFilter{AssessorId: claude.Id, Sort: "score"}) {
 		t.Error("sort score filtered the item")
+	}
+}
+
+// TestAssessmentFilters_WithWindowAgree checks the date window and the
+// assessment filters together: the Hub's check (which decides update_matches)
+// must agree with ListItems, so an assessed item that lies outside the window
+// is never inserted by a live update.
+func TestAssessmentFilters_WithWindowAgree(t *testing.T) {
+	svc, database := newTestService(t)
+	src := addSource(t, svc, "feed", "https://example.com/feed")
+	cve := addTag(t, svc, "CVE")
+	claude := addAssessor(t, svc, "claude")
+
+	// minutes relative to 2026-09-01 12:00 UTC; the cutoff is that time.
+	cutoff := time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC)
+	for _, it := range []struct {
+		title   string
+		minutes int
+		score   *float64
+	}{
+		{"old-unassessed", -120, nil},
+		{"old-scored", -60, fptr(0.9)},
+		{"new-unassessed", 0, nil},
+		{"new-scored-high", 1, fptr(0.9)},
+		{"new-scored-low", 2, fptr(0.1)},
+	} {
+		id := insertItem(t, database, src.Id, it.title, "", it.minutes)
+		if err := db.AssignTagToItem(database, id, cve.Id); err != nil {
+			t.Fatal(err)
+		}
+		if it.score != nil {
+			if _, err := db.PutAssessment(database, &db.Assessment{ItemID: id, AssessorID: claude.Id, Score: it.score}); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	all, _, err := db.ListItems(database, db.ItemFilter{Limit: 1000})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, after := range []time.Time{{}, cutoff, cutoff.Add(90 * time.Minute)} {
+		for _, min := range []*float64{nil, fptr(0.5)} {
+			for _, unassessed := range []int64{0, claude.Id} {
+				if min != nil && unassessed != 0 {
+					continue
+				}
+				df := db.ItemFilter{TagID: cve.Id, AssessorID: claude.Id, MinScore: min, UnassessedBy: unassessed, After: after, Limit: 1000}
+				sf := &pb.StreamFilter{TagId: cve.Id, AssessorId: claude.Id, MinScore: min, UnassessedBy: unassessed}
+				if !after.IsZero() {
+					sf.After = timestamppb.New(after)
+				}
+				listed, _, err := db.ListItems(database, df)
+				if err != nil {
+					t.Fatal(err)
+				}
+				var want, got []string
+				for _, it := range listed {
+					want = append(want, it.Title)
+				}
+				for _, it := range all {
+					if svc.itemMatchesFilter(ItemToProto(it), sf) {
+						got = append(got, it.Title)
+					}
+				}
+				sort.Strings(want)
+				sort.Strings(got)
+				if !reflect.DeepEqual(got, want) {
+					t.Errorf("after=%v min=%v unassessed=%d:\n hub  %v\n list %v", after, min, unassessed, got, want)
+				}
+			}
+		}
 	}
 }

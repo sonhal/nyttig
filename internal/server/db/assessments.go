@@ -129,7 +129,7 @@ func UpdateAssessor(db *sql.DB, a *Assessor) (bool, error) {
 }
 
 // DeleteAssessor removes an assessor and all of its assessments. Saved views
-// that use it keep existing and stop filtering on it (see migration 7). It
+// that use it keep existing and stop filtering on it (see migration 8). It
 // reports whether the assessor existed.
 func DeleteAssessor(db *sql.DB, id int64) (bool, error) {
 	return deleteByID(db, `DELETE FROM assessors WHERE id = ?`, id)

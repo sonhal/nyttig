@@ -57,6 +57,25 @@ describe('searchItems', () => {
 		expect(new URL(urlOf(fn), 'http://x').searchParams.get('tag_exact')).toBe('1');
 	});
 
+	it('sends the snapshot cutoff as after, never the window', async () => {
+		const fn = stubFetch(200, {});
+		await searchItems({ ...defaultFilter, tag: '4', since: '7d' }, 50, 100, false, 1788264000);
+		const u = new URL(urlOf(fn), 'http://x');
+		expect(u.searchParams.get('after')).toBe('1788264000');
+		expect(u.searchParams.has('since')).toBe(false);
+		expect(u.searchParams.get('tag')).toBe('4');
+		expect(u.searchParams.get('limit')).toBe('50');
+		expect(u.searchParams.get('offset')).toBe('100');
+	});
+
+	it('sends no cutoff without one', async () => {
+		const fn = stubFetch(200, {});
+		await searchItems({ ...defaultFilter, since: '7d' }, 1);
+		const u = new URL(urlOf(fn), 'http://x');
+		expect(u.searchParams.has('after')).toBe(false);
+		expect(u.searchParams.has('since')).toBe(false);
+	});
+
 	it('exact without a tag sends nothing extra', async () => {
 		const fn = stubFetch(200, {});
 		await searchItems(defaultFilter, 1, 0, true);

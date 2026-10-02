@@ -7,6 +7,7 @@
 // Everything here is pure: the views come in as arguments.
 
 import { defaultFilter, filterToParams, sameFilter } from './filter';
+import { validSince } from './since';
 import type { Filter, SavedView, ViewFilter } from './types';
 
 /** The most views the daemon keeps. */
@@ -24,6 +25,7 @@ export function viewToFilter(v: SavedView): Filter {
 		tag: f.tag ?? '',
 		sort: f.sort === 'oldest' ? 'oldest' : f.sort === 'score' && f.assessor ? 'score' : 'newest',
 		unviewed: !!f.unviewed,
+		since: validSince(f.since),
 		assessor: f.assessor ?? '',
 		minScore: f.assessor && typeof f.min_score === 'number' ? f.min_score : null,
 		unassessed: f.unassessed ?? ''
@@ -38,6 +40,7 @@ export function filterToViewBody(f: Filter): ViewFilter {
 	if (f.tag) b.tag = f.tag;
 	if (f.sort !== defaultFilter.sort) b.sort = f.sort;
 	if (f.unviewed) b.unviewed = true;
+	if (f.since) b.since = f.since;
 	if (f.assessor) b.assessor = f.assessor;
 	// A minimum of 0 is a minimum, so it is kept.
 	if (f.assessor && f.minScore !== null) b.min_score = f.minScore;

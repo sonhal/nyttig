@@ -84,6 +84,8 @@ export interface Filter {
 	tag: string;
 	sort: Sort;
 	unviewed: boolean;
+	/** A rolling window such as "7d" (since.ts), "" = any time. */
+	since: string;
 	/** Assessor ID, "" = none: whose scores minScore and sort "score" use, and which is shown first. */
 	assessor: string;
 	/** Only items the assessor scored at least this (0 to 1); null = no minimum. Needs assessor. */
@@ -124,6 +126,8 @@ export interface ViewFilter {
 	tag?: string;
 	sort?: string;
 	unviewed?: boolean;
+	/** The window as the user typed it ("7d"); absent = any time. */
+	since?: string;
 	assessor?: string;
 	min_score?: number;
 	unassessed?: string;

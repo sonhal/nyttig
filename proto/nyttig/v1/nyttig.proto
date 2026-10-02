@@ -161,9 +161,10 @@ message ViewFilter {
     int64 tag_id = 3;
     string sort = 4;          // "newest" (default), "oldest" or "score"
     bool unviewed_only = 5;
-    int64 assessor_id = 6;    // 0 = none; whose scores min_score and sort "score" use
-    optional double min_score = 7;
-    int64 unassessed_by = 8;  // 0 = none
+    string since = 6;         // rolling window: "24h", "7d", "2w", "1mo", "1y"; "" = no window
+    int64 assessor_id = 7;    // 0 = none; whose scores min_score and sort "score" use
+    optional double min_score = 8;
+    int64 unassessed_by = 9;  // 0 = none
 }
 
 message SavedView {
@@ -287,9 +288,10 @@ message SearchRequest {
     string sort      = 6;  // newest, oldest, score; default newest
     bool   unviewed_only = 7;
     bool   tag_exact = 8;  // match tag_id only, not its descendants
-    int64  assessor_id = 9;   // 0 = none; whose scores min_score and sort "score" use
-    optional double min_score = 10;  // an in-scope score from assessor_id of at least this
-    int64  unassessed_by = 11;  // 0 = none; no in-scope assessment by this assessor
+    google.protobuf.Timestamp after = 9;  // only items dated at or after this (published, else fetched); unset = no window
+    int64  assessor_id = 10;   // 0 = none; whose scores min_score and sort "score" use
+    optional double min_score = 11;  // an in-scope score from assessor_id of at least this
+    int64  unassessed_by = 12;  // 0 = none; no in-scope assessment by this assessor
 }
 
 message SearchResponse {
@@ -318,9 +320,10 @@ message StreamFilter {
     string sort      = 4;  // newest, oldest, score; default newest
     int32  limit     = 5;
     bool   unviewed_only = 6;
-    int64  assessor_id = 7;   // 0 = none; whose scores min_score and sort "score" use
-    optional double min_score = 8;
-    int64  unassessed_by = 9;  // 0 = none
+    google.protobuf.Timestamp after = 7;  // only items dated at or after this (published, else fetched); unset = no window
+    int64  assessor_id = 8;   // 0 = none; whose scores min_score and sort "score" use
+    optional double min_score = 9;
+    int64  unassessed_by = 10;  // 0 = none
 }
 
 message ServerMessage {

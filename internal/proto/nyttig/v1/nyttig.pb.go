@@ -1230,9 +1230,10 @@ type ViewFilter struct {
 	TagId         int64                  `protobuf:"varint,3,opt,name=tag_id,json=tagId,proto3" json:"tag_id,omitempty"`
 	Sort          string                 `protobuf:"bytes,4,opt,name=sort,proto3" json:"sort,omitempty"` // "newest" (default), "oldest" or "score"
 	UnviewedOnly  bool                   `protobuf:"varint,5,opt,name=unviewed_only,json=unviewedOnly,proto3" json:"unviewed_only,omitempty"`
-	AssessorId    int64                  `protobuf:"varint,6,opt,name=assessor_id,json=assessorId,proto3" json:"assessor_id,omitempty"` // 0 = none; whose scores min_score and sort "score" use
-	MinScore      *float64               `protobuf:"fixed64,7,opt,name=min_score,json=minScore,proto3,oneof" json:"min_score,omitempty"`
-	UnassessedBy  int64                  `protobuf:"varint,8,opt,name=unassessed_by,json=unassessedBy,proto3" json:"unassessed_by,omitempty"` // 0 = none
+	Since         string                 `protobuf:"bytes,6,opt,name=since,proto3" json:"since,omitempty"`                              // rolling window: "24h", "7d", "2w", "1mo", "1y"; "" = no window
+	AssessorId    int64                  `protobuf:"varint,7,opt,name=assessor_id,json=assessorId,proto3" json:"assessor_id,omitempty"` // 0 = none; whose scores min_score and sort "score" use
+	MinScore      *float64               `protobuf:"fixed64,8,opt,name=min_score,json=minScore,proto3,oneof" json:"min_score,omitempty"`
+	UnassessedBy  int64                  `protobuf:"varint,9,opt,name=unassessed_by,json=unassessedBy,proto3" json:"unassessed_by,omitempty"` // 0 = none
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1300,6 +1301,13 @@ func (x *ViewFilter) GetUnviewedOnly() bool {
 		return x.UnviewedOnly
 	}
 	return false
+}
+
+func (x *ViewFilter) GetSince() string {
+	if x != nil {
+		return x.Since
+	}
+	return ""
 }
 
 func (x *ViewFilter) GetAssessorId() int64 {
@@ -2315,9 +2323,10 @@ type SearchRequest struct {
 	Sort          string                 `protobuf:"bytes,6,opt,name=sort,proto3" json:"sort,omitempty"`                          // newest, oldest, score; default newest
 	UnviewedOnly  bool                   `protobuf:"varint,7,opt,name=unviewed_only,json=unviewedOnly,proto3" json:"unviewed_only,omitempty"`
 	TagExact      bool                   `protobuf:"varint,8,opt,name=tag_exact,json=tagExact,proto3" json:"tag_exact,omitempty"`              // match tag_id only, not its descendants
-	AssessorId    int64                  `protobuf:"varint,9,opt,name=assessor_id,json=assessorId,proto3" json:"assessor_id,omitempty"`        // 0 = none; whose scores min_score and sort "score" use
-	MinScore      *float64               `protobuf:"fixed64,10,opt,name=min_score,json=minScore,proto3,oneof" json:"min_score,omitempty"`      // an in-scope score from assessor_id of at least this
-	UnassessedBy  int64                  `protobuf:"varint,11,opt,name=unassessed_by,json=unassessedBy,proto3" json:"unassessed_by,omitempty"` // 0 = none; no in-scope assessment by this assessor
+	After         *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=after,proto3" json:"after,omitempty"`                                     // only items dated at or after this (published, else fetched); unset = no window
+	AssessorId    int64                  `protobuf:"varint,10,opt,name=assessor_id,json=assessorId,proto3" json:"assessor_id,omitempty"`       // 0 = none; whose scores min_score and sort "score" use
+	MinScore      *float64               `protobuf:"fixed64,11,opt,name=min_score,json=minScore,proto3,oneof" json:"min_score,omitempty"`      // an in-scope score from assessor_id of at least this
+	UnassessedBy  int64                  `protobuf:"varint,12,opt,name=unassessed_by,json=unassessedBy,proto3" json:"unassessed_by,omitempty"` // 0 = none; no in-scope assessment by this assessor
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2406,6 +2415,13 @@ func (x *SearchRequest) GetTagExact() bool {
 		return x.TagExact
 	}
 	return false
+}
+
+func (x *SearchRequest) GetAfter() *timestamppb.Timestamp {
+	if x != nil {
+		return x.After
+	}
+	return nil
 }
 
 func (x *SearchRequest) GetAssessorId() int64 {
@@ -2599,9 +2615,10 @@ type StreamFilter struct {
 	Sort          string                 `protobuf:"bytes,4,opt,name=sort,proto3" json:"sort,omitempty"`                          // newest, oldest, score; default newest
 	Limit         int32                  `protobuf:"varint,5,opt,name=limit,proto3" json:"limit,omitempty"`
 	UnviewedOnly  bool                   `protobuf:"varint,6,opt,name=unviewed_only,json=unviewedOnly,proto3" json:"unviewed_only,omitempty"`
-	AssessorId    int64                  `protobuf:"varint,7,opt,name=assessor_id,json=assessorId,proto3" json:"assessor_id,omitempty"` // 0 = none; whose scores min_score and sort "score" use
-	MinScore      *float64               `protobuf:"fixed64,8,opt,name=min_score,json=minScore,proto3,oneof" json:"min_score,omitempty"`
-	UnassessedBy  int64                  `protobuf:"varint,9,opt,name=unassessed_by,json=unassessedBy,proto3" json:"unassessed_by,omitempty"` // 0 = none
+	After         *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=after,proto3" json:"after,omitempty"`                              // only items dated at or after this (published, else fetched); unset = no window
+	AssessorId    int64                  `protobuf:"varint,8,opt,name=assessor_id,json=assessorId,proto3" json:"assessor_id,omitempty"` // 0 = none; whose scores min_score and sort "score" use
+	MinScore      *float64               `protobuf:"fixed64,9,opt,name=min_score,json=minScore,proto3,oneof" json:"min_score,omitempty"`
+	UnassessedBy  int64                  `protobuf:"varint,10,opt,name=unassessed_by,json=unassessedBy,proto3" json:"unassessed_by,omitempty"` // 0 = none
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2676,6 +2693,13 @@ func (x *StreamFilter) GetUnviewedOnly() bool {
 		return x.UnviewedOnly
 	}
 	return false
+}
+
+func (x *StreamFilter) GetAfter() *timestamppb.Timestamp {
+	if x != nil {
+		return x.After
+	}
+	return nil
 }
 
 func (x *StreamFilter) GetAssessorId() int64 {
@@ -3022,18 +3046,19 @@ const file_nyttig_v1_nyttig_proto_rawDesc = "" +
 	"\x10RemoveTagRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\x03R\x02id\"6\n" +
 	"\x10ListTagsResponse\x12\"\n" +
-	"\x04tags\x18\x01 \x03(\v2\x0e.nyttig.v1.TagR\x04tags\"\x87\x02\n" +
+	"\x04tags\x18\x01 \x03(\v2\x0e.nyttig.v1.TagR\x04tags\"\x9d\x02\n" +
 	"\n" +
 	"ViewFilter\x12\x16\n" +
 	"\x06search\x18\x01 \x01(\tR\x06search\x12\x1b\n" +
 	"\tsource_id\x18\x02 \x01(\x03R\bsourceId\x12\x15\n" +
 	"\x06tag_id\x18\x03 \x01(\x03R\x05tagId\x12\x12\n" +
 	"\x04sort\x18\x04 \x01(\tR\x04sort\x12#\n" +
-	"\runviewed_only\x18\x05 \x01(\bR\funviewedOnly\x12\x1f\n" +
-	"\vassessor_id\x18\x06 \x01(\x03R\n" +
+	"\runviewed_only\x18\x05 \x01(\bR\funviewedOnly\x12\x14\n" +
+	"\x05since\x18\x06 \x01(\tR\x05since\x12\x1f\n" +
+	"\vassessor_id\x18\a \x01(\x03R\n" +
 	"assessorId\x12 \n" +
-	"\tmin_score\x18\a \x01(\x01H\x00R\bminScore\x88\x01\x01\x12#\n" +
-	"\runassessed_by\x18\b \x01(\x03R\funassessedByB\f\n" +
+	"\tmin_score\x18\b \x01(\x01H\x00R\bminScore\x88\x01\x01\x12#\n" +
+	"\runassessed_by\x18\t \x01(\x03R\funassessedByB\f\n" +
 	"\n" +
 	"_min_score\"\x96\x01\n" +
 	"\tSavedView\x12\x0e\n" +
@@ -3105,7 +3130,7 @@ const file_nyttig_v1_nyttig_proto_rawDesc = "" +
 	"\x05limit\x18\x04 \x01(\x05R\x05limit\"V\n" +
 	"\x13TestTagRuleResponse\x12%\n" +
 	"\x05items\x18\x01 \x03(\v2\x0f.nyttig.v1.ItemR\x05items\x12\x18\n" +
-	"\ascanned\x18\x02 \x01(\x05R\ascanned\"\xd3\x02\n" +
+	"\ascanned\x18\x02 \x01(\x05R\ascanned\"\x85\x03\n" +
 	"\rSearchRequest\x12\x14\n" +
 	"\x05query\x18\x01 \x01(\tR\x05query\x12\x1b\n" +
 	"\tsource_id\x18\x02 \x01(\x03R\bsourceId\x12\x15\n" +
@@ -3114,12 +3139,13 @@ const file_nyttig_v1_nyttig_proto_rawDesc = "" +
 	"\x06offset\x18\x05 \x01(\x05R\x06offset\x12\x12\n" +
 	"\x04sort\x18\x06 \x01(\tR\x04sort\x12#\n" +
 	"\runviewed_only\x18\a \x01(\bR\funviewedOnly\x12\x1b\n" +
-	"\ttag_exact\x18\b \x01(\bR\btagExact\x12\x1f\n" +
-	"\vassessor_id\x18\t \x01(\x03R\n" +
+	"\ttag_exact\x18\b \x01(\bR\btagExact\x120\n" +
+	"\x05after\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\x05after\x12\x1f\n" +
+	"\vassessor_id\x18\n" +
+	" \x01(\x03R\n" +
 	"assessorId\x12 \n" +
-	"\tmin_score\x18\n" +
-	" \x01(\x01H\x00R\bminScore\x88\x01\x01\x12#\n" +
-	"\runassessed_by\x18\v \x01(\x03R\funassessedByB\f\n" +
+	"\tmin_score\x18\v \x01(\x01H\x00R\bminScore\x88\x01\x01\x12#\n" +
+	"\runassessed_by\x18\f \x01(\x03R\funassessedByB\f\n" +
 	"\n" +
 	"_min_score\"M\n" +
 	"\x0eSearchResponse\x12%\n" +
@@ -3129,18 +3155,20 @@ const file_nyttig_v1_nyttig_proto_rawDesc = "" +
 	"\bitem_ids\x18\x01 \x03(\x03R\aitemIds\"I\n" +
 	"\rClientMessage\x121\n" +
 	"\x06filter\x18\x01 \x01(\v2\x17.nyttig.v1.StreamFilterH\x00R\x06filterB\x05\n" +
-	"\x03msg\"\x9f\x02\n" +
+	"\x03msg\"\xd1\x02\n" +
 	"\fStreamFilter\x12\x1b\n" +
 	"\tsource_id\x18\x01 \x01(\x03R\bsourceId\x12\x15\n" +
 	"\x06tag_id\x18\x02 \x01(\x03R\x05tagId\x12\x16\n" +
 	"\x06search\x18\x03 \x01(\tR\x06search\x12\x12\n" +
 	"\x04sort\x18\x04 \x01(\tR\x04sort\x12\x14\n" +
 	"\x05limit\x18\x05 \x01(\x05R\x05limit\x12#\n" +
-	"\runviewed_only\x18\x06 \x01(\bR\funviewedOnly\x12\x1f\n" +
-	"\vassessor_id\x18\a \x01(\x03R\n" +
+	"\runviewed_only\x18\x06 \x01(\bR\funviewedOnly\x120\n" +
+	"\x05after\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\x05after\x12\x1f\n" +
+	"\vassessor_id\x18\b \x01(\x03R\n" +
 	"assessorId\x12 \n" +
-	"\tmin_score\x18\b \x01(\x01H\x00R\bminScore\x88\x01\x01\x12#\n" +
-	"\runassessed_by\x18\t \x01(\x03R\funassessedByB\f\n" +
+	"\tmin_score\x18\t \x01(\x01H\x00R\bminScore\x88\x01\x01\x12#\n" +
+	"\runassessed_by\x18\n" +
+	" \x01(\x03R\funassessedByB\f\n" +
 	"\n" +
 	"_min_score\"\xf5\x01\n" +
 	"\rServerMessage\x12%\n" +
@@ -3263,71 +3291,73 @@ var file_nyttig_v1_nyttig_proto_depIdxs = []int32{
 	3,  // 15: nyttig.v1.ListAssessorsResponse.assessors:type_name -> nyttig.v1.Assessor
 	5,  // 16: nyttig.v1.ListTagRulesResponse.rules:type_name -> nyttig.v1.TagRule
 	1,  // 17: nyttig.v1.TestTagRuleResponse.items:type_name -> nyttig.v1.Item
-	1,  // 18: nyttig.v1.SearchResponse.items:type_name -> nyttig.v1.Item
-	38, // 19: nyttig.v1.ClientMessage.filter:type_name -> nyttig.v1.StreamFilter
-	1,  // 20: nyttig.v1.ServerMessage.item:type_name -> nyttig.v1.Item
-	40, // 21: nyttig.v1.ServerMessage.reset:type_name -> nyttig.v1.Reset
-	41, // 22: nyttig.v1.ServerMessage.complete:type_name -> nyttig.v1.Complete
-	1,  // 23: nyttig.v1.ServerMessage.item_update:type_name -> nyttig.v1.Item
-	6,  // 24: nyttig.v1.Nyttig.AddSource:input_type -> nyttig.v1.AddSourceRequest
-	7,  // 25: nyttig.v1.Nyttig.RemoveSource:input_type -> nyttig.v1.RemoveSourceRequest
-	8,  // 26: nyttig.v1.Nyttig.UpdateSource:input_type -> nyttig.v1.UpdateSourceRequest
-	43, // 27: nyttig.v1.Nyttig.ListSources:input_type -> google.protobuf.Empty
-	10, // 28: nyttig.v1.Nyttig.RefreshSource:input_type -> nyttig.v1.RefreshSourceRequest
-	11, // 29: nyttig.v1.Nyttig.AddTag:input_type -> nyttig.v1.AddTagRequest
-	13, // 30: nyttig.v1.Nyttig.UpdateTag:input_type -> nyttig.v1.UpdateTagRequest
-	14, // 31: nyttig.v1.Nyttig.RemoveTag:input_type -> nyttig.v1.RemoveTagRequest
-	43, // 32: nyttig.v1.Nyttig.ListTags:input_type -> google.protobuf.Empty
-	29, // 33: nyttig.v1.Nyttig.AddTagRule:input_type -> nyttig.v1.AddTagRuleRequest
-	30, // 34: nyttig.v1.Nyttig.RemoveTagRule:input_type -> nyttig.v1.RemoveTagRuleRequest
-	43, // 35: nyttig.v1.Nyttig.ListTagRules:input_type -> google.protobuf.Empty
-	32, // 36: nyttig.v1.Nyttig.TestTagRule:input_type -> nyttig.v1.TestTagRuleRequest
-	18, // 37: nyttig.v1.Nyttig.AddSavedView:input_type -> nyttig.v1.AddSavedViewRequest
-	19, // 38: nyttig.v1.Nyttig.UpdateSavedView:input_type -> nyttig.v1.UpdateSavedViewRequest
-	20, // 39: nyttig.v1.Nyttig.RemoveSavedView:input_type -> nyttig.v1.RemoveSavedViewRequest
-	43, // 40: nyttig.v1.Nyttig.ListSavedViews:input_type -> google.protobuf.Empty
-	21, // 41: nyttig.v1.Nyttig.ReorderSavedViews:input_type -> nyttig.v1.ReorderSavedViewsRequest
-	23, // 42: nyttig.v1.Nyttig.AddAssessor:input_type -> nyttig.v1.AddAssessorRequest
-	24, // 43: nyttig.v1.Nyttig.UpdateAssessor:input_type -> nyttig.v1.UpdateAssessorRequest
-	25, // 44: nyttig.v1.Nyttig.RemoveAssessor:input_type -> nyttig.v1.RemoveAssessorRequest
-	43, // 45: nyttig.v1.Nyttig.ListAssessors:input_type -> google.protobuf.Empty
-	27, // 46: nyttig.v1.Nyttig.PutAssessment:input_type -> nyttig.v1.PutAssessmentRequest
-	28, // 47: nyttig.v1.Nyttig.RemoveAssessment:input_type -> nyttig.v1.RemoveAssessmentRequest
-	37, // 48: nyttig.v1.Nyttig.StreamItems:input_type -> nyttig.v1.ClientMessage
-	34, // 49: nyttig.v1.Nyttig.Search:input_type -> nyttig.v1.SearchRequest
-	36, // 50: nyttig.v1.Nyttig.MarkViewed:input_type -> nyttig.v1.MarkViewedRequest
-	0,  // 51: nyttig.v1.Nyttig.AddSource:output_type -> nyttig.v1.Source
-	43, // 52: nyttig.v1.Nyttig.RemoveSource:output_type -> google.protobuf.Empty
-	0,  // 53: nyttig.v1.Nyttig.UpdateSource:output_type -> nyttig.v1.Source
-	9,  // 54: nyttig.v1.Nyttig.ListSources:output_type -> nyttig.v1.ListSourcesResponse
-	43, // 55: nyttig.v1.Nyttig.RefreshSource:output_type -> google.protobuf.Empty
-	2,  // 56: nyttig.v1.Nyttig.AddTag:output_type -> nyttig.v1.Tag
-	2,  // 57: nyttig.v1.Nyttig.UpdateTag:output_type -> nyttig.v1.Tag
-	43, // 58: nyttig.v1.Nyttig.RemoveTag:output_type -> google.protobuf.Empty
-	15, // 59: nyttig.v1.Nyttig.ListTags:output_type -> nyttig.v1.ListTagsResponse
-	5,  // 60: nyttig.v1.Nyttig.AddTagRule:output_type -> nyttig.v1.TagRule
-	43, // 61: nyttig.v1.Nyttig.RemoveTagRule:output_type -> google.protobuf.Empty
-	31, // 62: nyttig.v1.Nyttig.ListTagRules:output_type -> nyttig.v1.ListTagRulesResponse
-	33, // 63: nyttig.v1.Nyttig.TestTagRule:output_type -> nyttig.v1.TestTagRuleResponse
-	17, // 64: nyttig.v1.Nyttig.AddSavedView:output_type -> nyttig.v1.SavedView
-	17, // 65: nyttig.v1.Nyttig.UpdateSavedView:output_type -> nyttig.v1.SavedView
-	43, // 66: nyttig.v1.Nyttig.RemoveSavedView:output_type -> google.protobuf.Empty
-	22, // 67: nyttig.v1.Nyttig.ListSavedViews:output_type -> nyttig.v1.ListSavedViewsResponse
-	22, // 68: nyttig.v1.Nyttig.ReorderSavedViews:output_type -> nyttig.v1.ListSavedViewsResponse
-	3,  // 69: nyttig.v1.Nyttig.AddAssessor:output_type -> nyttig.v1.Assessor
-	3,  // 70: nyttig.v1.Nyttig.UpdateAssessor:output_type -> nyttig.v1.Assessor
-	43, // 71: nyttig.v1.Nyttig.RemoveAssessor:output_type -> google.protobuf.Empty
-	26, // 72: nyttig.v1.Nyttig.ListAssessors:output_type -> nyttig.v1.ListAssessorsResponse
-	4,  // 73: nyttig.v1.Nyttig.PutAssessment:output_type -> nyttig.v1.Assessment
-	43, // 74: nyttig.v1.Nyttig.RemoveAssessment:output_type -> google.protobuf.Empty
-	39, // 75: nyttig.v1.Nyttig.StreamItems:output_type -> nyttig.v1.ServerMessage
-	35, // 76: nyttig.v1.Nyttig.Search:output_type -> nyttig.v1.SearchResponse
-	43, // 77: nyttig.v1.Nyttig.MarkViewed:output_type -> google.protobuf.Empty
-	51, // [51:78] is the sub-list for method output_type
-	24, // [24:51] is the sub-list for method input_type
-	24, // [24:24] is the sub-list for extension type_name
-	24, // [24:24] is the sub-list for extension extendee
-	0,  // [0:24] is the sub-list for field type_name
+	42, // 18: nyttig.v1.SearchRequest.after:type_name -> google.protobuf.Timestamp
+	1,  // 19: nyttig.v1.SearchResponse.items:type_name -> nyttig.v1.Item
+	38, // 20: nyttig.v1.ClientMessage.filter:type_name -> nyttig.v1.StreamFilter
+	42, // 21: nyttig.v1.StreamFilter.after:type_name -> google.protobuf.Timestamp
+	1,  // 22: nyttig.v1.ServerMessage.item:type_name -> nyttig.v1.Item
+	40, // 23: nyttig.v1.ServerMessage.reset:type_name -> nyttig.v1.Reset
+	41, // 24: nyttig.v1.ServerMessage.complete:type_name -> nyttig.v1.Complete
+	1,  // 25: nyttig.v1.ServerMessage.item_update:type_name -> nyttig.v1.Item
+	6,  // 26: nyttig.v1.Nyttig.AddSource:input_type -> nyttig.v1.AddSourceRequest
+	7,  // 27: nyttig.v1.Nyttig.RemoveSource:input_type -> nyttig.v1.RemoveSourceRequest
+	8,  // 28: nyttig.v1.Nyttig.UpdateSource:input_type -> nyttig.v1.UpdateSourceRequest
+	43, // 29: nyttig.v1.Nyttig.ListSources:input_type -> google.protobuf.Empty
+	10, // 30: nyttig.v1.Nyttig.RefreshSource:input_type -> nyttig.v1.RefreshSourceRequest
+	11, // 31: nyttig.v1.Nyttig.AddTag:input_type -> nyttig.v1.AddTagRequest
+	13, // 32: nyttig.v1.Nyttig.UpdateTag:input_type -> nyttig.v1.UpdateTagRequest
+	14, // 33: nyttig.v1.Nyttig.RemoveTag:input_type -> nyttig.v1.RemoveTagRequest
+	43, // 34: nyttig.v1.Nyttig.ListTags:input_type -> google.protobuf.Empty
+	29, // 35: nyttig.v1.Nyttig.AddTagRule:input_type -> nyttig.v1.AddTagRuleRequest
+	30, // 36: nyttig.v1.Nyttig.RemoveTagRule:input_type -> nyttig.v1.RemoveTagRuleRequest
+	43, // 37: nyttig.v1.Nyttig.ListTagRules:input_type -> google.protobuf.Empty
+	32, // 38: nyttig.v1.Nyttig.TestTagRule:input_type -> nyttig.v1.TestTagRuleRequest
+	18, // 39: nyttig.v1.Nyttig.AddSavedView:input_type -> nyttig.v1.AddSavedViewRequest
+	19, // 40: nyttig.v1.Nyttig.UpdateSavedView:input_type -> nyttig.v1.UpdateSavedViewRequest
+	20, // 41: nyttig.v1.Nyttig.RemoveSavedView:input_type -> nyttig.v1.RemoveSavedViewRequest
+	43, // 42: nyttig.v1.Nyttig.ListSavedViews:input_type -> google.protobuf.Empty
+	21, // 43: nyttig.v1.Nyttig.ReorderSavedViews:input_type -> nyttig.v1.ReorderSavedViewsRequest
+	23, // 44: nyttig.v1.Nyttig.AddAssessor:input_type -> nyttig.v1.AddAssessorRequest
+	24, // 45: nyttig.v1.Nyttig.UpdateAssessor:input_type -> nyttig.v1.UpdateAssessorRequest
+	25, // 46: nyttig.v1.Nyttig.RemoveAssessor:input_type -> nyttig.v1.RemoveAssessorRequest
+	43, // 47: nyttig.v1.Nyttig.ListAssessors:input_type -> google.protobuf.Empty
+	27, // 48: nyttig.v1.Nyttig.PutAssessment:input_type -> nyttig.v1.PutAssessmentRequest
+	28, // 49: nyttig.v1.Nyttig.RemoveAssessment:input_type -> nyttig.v1.RemoveAssessmentRequest
+	37, // 50: nyttig.v1.Nyttig.StreamItems:input_type -> nyttig.v1.ClientMessage
+	34, // 51: nyttig.v1.Nyttig.Search:input_type -> nyttig.v1.SearchRequest
+	36, // 52: nyttig.v1.Nyttig.MarkViewed:input_type -> nyttig.v1.MarkViewedRequest
+	0,  // 53: nyttig.v1.Nyttig.AddSource:output_type -> nyttig.v1.Source
+	43, // 54: nyttig.v1.Nyttig.RemoveSource:output_type -> google.protobuf.Empty
+	0,  // 55: nyttig.v1.Nyttig.UpdateSource:output_type -> nyttig.v1.Source
+	9,  // 56: nyttig.v1.Nyttig.ListSources:output_type -> nyttig.v1.ListSourcesResponse
+	43, // 57: nyttig.v1.Nyttig.RefreshSource:output_type -> google.protobuf.Empty
+	2,  // 58: nyttig.v1.Nyttig.AddTag:output_type -> nyttig.v1.Tag
+	2,  // 59: nyttig.v1.Nyttig.UpdateTag:output_type -> nyttig.v1.Tag
+	43, // 60: nyttig.v1.Nyttig.RemoveTag:output_type -> google.protobuf.Empty
+	15, // 61: nyttig.v1.Nyttig.ListTags:output_type -> nyttig.v1.ListTagsResponse
+	5,  // 62: nyttig.v1.Nyttig.AddTagRule:output_type -> nyttig.v1.TagRule
+	43, // 63: nyttig.v1.Nyttig.RemoveTagRule:output_type -> google.protobuf.Empty
+	31, // 64: nyttig.v1.Nyttig.ListTagRules:output_type -> nyttig.v1.ListTagRulesResponse
+	33, // 65: nyttig.v1.Nyttig.TestTagRule:output_type -> nyttig.v1.TestTagRuleResponse
+	17, // 66: nyttig.v1.Nyttig.AddSavedView:output_type -> nyttig.v1.SavedView
+	17, // 67: nyttig.v1.Nyttig.UpdateSavedView:output_type -> nyttig.v1.SavedView
+	43, // 68: nyttig.v1.Nyttig.RemoveSavedView:output_type -> google.protobuf.Empty
+	22, // 69: nyttig.v1.Nyttig.ListSavedViews:output_type -> nyttig.v1.ListSavedViewsResponse
+	22, // 70: nyttig.v1.Nyttig.ReorderSavedViews:output_type -> nyttig.v1.ListSavedViewsResponse
+	3,  // 71: nyttig.v1.Nyttig.AddAssessor:output_type -> nyttig.v1.Assessor
+	3,  // 72: nyttig.v1.Nyttig.UpdateAssessor:output_type -> nyttig.v1.Assessor
+	43, // 73: nyttig.v1.Nyttig.RemoveAssessor:output_type -> google.protobuf.Empty
+	26, // 74: nyttig.v1.Nyttig.ListAssessors:output_type -> nyttig.v1.ListAssessorsResponse
+	4,  // 75: nyttig.v1.Nyttig.PutAssessment:output_type -> nyttig.v1.Assessment
+	43, // 76: nyttig.v1.Nyttig.RemoveAssessment:output_type -> google.protobuf.Empty
+	39, // 77: nyttig.v1.Nyttig.StreamItems:output_type -> nyttig.v1.ServerMessage
+	35, // 78: nyttig.v1.Nyttig.Search:output_type -> nyttig.v1.SearchResponse
+	43, // 79: nyttig.v1.Nyttig.MarkViewed:output_type -> google.protobuf.Empty
+	53, // [53:80] is the sub-list for method output_type
+	26, // [26:53] is the sub-list for method input_type
+	26, // [26:26] is the sub-list for extension type_name
+	26, // [26:26] is the sub-list for extension extendee
+	0,  // [0:26] is the sub-list for field type_name
 }
 
 func init() { file_nyttig_v1_nyttig_proto_init() }

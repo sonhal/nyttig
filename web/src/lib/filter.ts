@@ -1,3 +1,4 @@
+import { validSince } from './since';
 import type { Filter, Sort } from './types';
 
 export const defaultFilter: Filter = {
@@ -6,6 +7,7 @@ export const defaultFilter: Filter = {
 	tag: '',
 	sort: 'newest',
 	unviewed: false,
+	since: '',
 	assessor: '',
 	minScore: null,
 	unassessed: ''
@@ -16,9 +18,9 @@ const MAX_QUERY = 500;
 
 /**
  * Reads the filter from the page URL (?q=&source=&tag=&sort=&unviewed=1
- * &assessor=&min_score=&unassessed=). Anything malformed falls back to the
- * default, so a hand-edited or stale bookmark never produces a request the
- * API rejects: a minimum score or the score sort without an assessor is
+ * &since=7d&assessor=&min_score=&unassessed=). Anything malformed falls back
+ * to the default, so a hand-edited or stale bookmark never produces a request
+ * the API rejects: a minimum score or the score sort without an assessor is
  * dropped, like the daemon would refuse it.
  */
 export function filterFromParams(p: URLSearchParams): Filter {
@@ -35,6 +37,7 @@ export function filterFromParams(p: URLSearchParams): Filter {
 		tag: ID_RE.test(tag) ? tag : '',
 		sort: sort === 'oldest' ? 'oldest' : sort === 'score' && assessor ? 'score' : 'newest',
 		unviewed: unviewed === '1' || unviewed === 'true',
+		since: validSince(p.get('since') ?? undefined),
 		assessor,
 		minScore: assessor ? parseScore(p.get('min_score')) : null,
 		unassessed: ID_RE.test(unassessed) ? unassessed : ''
@@ -60,9 +63,24 @@ export function filterToParams(f: Filter): URLSearchParams {
 	if (f.tag) p.set('tag', f.tag);
 	if (f.sort !== 'newest') p.set('sort', f.sort);
 	if (f.unviewed) p.set('unviewed', '1');
+	if (f.since) p.set('since', f.since);
 	if (f.assessor) p.set('assessor', f.assessor);
 	if (f.assessor && f.minScore !== null) p.set('min_score', String(f.minScore));
 	if (f.unassessed) p.set('unassessed', f.unassessed);
+	return p;
+}
+
+/**
+ * The parameters of /api/stream and /api/items for a filter: the page URL's,
+ * except that the window travels as an absolute cutoff, "after" in unix
+ * seconds. A snapshot takes it once (sinceAfter) and sends the same value with
+ * the stream and with every older page, so the window cannot slide between
+ * them and make a page skip rows.
+ */
+export function apiParams(f: Filter, after?: number): URLSearchParams {
+	const p = filterToParams(f);
+	p.delete('since');
+	if (after !== undefined) p.set('after', String(after));
 	return p;
 }
 

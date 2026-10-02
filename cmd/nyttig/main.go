@@ -15,6 +15,7 @@
 //	nyttig search -q "sqlite"                    # full-text search stored items
 //	nyttig add-view -n sec -tag "cyber security" -unviewed   # save a filter as a view
 //	nyttig search -view sec                      # run a saved view's filter
+//	nyttig search -since 7d rust                 # only items from the last 7 days
 //	nyttig refresh                               # force immediate fetch of all sources
 package main
 
@@ -26,6 +27,7 @@ import (
 	"strconv"
 	"strings"
 	"text/tabwriter"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -146,7 +148,7 @@ func printHelp() {
 	fmt.Fprintf(os.Stderr, "  list-tag-rules List all tag rules\n")
 	fmt.Fprintf(os.Stderr, "  remove-tag-rule Remove a tag rule by ID\n")
 	fmt.Fprintf(os.Stderr, "  list-views     List saved views (named feed filters)\n")
-	fmt.Fprintf(os.Stderr, "  add-view       Save a filter (search, source, tag, sort, unviewed) as a view\n")
+	fmt.Fprintf(os.Stderr, "  add-view       Save a filter (search, source, tag, sort, unviewed, since) as a view\n")
 	fmt.Fprintf(os.Stderr, "  update-view    Change a view (only the given flags change)\n")
 	fmt.Fprintf(os.Stderr, "  remove-view    Remove a view by ID or name\n")
 	fmt.Fprintf(os.Stderr, "  reorder-views  Set the order of the views\n")
@@ -873,6 +875,7 @@ func searchCmd() {
 		assessorRef   string
 		minScore      float64
 		unassessedRef string
+		window        string
 	)
 
 	flags.StringVar(&viewRef, "view", "", "Run this saved view's filter (name or ID); flags you pass override its filter")
@@ -890,6 +893,7 @@ func searchCmd() {
 	flags.StringVar(&assessorRef, "assessor", "", "Whose scores -min-score and -sort score use (name or ID); shown first")
 	flags.Float64Var(&minScore, "min-score", 0, "Only items this assessor scored at least this (0 to 1; needs -assessor)")
 	flags.StringVar(&unassessedRef, "unassessed-by", "", "Only items this assessor has not assessed (name or ID)")
+	flags.StringVar(&window, "since", "", "Only items from the last 24h, 7d, 2w, 1mo or 1y (published date, else fetch date)")
 
 	args := os.Args[2:]
 	if len(args) > 0 && args[0] == "--help" {
@@ -945,6 +949,9 @@ func searchCmd() {
 			if !set["unviewed"] {
 				unviewed = f.UnviewedOnly
 			}
+			if !set["since"] {
+				window = f.Since
+			}
 			if assessorRef == "" {
 				assessorID = f.AssessorId
 			}
@@ -970,7 +977,14 @@ func searchCmd() {
 		}
 	}
 
+	after, err := cutoffFromSince(window, time.Now())
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+
 	resp, err := c.Search(ctx, &pb.SearchRequest{
+		After:        after,
 		Query:        query,
 		SourceId:     sourceID,
 		TagId:        tagID,

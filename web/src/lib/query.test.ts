@@ -34,6 +34,27 @@ describe('parse', () => {
 		);
 	});
 
+	it('reads since: windows', () => {
+		expect(ok('since:7d')).toEqual(f({ since: '7d' }));
+		expect(ok('since:24h kernel')).toEqual(f({ since: '24h', q: 'kernel' }));
+		expect(ok('SINCE:1mo')).toEqual(f({ since: '1mo' }));
+		expect(ok('tag:linux since:2w is:unviewed sort:oldest')).toEqual(
+			f({ tag: '1', since: '2w', unviewed: true, sort: 'oldest' })
+		);
+		expect(ok('since:7d since:7d')).toEqual(f({ since: '7d' }));
+	});
+
+	it('explains a bad since: window', () => {
+		const msg = (text: string) => parse(text, sources, tags).errors[0]?.message;
+		expect(msg('since:1m')).toContain('ambiguous');
+		expect(msg('since:0d')).toContain('between 1 and 9999');
+		expect(msg('since:7D')).toContain('not a window');
+		expect(msg('since:')).toContain('needs a window');
+		expect(msg('since:soon')).toContain('not a window');
+		expect(msg('since:7d since:30d')).toBe('since given twice');
+		expect(parse('since:1m', sources, tags).filter.since).toBe('');
+	});
+
 	it('ignores case in keys, values and names, and extra whitespace', () => {
 		expect(ok('  TAG:RUST   Src:hn\tIS:Unviewed SORT:Oldest ')).toEqual(
 			f({ tag: '2', source: '2', unviewed: true, sort: 'oldest' })
@@ -119,6 +140,9 @@ describe('format', () => {
 		expect(format(f({ q: 'kernel  panic', tag: '1', source: '3', unviewed: true, sort: 'oldest' }), sources, tags)).toBe(
 			'kernel panic src:Go tag:linux is:unviewed sort:oldest'
 		);
+		expect(format(f({ q: 'kernel', tag: '1', unviewed: true, since: '7d', sort: 'oldest' }), sources, tags)).toBe(
+			'kernel tag:linux is:unviewed since:7d sort:oldest'
+		);
 	});
 
 	it('quotes names with spaces, and words that would be read as operators', () => {
@@ -145,6 +169,8 @@ describe('round trips', () => {
 		defaultFilter,
 		f({ q: 'kernel panic' }),
 		f({ tag: '3', source: '2' }),
+		f({ since: '30d' }),
+		f({ q: 'since:7d', since: '1y', tag: '1' }),
 		f({ q: 'tag:linux', tag: '1' }),
 		f({ q: '"quoted" \\back "x', unviewed: true }),
 		f({ q: 'sort:oldest is:unviewed src:x', sort: 'oldest' }),
@@ -193,6 +219,19 @@ describe('complete', () => {
 		expect(at('sort:sc')?.candidates.map((c) => c.insert)).toEqual(['sort:score']);
 	});
 
+	it('suggests common since: windows', () => {
+		expect(at('since:')?.candidates.map((c) => c.insert)).toEqual([
+			'since:24h',
+			'since:7d',
+			'since:2w',
+			'since:1mo',
+			'since:1y'
+		]);
+		expect(at('since:1')?.candidates.map((c) => c.insert)).toEqual(['since:1mo', 'since:1y']);
+		expect(at('since:7d')).toBeNull();
+		expect(at('since:2')?.candidates[0]?.kind).toBe('since');
+	});
+
 	it('carries the color for the list', () => {
 		expect(at('src:hack')?.candidates[0]?.color).toBe('#FF6600');
 	});
@@ -236,6 +275,15 @@ describe('assessor terms', () => {
 		expect(r.errors).toEqual([]);
 		return r.filter;
 	};
+
+	it('combines with the since: window (the work definition of an assessor)', () => {
+		const text = 'tag:linux since:1d unassessed:claude';
+		expect(pf(text)).toEqual(f({ tag: '1', since: '1d', unassessed: '1' }));
+		expect(format(pf(text), sources, tags, assessors)).toBe(text);
+		const scored = f({ since: '7d', assessor: '1', minScore: 0.7, sort: 'score' });
+		expect(format(scored, sources, tags, assessors)).toBe('since:7d score:claude>=0.7 sort:score');
+		expect(pf('since:7d score:claude>=0.7 sort:score')).toEqual(scored);
+	});
 
 	it('reads score: with and without a minimum, and unassessed:', () => {
 		expect(pf('score:claude')).toEqual(f({ assessor: '1' }));

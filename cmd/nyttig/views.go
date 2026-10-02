@@ -9,9 +9,13 @@ import (
 	"strconv"
 	"strings"
 	"text/tabwriter"
+	"time"
+
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/sonhal/nyttig/internal/client"
 	pb "github.com/sonhal/nyttig/internal/proto/nyttig/v1"
+	"github.com/sonhal/nyttig/internal/since"
 	"github.com/sonhal/nyttig/internal/tui"
 )
 
@@ -87,7 +91,7 @@ func queryWord(w string) string {
 	}
 	if m := operatorPrefix.FindString(w); m != "" {
 		switch strings.ToLower(strings.TrimSuffix(m, ":")) {
-		case "tag", "src", "source", "is", "sort", "score", "unassessed":
+		case "tag", "src", "source", "is", "since", "sort", "score", "unassessed":
 			return quoteQuery(w)
 		}
 	}
@@ -95,9 +99,9 @@ func queryWord(w string) string {
 }
 
 // formatViewFilter writes a view's filter the way the web `/` bar does:
-// words, src:, tag:, is:unviewed, score:<assessor>[>=N], unassessed:<assessor>
-// and sort: (the default sort is left out). A source, tag or assessor with no
-// known name is written as #id.
+// words, src:, tag:, is:unviewed, since:, score:<assessor>[>=N],
+// unassessed:<assessor> and sort: (the default sort is left out). A source,
+// tag or assessor with no known name is written as #id.
 func formatViewFilter(f *pb.ViewFilter, sources, tags, assessors map[int64]string) string {
 	if f == nil {
 		return ""
@@ -121,6 +125,9 @@ func formatViewFilter(f *pb.ViewFilter, sources, tags, assessors map[int64]strin
 	if f.UnviewedOnly {
 		parts = append(parts, "is:unviewed")
 	}
+	if f.Since != "" {
+		parts = append(parts, "since:"+f.Since)
+	}
 	if f.AssessorId != 0 {
 		term := "score:" + named(assessors, f.AssessorId)
 		if f.MinScore != nil {
@@ -135,6 +142,25 @@ func formatViewFilter(f *pb.ViewFilter, sources, tags, assessors map[int64]strin
 		parts = append(parts, "sort:"+f.Sort)
 	}
 	return strings.Join(parts, " ")
+}
+
+// cutoffFromSince resolves a window such as "7d" to the absolute cutoff the
+// daemon's queries take, counted back from now and never before the Unix
+// epoch (a window like 9999y reaches before year 1, which a Timestamp cannot
+// hold). An empty window is no cutoff (nil).
+func cutoffFromSince(text string, now time.Time) (*timestamppb.Timestamp, error) {
+	if text == "" {
+		return nil, nil
+	}
+	w, err := since.Parse(text)
+	if err != nil {
+		return nil, err
+	}
+	cut := w.Cutoff(now)
+	if cut.Before(time.Unix(0, 0)) {
+		cut = time.Unix(0, 0)
+	}
+	return timestamppb.New(cut), nil
 }
 
 // nameMaps loads the source, tag and assessor names used to format filters.
@@ -218,6 +244,7 @@ func addViewCmd() {
 		tag      string
 		sort     string
 		unviewed bool
+		window   string
 		favorite bool
 
 		assessor   string
@@ -232,6 +259,7 @@ func addViewCmd() {
 	flags.StringVar(&tag, "tag", "", "Only this tag and the tags below it (name or ID)")
 	flags.StringVar(&sort, "sort", "", "Sort order: newest (default), oldest or score (needs -assessor)")
 	flags.BoolVar(&unviewed, "unviewed", false, "Only items not yet viewed")
+	flags.StringVar(&window, "since", "", "Only items from the last 24h, 7d, 2w, 1mo or 1y")
 	flags.BoolVar(&favorite, "favorite", false, "Show the view as a tab in the web app")
 	flags.StringVar(&assessor, "assessor", "", "Whose scores -min-score and -sort score use (name or ID)")
 	flags.Float64Var(&minScore, "min-score", 0, "Only items this assessor scored at least this (0 to 1)")
@@ -239,7 +267,7 @@ func addViewCmd() {
 
 	args := os.Args[2:]
 	if len(args) == 0 || args[0] == "--help" {
-		_, _ = fmt.Fprintf(os.Stderr, "Usage: nyttig add-view -n <name> [-q <text>] [-source <name|id>] [-tag <name|id>] [-unviewed] [-sort oldest|score] [-favorite]\n")
+		_, _ = fmt.Fprintf(os.Stderr, "Usage: nyttig add-view -n <name> [-q <text>] [-source <name|id>] [-tag <name|id>] [-unviewed] [-since 7d] [-sort oldest|score] [-favorite]\n")
 		_, _ = fmt.Fprintf(os.Stderr, "                      [-assessor <name|id>] [-min-score <0-1>] [-unassessed-by <name|id>]\n\n")
 		flags.PrintDefaults()
 		os.Exit(0)
@@ -255,7 +283,7 @@ func addViewCmd() {
 	defer func() { _ = c.Close() }()
 	ctx := context.Background()
 
-	f := &pb.ViewFilter{Search: query, Sort: sort, UnviewedOnly: unviewed}
+	f := &pb.ViewFilter{Search: query, Sort: sort, UnviewedOnly: unviewed, Since: window}
 	var err error
 	if source != "" {
 		if f.SourceId, err = resolveSourceID(ctx, c, source); err != nil {
@@ -303,6 +331,8 @@ func updateViewCmd() {
 		noTag    bool
 		sort     string
 		unviewed bool
+		window   string
+		noSince  bool
 		favorite bool
 
 		assessor     string
@@ -324,6 +354,8 @@ func updateViewCmd() {
 	flags.BoolVar(&noTag, "no-tag", false, "Stop filtering on a tag")
 	flags.StringVar(&sort, "sort", "", "Sort order: newest, oldest or score (needs an assessor)")
 	flags.BoolVar(&unviewed, "unviewed", false, "Only items not yet viewed (-unviewed=false clears it)")
+	flags.StringVar(&window, "since", "", "Only items from the last 24h, 7d, 2w, 1mo or 1y")
+	flags.BoolVar(&noSince, "no-since", false, "Stop limiting the view to a time window")
 	flags.BoolVar(&favorite, "favorite", false, "Show the view as a tab (-favorite=false removes it)")
 	flags.StringVar(&assessor, "assessor", "", "Whose scores -min-score and -sort score use (name or ID)")
 	flags.BoolVar(&noAssessor, "no-assessor", false, "Stop using an assessor (also clears the minimum score; a score sort becomes newest)")
@@ -334,7 +366,8 @@ func updateViewCmd() {
 	args := os.Args[2:]
 	if len(args) == 0 || args[0] == "--help" {
 		_, _ = fmt.Fprintf(os.Stderr, "Usage: nyttig update-view (-id <id> | -n <name>) [-rename <name>] [-q <text>] [-source <name|id> | -no-source]\n")
-		_, _ = fmt.Fprintf(os.Stderr, "                          [-tag <name|id> | -no-tag] [-sort newest|oldest|score] [-unviewed[=false]] [-favorite[=false]]\n")
+		_, _ = fmt.Fprintf(os.Stderr, "                          [-tag <name|id> | -no-tag] [-sort newest|oldest|score] [-unviewed[=false]]\n")
+		_, _ = fmt.Fprintf(os.Stderr, "                          [-since <window> | -no-since] [-favorite[=false]]\n")
 		_, _ = fmt.Fprintf(os.Stderr, "                          [-assessor <name|id> | -no-assessor] [-min-score <0-1> | -no-min-score] [-unassessed-by <name|id>]\n\n")
 		_, _ = fmt.Fprintf(os.Stderr, "Only the given flags are changed.\n\n")
 		flags.PrintDefaults()
@@ -352,6 +385,9 @@ func updateViewCmd() {
 	if set["tag"] && noTag {
 		fail(fmt.Errorf("-tag and -no-tag cannot be used together"))
 	}
+	if set["since"] && noSince {
+		fail(fmt.Errorf("-since and -no-since cannot be used together"))
+	}
 
 	c := newClient()
 	defer func() { _ = c.Close() }()
@@ -365,7 +401,7 @@ func updateViewCmd() {
 	if set["min-score"] && noMinScore {
 		fail(fmt.Errorf("-min-score and -no-min-score cannot be used together"))
 	}
-	filterChange := set["q"] || set["query"] || set["source"] || set["tag"] || noSource || noTag || set["sort"] || set["unviewed"] ||
+	filterChange := set["q"] || set["query"] || set["source"] || set["tag"] || noSource || noTag || set["sort"] || set["unviewed"] || set["since"] || noSince ||
 		set["assessor"] || noAssessor || set["min-score"] || noMinScore || set["unassessed-by"]
 	var cur *pb.SavedView
 	if id == 0 || filterChange {
@@ -399,7 +435,7 @@ func updateViewCmd() {
 		f := &pb.ViewFilter{}
 		if cur.Filter != nil {
 			f.Search, f.SourceId, f.TagId = cur.Filter.Search, cur.Filter.SourceId, cur.Filter.TagId
-			f.Sort, f.UnviewedOnly = cur.Filter.Sort, cur.Filter.UnviewedOnly
+			f.Sort, f.UnviewedOnly, f.Since = cur.Filter.Sort, cur.Filter.UnviewedOnly, cur.Filter.Since
 			f.AssessorId, f.MinScore, f.UnassessedBy = cur.Filter.AssessorId, cur.Filter.MinScore, cur.Filter.UnassessedBy
 		}
 		var err error
@@ -450,6 +486,12 @@ func updateViewCmd() {
 		}
 		if set["unviewed"] {
 			f.UnviewedOnly = unviewed
+		}
+		if noSince {
+			f.Since = ""
+		}
+		if set["since"] {
+			f.Since = window
 		}
 		req.Filter = f
 	}

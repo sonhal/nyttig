@@ -43,6 +43,21 @@ describe('viewToFilter / filterToViewBody', () => {
 		expect(filterToViewBody({ ...defaultFilter, sort: 'oldest' })).toEqual({ sort: 'oldest' });
 	});
 
+	it('carries the window as the user typed it', () => {
+		const week: SavedView = { id: '5', name: 'Week', filter: { tag: '4', since: '30d' } };
+		expect(viewToFilter(week)).toEqual({ ...defaultFilter, tag: '4', since: '30d' });
+		expect(filterToViewBody(viewToFilter(week))).toEqual({ tag: '4', since: '30d' });
+		expect(filterToViewBody(defaultFilter)).toEqual({});
+		// A window the API should never send is treated as none rather than trusted.
+		expect(viewToFilter({ filter: { since: '1m' } }).since).toBe('');
+		expect(viewToFilter({ filter: { since: '7D' } }).since).toBe('');
+		expect(viewHref(week)).toBe('/?view=5&tag=4&since=30d');
+		expect(isModified(week, viewToFilter(week))).toBe(false);
+		expect(isModified(week, { ...viewToFilter(week), since: '7d' })).toBe(true);
+		expect(isModified(week, { ...viewToFilter(week), since: '' })).toBe(true);
+		expect(isModified(misc, { ...defaultFilter, since: '24h' })).toBe(true);
+	});
+
 	it('round-trips', () => {
 		for (const v of views) expect(viewToFilter({ filter: filterToViewBody(viewToFilter(v)) })).toEqual(viewToFilter(v));
 	});
@@ -150,6 +165,13 @@ describe('assessor fields of a view', () => {
 			minScore: 0.7,
 			unassessed: '5'
 		});
+	});
+
+	it('keeps the window next to the assessor fields', () => {
+		const work: SavedView = { id: '12', name: 'claude-cve', filter: { tag: '4', since: '1d', unassessed: '5' } };
+		const f = viewToFilter(work);
+		expect(f).toEqual({ ...defaultFilter, tag: '4', since: '1d', unassessed: '5' });
+		expect(filterToViewBody(f)).toEqual({ tag: '4', since: '1d', unassessed: '5' });
 	});
 
 	it('leaves a score sort and a minimum without an assessor out', () => {

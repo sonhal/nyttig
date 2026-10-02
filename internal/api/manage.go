@@ -526,7 +526,7 @@ func (a *handlers) testRule(w http.ResponseWriter, r *http.Request) {
 
 var (
 	viewFields   = []string{"name", "filter", "favorite"}
-	filterFields = []string{"q", "source", "tag", "sort", "unviewed", "assessor", "min_score", "unassessed"}
+	filterFields = []string{"q", "source", "tag", "since", "sort", "unviewed", "assessor", "min_score", "unassessed"}
 )
 
 // viewJSON is a saved view as the browser sees it. Its filter uses the same
@@ -544,6 +544,7 @@ type filterJSON struct {
 	Q        string `json:"q,omitempty"`
 	Source   string `json:"source,omitempty"`
 	Tag      string `json:"tag,omitempty"`
+	Since    string `json:"since,omitempty"`
 	Sort     string `json:"sort,omitempty"`
 	Unviewed bool   `json:"unviewed,omitempty"`
 	// The assessment fields: assessor (an ID) selects whose scores min_score
@@ -571,7 +572,7 @@ func toViewJSON(v *pb.SavedView) viewJSON {
 		Name: v.GetName(),
 		Filter: filterJSON{
 			Q: f.GetSearch(), Source: idString(f.GetSourceId()), Tag: idString(f.GetTagId()),
-			Sort: f.GetSort(), Unviewed: f.GetUnviewedOnly(),
+			Since: f.GetSince(), Sort: f.GetSort(), Unviewed: f.GetUnviewedOnly(),
 			Assessor: idString(f.GetAssessorId()), MinScore: minScore, Unassessed: idString(f.GetUnassessedBy()),
 		},
 		Favorite: v.GetFavorite(),
@@ -601,10 +602,11 @@ func viewFilter(b jsonBody) (*pb.ViewFilter, bool, error) {
 	assessor, err6 := o.id("assessor")
 	minScore, err7 := o.float64Field("min_score")
 	unassessed, err8 := o.id("unassessed")
-	if err := firstErr(err1, err2, err3, err4, err5, err6, err7, err8); err != nil {
+	since, err9 := o.str("since")
+	if err := firstErr(err1, err2, err3, err4, err5, err6, err7, err8, err9); err != nil {
 		return nil, true, fmt.Errorf("%w: filter: %s", errBody, strings.TrimPrefix(err.Error(), errBody.Error()+": "))
 	}
-	return &pb.ViewFilter{Search: valueOr(q, ""), SourceId: src, TagId: tag, Sort: valueOr(sort, ""), UnviewedOnly: valueOr(unviewed, false),
+	return &pb.ViewFilter{Search: valueOr(q, ""), SourceId: src, TagId: tag, Sort: valueOr(sort, ""), UnviewedOnly: valueOr(unviewed, false), Since: valueOr(since, ""),
 		AssessorId: assessor, MinScore: minScore, UnassessedBy: unassessed}, true, nil
 }
 

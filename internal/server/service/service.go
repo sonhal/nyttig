@@ -10,11 +10,13 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -680,7 +682,7 @@ func (s *Service) checkViewRefs(f *pb.ViewFilter) error {
 
 // applyViewFilter copies a (validated) proto filter onto v; nil clears it.
 func applyViewFilter(v *db.SavedView, f *pb.ViewFilter) {
-	v.Search, v.SourceID, v.TagID, v.Sort, v.UnviewedOnly = "", nil, nil, "newest", false
+	v.Search, v.SourceID, v.TagID, v.Sort, v.UnviewedOnly, v.Since = "", nil, nil, "newest", false, ""
 	v.AssessorID, v.MinScore, v.UnassessedBy = nil, nil, nil
 	if f == nil {
 		return
@@ -698,6 +700,7 @@ func applyViewFilter(v *db.SavedView, f *pb.ViewFilter) {
 		v.Sort = f.Sort
 	}
 	v.UnviewedOnly = f.UnviewedOnly
+	v.Since = f.Since
 	if f.AssessorId != 0 {
 		id := f.AssessorId
 		v.AssessorID = &id
@@ -713,7 +716,7 @@ func applyViewFilter(v *db.SavedView, f *pb.ViewFilter) {
 }
 
 func dbSavedViewToProto(v *db.SavedView) *pb.SavedView {
-	f := &pb.ViewFilter{Search: v.Search, Sort: v.Sort, UnviewedOnly: v.UnviewedOnly}
+	f := &pb.ViewFilter{Search: v.Search, Sort: v.Sort, UnviewedOnly: v.UnviewedOnly, Since: v.Since}
 	if v.SourceID != nil {
 		f.SourceId = *v.SourceID
 	}
@@ -871,6 +874,10 @@ func (s *Service) Search(ctx context.Context, req *pb.SearchRequest) (*pb.Search
 	); err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
+	after, err := afterTime(req.After)
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
 	limit := int(req.Limit)
 	if limit <= 0 {
 		limit = 100
@@ -884,6 +891,7 @@ func (s *Service) Search(ctx context.Context, req *pb.SearchRequest) (*pb.Search
 		Limit:        limit,
 		Offset:       int(req.Offset),
 		UnviewedOnly: req.UnviewedOnly,
+		After:        after,
 		AssessorID:   req.AssessorId,
 		MinScore:     req.MinScore,
 		UnassessedBy: req.UnassessedBy,
@@ -1133,6 +1141,10 @@ func (s *Service) StreamItems(stream pb.Nyttig_StreamItemsServer) error {
 // sendFilteredItems queries the database with the given filter and sends
 // matching items followed by a Complete message.
 func (s *Service) sendFilteredItems(stream pb.Nyttig_StreamItemsServer, filter *pb.StreamFilter) error {
+	after, err := afterTime(filter.After)
+	if err != nil {
+		return status.Error(codes.InvalidArgument, err.Error())
+	}
 	limit := int(filter.Limit)
 	if limit <= 0 {
 		limit = 200
@@ -1157,6 +1169,7 @@ func (s *Service) sendFilteredItems(stream pb.Nyttig_StreamItemsServer, filter *
 		Sort:         sort,
 		Limit:        limit,
 		UnviewedOnly: filter.UnviewedOnly,
+		After:        after,
 		AssessorID:   filter.AssessorId,
 		MinScore:     filter.MinScore,
 		UnassessedBy: filter.UnassessedBy,
@@ -1204,6 +1217,9 @@ func (s *Service) itemMatchesFilter(item *pb.Item, filter *pb.StreamFilter) bool
 		}
 	}
 	if filter.UnviewedOnly && item.Viewed {
+		return false
+	}
+	if !itemInWindow(item, filter.After) {
 		return false
 	}
 	if !s.assessmentsMatch(item, filter.AssessorId, filter.MinScore, filter.UnassessedBy, filter.TagId, false) {
@@ -1260,6 +1276,36 @@ func (s *Service) assessmentsMatch(item *pb.Item, assessorID int64, minScore *fl
 		return false
 	}
 	return !assessed
+}
+
+// itemInWindow applies a stream filter's cutoff with the rule ListItems uses:
+// the item's date is its published date, else when it was fetched, and it
+// passes when that is not before the cutoff. Both sides are compared in whole
+// seconds, because the database text has no fractions. An unset cutoff passes
+// everything, and so does an item with no date at all.
+func itemInWindow(item *pb.Item, after *timestamppb.Timestamp) bool {
+	if after == nil {
+		return true
+	}
+	d := item.Published
+	if d == nil {
+		d = item.FetchedAt
+	}
+	if d == nil {
+		return true
+	}
+	return !d.AsTime().Truncate(time.Second).Before(after.AsTime().Truncate(time.Second))
+}
+
+// afterTime converts the optional cutoff of a request; unset is the zero time.
+func afterTime(ts *timestamppb.Timestamp) (time.Time, error) {
+	if ts == nil {
+		return time.Time{}, nil
+	}
+	if err := ts.CheckValid(); err != nil {
+		return time.Time{}, fmt.Errorf("after is not a valid timestamp: %v", err)
+	}
+	return ts.AsTime(), nil
 }
 
 // ── Conversion helpers ─────────────────────────────────────────────────────

@@ -539,7 +539,7 @@ func itoa(v int) string {
 	return string(b)
 }
 
-func TestMigration7_RebuildKeepsSavedViews(t *testing.T) {
+func TestMigration8_RebuildKeepsSavedViews(t *testing.T) {
 	database, err := sql.Open("sqlite3", filepath.Join(t.TempDir(), "old.db"))
 	if err != nil {
 		t.Fatal(err)
@@ -549,7 +549,7 @@ func TestMigration7_RebuildKeepsSavedViews(t *testing.T) {
 	if _, err := database.Exec(`PRAGMA foreign_keys=ON`); err != nil {
 		t.Fatal(err)
 	}
-	migrateTo(t, database, 1, 6)
+	migrateTo(t, database, 1, 7)
 
 	if _, err := database.Exec(`INSERT INTO sources (id, name, url, type, refresh_sec, enabled) VALUES (3, 's', 'http://x', 'rss', 60, 1)`); err != nil {
 		t.Fatal(err)
@@ -559,16 +559,16 @@ func TestMigration7_RebuildKeepsSavedViews(t *testing.T) {
 	}
 	// Ids with gaps, mixed positions and favorites, a NOCASE name.
 	rows := []string{
-		`(7, 'Security', 'cve', 3, 4, 'oldest', 1, 1, 2, '2026-01-02 03:04:05')`,
-		`(9, 'plain', '', NULL, NULL, 'newest', 0, 0, 0, '2026-02-03 04:05:06')`,
-		`(12, 'Fav', 'x', NULL, 4, 'newest', 0, 1, 1, '2026-03-04 05:06:07')`,
+		`(7, 'Security', 'cve', 3, 4, 'oldest', 1, 1, 2, '2026-01-02 03:04:05', '7d')`,
+		`(9, 'plain', '', NULL, NULL, 'newest', 0, 0, 0, '2026-02-03 04:05:06', '')`,
+		`(12, 'Fav', 'x', NULL, 4, 'newest', 0, 1, 1, '2026-03-04 05:06:07', '1mo')`,
 	}
 	for _, r := range rows {
-		if _, err := database.Exec(`INSERT INTO saved_views (id, name, search, source_id, tag_id, sort, unviewed_only, favorite, position, created_at) VALUES ` + r); err != nil {
+		if _, err := database.Exec(`INSERT INTO saved_views (id, name, search, source_id, tag_id, sort, unviewed_only, favorite, position, created_at, since) VALUES ` + r); err != nil {
 			t.Fatal(err)
 		}
 	}
-	migrateTo(t, database, 7, 7)
+	migrateTo(t, database, 8, 8)
 
 	views, err := ListSavedViews(database)
 	if err != nil {
@@ -581,8 +581,8 @@ func TestMigration7_RebuildKeepsSavedViews(t *testing.T) {
 	src, tag := int64(3), int64(4)
 	want := []*SavedView{
 		{ID: 9, Name: "plain", Sort: "newest", Position: 0},
-		{ID: 12, Name: "Fav", Search: "x", TagID: &tag, Sort: "newest", Favorite: true, Position: 1},
-		{ID: 7, Name: "Security", Search: "cve", SourceID: &src, TagID: &tag, Sort: "oldest", UnviewedOnly: true, Favorite: true, Position: 2},
+		{ID: 12, Name: "Fav", Search: "x", TagID: &tag, Sort: "newest", Since: "1mo", Favorite: true, Position: 1},
+		{ID: 7, Name: "Security", Search: "cve", SourceID: &src, TagID: &tag, Sort: "oldest", UnviewedOnly: true, Since: "7d", Favorite: true, Position: 2},
 	}
 	if !reflect.DeepEqual(views, want) {
 		t.Fatalf("views after migration:\n got %+v %+v %+v\nwant %+v %+v %+v", views[0], views[1], views[2], want[0], want[1], want[2])

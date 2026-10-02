@@ -1,10 +1,11 @@
 // The query syntax of the "/" bar:
 //
-//   kernel panic tag:rust src:"Hacker News" is:unviewed sort:oldest
-//   tag:CVE score:claude>=0.7 sort:score
+//   kernel panic tag:rust src:"Hacker News" is:unviewed since:7d sort:oldest
+//   tag:CVE since:1d score:claude>=0.7 sort:score
+//   tag:CVE since:1d unassessed:claude
 //
-// "tag:", "src:", "is:unviewed" and "sort:newest|oldest|score" set the
-// filter, "score:<assessor>" picks the assessor whose scores to show first
+// "tag:", "src:", "is:unviewed", "since:7d" and "sort:newest|oldest|score" set
+// the filter, "score:<assessor>" picks the assessor whose scores to show first
 // (">=0.7" keeps only items it scored that high, and "sort:score" orders by
 // its scores, so it needs a "score:" term) and "unassessed:<assessor>" keeps
 // items it has not assessed. Every other word is free text (the FTS search, matched as a phrase). A
@@ -21,6 +22,7 @@
 
 import { defaultFilter, parseScore } from './filter';
 import { oneLine } from './sanitize';
+import { parseSince, SINCE_SUGGESTIONS } from './since';
 import type { Assessor, Filter, Sort, Source, Tag } from './types';
 
 export interface QueryError {
@@ -40,12 +42,13 @@ export interface ParseResult {
 const ID_RE = /^[1-9][0-9]{0,18}$/;
 export const MAX_QUERY = 500;
 
-type Key = 'tag' | 'src' | 'is' | 'sort' | 'score' | 'unassessed';
+type Key = 'tag' | 'src' | 'is' | 'since' | 'sort' | 'score' | 'unassessed';
 const KEY_ALIASES: Record<string, Key> = {
 	tag: 'tag',
 	src: 'src',
 	source: 'src',
 	is: 'is',
+	since: 'since',
 	sort: 'sort',
 	score: 'score',
 	unassessed: 'unassessed'
@@ -56,6 +59,10 @@ export const QUERY_KEYS: readonly { usage: string; desc: string }[] = [
 	{ usage: 'tag:<name>', desc: 'only items with this tag or a child tag (tag:rust, tag:"Release notes")' },
 	{ usage: 'src:<name>', desc: 'only this source, by name or abbreviation' },
 	{ usage: 'is:unviewed', desc: 'only unviewed items' },
+	{
+		usage: 'since:<n>h|d|w|mo|y',
+		desc: 'only items from the last n hours, days, weeks, months or years (since:24h, since:7d, since:1mo)'
+	},
 	{ usage: 'score:<assessor>[>=0.7]', desc: "show an assessor's scores first; with >= only items it scored at least that" },
 	{ usage: 'unassessed:<assessor>', desc: 'only items this assessor has not assessed (an assessor finds its work this way)' },
 	{ usage: 'sort:newest|oldest|score', desc: 'the sort order; score needs a score: term' },
@@ -204,6 +211,7 @@ export function parse(
 
 	let sortSet = false;
 	let sortToken: Token | undefined;
+	let sinceSet = false;
 
 	for (const t of tokenize(text)) {
 		switch (t.key) {
@@ -269,6 +277,16 @@ export function parse(
 				if (t.value.toLowerCase() === 'unviewed') filter.unviewed = true;
 				else err(t, t.value ? `unknown is: value: ${t.value} (try unviewed)` : 'is: needs a value (unviewed)');
 				break;
+			case 'since': {
+				const r = parseSince(t.value);
+				if (!r.ok) err(t, r.error);
+				else if (sinceSet && filter.since !== t.value) err(t, 'since given twice');
+				else {
+					filter.since = t.value;
+					sinceSet = true;
+				}
+				break;
+			}
 			case 'sort': {
 				const v = t.value.toLowerCase();
 				const s = SORT_VALUES.find((x) => x === v);
@@ -340,6 +358,7 @@ export function format(
 	if (f.source) parts.push('src:' + named(sources, f.source));
 	if (f.tag) parts.push('tag:' + named(tags, f.tag));
 	if (f.unviewed) parts.push('is:unviewed');
+	if (f.since) parts.push('since:' + f.since);
 	if (f.assessor) {
 		parts.push('score:' + named(assessors, f.assessor, true) + (f.minScore !== null ? '>=' + f.minScore : ''));
 	}
@@ -355,7 +374,7 @@ export interface Candidate {
 	label: string;
 	/** What replaces the token, e.g. `tag:"Hacker News"`. */
 	insert: string;
-	kind: 'tag' | 'src' | 'is' | 'sort' | 'score' | 'unassessed';
+	kind: 'tag' | 'src' | 'is' | 'since' | 'sort' | 'score' | 'unassessed';
 	color?: string;
 }
 
@@ -400,6 +419,9 @@ export function complete(
 			break;
 		case 'is':
 			entries = IS_VALUES.map((label) => ({ label }));
+			break;
+		case 'since':
+			entries = SINCE_SUGGESTIONS.map((label) => ({ label }));
 			break;
 		case 'sort':
 			entries = SORT_VALUES.map((label) => ({ label }));

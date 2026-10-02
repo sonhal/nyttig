@@ -1,5 +1,5 @@
 <!--
-	The filter bar. Desktop: "/ query  src:[..] tag:[..] sort:[..] unviewed:[..]"
+	The filter bar. Desktop: "/ query  src:[..] tag:[..] since:[..] sort:[..] unviewed:[..]"
 	like the TUI, each chip clickable. Mobile: the query input plus buttons
 	for the filter sheet and refresh.
 -->
@@ -31,6 +31,7 @@
 		oncyclesource: () => void;
 		oncycletag: () => void;
 		onpickassessor?: () => void;
+		oncyclesince: () => void;
 		ontogglesort: () => void;
 		ontoggleunviewed: () => void;
 		onopensheet: () => void;
@@ -55,6 +56,7 @@
 		oncyclesource,
 		oncycletag,
 		onpickassessor,
+		oncyclesince,
 		ontogglesort,
 		ontoggleunviewed,
 		onopensheet,
@@ -91,7 +93,7 @@
 			bind:this={input}
 			bind:value={draft}
 			type="search"
-			placeholder="search…  tag: src: is:unviewed"
+			placeholder="search…  tag: src: is:unviewed since:"
 			aria-invalid={error ? 'true' : undefined}
 			aria-describedby={error ? 'query-error' : undefined}
 			aria-controls="query-suggest"
@@ -117,6 +119,9 @@
 		>
 		<button type="button" onclick={oncycletag} title="cycle tag (t)"
 			><span class="k">tag:</span><span class="v">{tagName}</span></button
+		>
+		<button type="button" onclick={oncyclesince} title="cycle time window (since:)" data-testid="chip-since"
+			><span class="k">since:</span><span class="v">{filter.since || 'any'}</span></button
 		>
 		<button type="button" onclick={onpickassessor} title="pick an assessor (a), clear it (A)" data-testid="chip-score"
 			><span class="k">score:</span><span class="v">{scoreName}</span></button

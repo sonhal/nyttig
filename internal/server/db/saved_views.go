@@ -18,11 +18,12 @@ type SavedView struct {
 	TagID        *int64
 	Sort         string // "newest", "oldest" or "score"
 	UnviewedOnly bool
+	Since        string // rolling window such as "7d"; empty = none
 	Favorite     bool
 	Position     int
 
 	// Assessment filter fields; nil = not set. Deleting an assessor clears
-	// them (and a "score" sort), see migration 7.
+	// them (and a "score" sort), see migration 8.
 	AssessorID   *int64
 	MinScore     *float64
 	UnassessedBy *int64
@@ -32,7 +33,7 @@ type SavedView struct {
 // the set of existing views.
 var ErrViewOrder = errors.New("ids must list every saved view exactly once")
 
-const savedViewColumns = `id, name, search, source_id, tag_id, sort, unviewed_only, favorite, position, assessor_id, min_score, unassessed_by`
+const savedViewColumns = `id, name, search, source_id, tag_id, sort, unviewed_only, since, favorite, position, assessor_id, min_score, unassessed_by`
 
 type rowScanner interface{ Scan(dest ...any) error }
 
@@ -40,7 +41,7 @@ func scanSavedView(r rowScanner) (*SavedView, error) {
 	v := &SavedView{}
 	var src, tag, assessor, unassessed sql.NullInt64
 	var minScore sql.NullFloat64
-	if err := r.Scan(&v.ID, &v.Name, &v.Search, &src, &tag, &v.Sort, &v.UnviewedOnly, &v.Favorite, &v.Position,
+	if err := r.Scan(&v.ID, &v.Name, &v.Search, &src, &tag, &v.Sort, &v.UnviewedOnly, &v.Since, &v.Favorite, &v.Position,
 		&assessor, &minScore, &unassessed); err != nil {
 		return nil, err
 	}
@@ -82,10 +83,10 @@ func sortOrDefault(s string) string {
 // A duplicate name (case-insensitive) is a UNIQUE constraint error.
 func InsertSavedView(db *sql.DB, v *SavedView) (int64, error) {
 	res, err := db.Exec(`INSERT INTO saved_views
-		(name, search, source_id, tag_id, sort, unviewed_only, favorite, assessor_id, min_score, unassessed_by, position)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, (SELECT COALESCE(MAX(position), -1) + 1 FROM saved_views))`,
+		(name, search, source_id, tag_id, sort, unviewed_only, since, favorite, assessor_id, min_score, unassessed_by, position)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, (SELECT COALESCE(MAX(position), -1) + 1 FROM saved_views))`,
 		v.Name, v.Search, nullableID(v.SourceID), nullableID(v.TagID),
-		sortOrDefault(v.Sort), v.UnviewedOnly, v.Favorite,
+		sortOrDefault(v.Sort), v.UnviewedOnly, v.Since, v.Favorite,
 		nullableID(v.AssessorID), v.MinScore, nullableID(v.UnassessedBy))
 	if err != nil {
 		return 0, err
@@ -134,10 +135,10 @@ func CountSavedViews(db *sql.DB) (int, error) {
 // position). It reports whether a view with that ID existed.
 func UpdateSavedView(db *sql.DB, v *SavedView) (bool, error) {
 	res, err := db.Exec(`UPDATE saved_views SET name = ?, search = ?, source_id = ?, tag_id = ?,
-		sort = ?, unviewed_only = ?, favorite = ?, assessor_id = ?, min_score = ?, unassessed_by = ?
+		sort = ?, unviewed_only = ?, since = ?, favorite = ?, assessor_id = ?, min_score = ?, unassessed_by = ?
 		WHERE id = ?`,
 		v.Name, v.Search, nullableID(v.SourceID), nullableID(v.TagID),
-		sortOrDefault(v.Sort), v.UnviewedOnly, v.Favorite,
+		sortOrDefault(v.Sort), v.UnviewedOnly, v.Since, v.Favorite,
 		nullableID(v.AssessorID), v.MinScore, nullableID(v.UnassessedBy), v.ID)
 	if err != nil {
 		return false, err

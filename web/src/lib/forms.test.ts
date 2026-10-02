@@ -334,6 +334,22 @@ describe('view forms', () => {
 		});
 	});
 
+	it('keeps the window of a view: shown in the query, sent as typed', () => {
+		const week: SavedView = { id: '2', name: 'Week', filter: { tag: '4', since: '7d' } };
+		expect(viewForm(week, sources, tags).query).toBe('tag:"cyber security" since:7d');
+		expect(viewAddBody({ name: 'w', query: 'since:30d tag:#4', favorite: true }, sources, tags)).toEqual({
+			name: 'w',
+			filter: { tag: '4', since: '30d' },
+			favorite: true
+		});
+		expect(validateView({ name: 'w', query: 'since:1m', favorite: true }, sources, tags).query).toContain('ambiguous');
+		const f = viewForm(week, sources, tags);
+		expect(viewPatchBody(week, f, sources, tags)).toEqual({});
+		expect(viewPatchBody(week, { ...f, query: 'tag:#4 since:1y' }, sources, tags)).toEqual({ filter: { tag: '4', since: '1y' } });
+		// Dropping the window drops it from the stored filter.
+		expect(viewPatchBody(week, { ...f, query: 'tag:#4' }, sources, tags)).toEqual({ filter: { tag: '4' } });
+	});
+
 	it('patches only what changed, sending the whole filter when it does', () => {
 		const f = viewForm(orig, sources, tags);
 		expect(viewPatchBody(orig, f, sources, tags)).toEqual({});

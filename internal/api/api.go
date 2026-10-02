@@ -16,6 +16,7 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/emptypb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	pb "github.com/sonhal/nyttig/internal/proto/nyttig/v1"
 )
@@ -136,6 +137,30 @@ type feedFilter struct {
 	AssessorID   int64
 	MinScore     *float64
 	UnassessedBy int64
+	After        *timestamppb.Timestamp // nil = no window
+}
+
+// maxAfter is the last second a protobuf Timestamp can hold (9999-12-31).
+const maxAfter = 253402300799
+
+// parseAfter reads after=<unix seconds>: a decimal integer from 0 up, or
+// absent for no window. The client fixes it once per snapshot (see the web
+// app's stream), so the daemon never counts "now" itself.
+func parseAfter(v url.Values) (*timestamppb.Timestamp, error) {
+	s := v.Get("after")
+	if s == "" {
+		return nil, nil
+	}
+	for _, c := range s {
+		if c < '0' || c > '9' {
+			return nil, fmt.Errorf("%w: after must be a unix time in seconds", errBadParam)
+		}
+	}
+	n, err := strconv.ParseInt(s, 10, 64)
+	if err != nil || n > maxAfter {
+		return nil, fmt.Errorf("%w: after must be a unix time in seconds", errBadParam)
+	}
+	return timestamppb.New(time.Unix(n, 0)), nil
 }
 
 func parseFeedFilter(v url.Values) (feedFilter, error) {
@@ -172,6 +197,9 @@ func parseFeedFilter(v url.Values) (feedFilter, error) {
 			return f, fmt.Errorf("%w: min_score must be a number from 0 to 1", errBadParam)
 		}
 		f.MinScore = &x
+	}
+	if f.After, err = parseAfter(v); err != nil {
+		return f, err
 	}
 	return f, nil
 }
@@ -289,6 +317,7 @@ func (a *handlers) items(w http.ResponseWriter, r *http.Request) {
 		TagExact:     tagExact,
 		Sort:         f.Sort,
 		UnviewedOnly: f.UnviewedOnly,
+		After:        f.After,
 		AssessorId:   f.AssessorID,
 		MinScore:     f.MinScore,
 		UnassessedBy: f.UnassessedBy,

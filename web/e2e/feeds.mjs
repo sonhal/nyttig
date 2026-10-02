@@ -114,6 +114,33 @@ ${items}
 </channel></rss>`;
 }
 
+// GET /dated/<name>.xml has four items with titles "<name> hour" (1.5 h old), "<name> 2
+// days", "<name> 10 days" and "<name> 60 days", published that long ago, for
+// the date window tests (since:7d shows the first two, since:1mo three).
+function datedFeed(name) {
+	const items = [
+		// An hour and a half, so a one-hour window is empty however fast the test runs.
+		['hour', 1.5],
+		['2 days', 48],
+		['10 days', 240],
+		['60 days', 1440]
+	]
+		.map(
+			([label, ago]) => `<item>
+<title>${esc(name)} ${label}</title>
+<link>https://${esc(name)}.example/${ago}</link>
+<guid>${esc(name)}-${ago}</guid>
+<pubDate>${hoursAgo(ago)}</pubDate>
+<description>Published ${label} ago.</description>
+</item>`
+		)
+		.join('\n');
+	return `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"><channel><title>${esc(name)}</title><link>https://${esc(name)}.example</link><description>dated</description>
+${items}
+</channel></rss>`;
+}
+
 export function startFeedServer() {
 	let pixelHits = 0;
 	let added = 0;
@@ -135,6 +162,12 @@ export function startFeedServer() {
 		if (extra) {
 			res.writeHead(200, { 'Content-Type': 'application/rss+xml' });
 			res.end(extraFeed(extra[1]));
+			return;
+		}
+		const dated = url.pathname.match(/^\/dated\/([\w-]+)\.xml$/);
+		if (dated) {
+			res.writeHead(200, { 'Content-Type': 'application/rss+xml' });
+			res.end(datedFeed(dated[1]));
 			return;
 		}
 		const big = url.pathname.match(/^\/bulk\/([\w-]+)\.xml$/);

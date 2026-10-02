@@ -7,7 +7,7 @@
 // reset + a fresh snapshot, which the reducer applies idempotently.
 
 import { searchItems } from './api';
-import { filterQuery } from './filter';
+import { apiParams } from './filter';
 import {
 	appendOlder,
 	beginOlder,
@@ -20,6 +20,7 @@ import {
 	type StreamEvent
 } from './reducer';
 import type { ScoreScope } from './scores';
+import { sinceAfter } from './since';
 import type { Filter, Item } from './types';
 
 export type ConnStatus = 'connecting' | 'connected' | 'disconnected';
@@ -37,6 +38,20 @@ export class FeedStream {
 
 	private es: EventSource | null = null;
 	private filter: Filter | null = null;
+	/**
+	 * The cutoff of the current snapshot in unix seconds, or undefined: the
+	 * filter's window counted back from when the stream last (re)connected.
+	 * The stream and every older page send this same value, so rows do not
+	 * move between them; rows age out of the list only on the next connect.
+	 */
+	after: number | undefined = undefined;
+	/**
+	 * The cutoff the stream was last opened with. After a reconnect it only
+	 * replaces `after` when the daemon's reset arrives: until then the rows on
+	 * screen are the old snapshot's, and an older page for them must keep the
+	 * old cutoff.
+	 */
+	private openedAfter: number | undefined = undefined;
 	private retryTimer: ReturnType<typeof setTimeout> | null = null;
 	private backoff = MIN_BACKOFF_MS;
 	private listeners = new Set<(prev: FeedState, next: FeedState) => void>();
@@ -99,6 +114,8 @@ export class FeedStream {
 		this.olderRetryAt = 0;
 		this.olderError = '';
 		this.open();
+		// A new filter starts a new snapshot at once: nothing is loaded.
+		this.after = this.openedAfter;
 	}
 
 	/**
@@ -114,7 +131,7 @@ export class FeedStream {
 		const epoch = s.epoch;
 		this.set(beginOlder(s));
 		try {
-			const page = await searchItems(f, limit, offset);
+			const page = await searchItems(f, limit, offset, false, this.after);
 			this.olderError = '';
 			this.set(appendOlder(this.state, epoch, offset, limit, page.items, page.total));
 		} catch (e) {
@@ -140,14 +157,19 @@ export class FeedStream {
 		this.teardown();
 		if (!this.filter) return;
 		this.status = 'connecting';
-		const es = new EventSource('/api/stream' + filterQuery(this.filter));
+		// A new snapshot: take the cutoff again, now.
+		this.openedAfter = sinceAfter(this.filter.since, Date.now());
+		const q = apiParams(this.filter, this.openedAfter).toString();
+		const es = new EventSource('/api/stream' + (q ? '?' + q : ''));
 		this.es = es;
 
 		es.addEventListener('open', () => {
 			if (this.es === es) this.status = 'connected';
 		});
 		es.addEventListener('reset', () => {
-			if (this.es === es) this.apply({ type: 'reset' });
+			if (this.es !== es) return;
+			this.after = this.openedAfter;
+			this.apply({ type: 'reset' });
 		});
 		es.addEventListener('item', (e) => {
 			if (this.es !== es) return;

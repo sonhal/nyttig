@@ -33,6 +33,7 @@
 	import { prefs } from '$lib/prefs.svelte';
 	import { treeOrder } from '$lib/tagtree';
 	import { applyCompletion, complete, format, parse, type Candidate } from '$lib/query';
+	import { describeSince, nextSince } from '$lib/since';
 	import { markViewed, moveCursor, setFollow } from '$lib/reducer';
 	import { ensureMe } from '$lib/rate';
 	import { oneLine, safeLink } from '$lib/sanitize';
@@ -181,7 +182,7 @@
 
 	async function loadUnviewed() {
 		try {
-			unviewedTotal = (await api.searchItems({ ...filter, unviewed: true }, 1)).total;
+			unviewedTotal = (await api.searchItems({ ...filter, unviewed: true }, 1, 0, false, stream.after)).total;
 		} catch {
 			unviewedTotal = null;
 		}
@@ -627,6 +628,7 @@
 		oncyclesource={() => run({ type: 'cycleSource' })}
 		oncycletag={() => run({ type: 'cycleTag' })}
 		onpickassessor={() => run({ type: 'pickAssessor' })}
+		oncyclesince={() => setFilter({ ...filter, since: nextSince(filter.since) })}
 		ontogglesort={() => run({ type: 'toggleSort' })}
 		ontoggleunviewed={() => setFilter({ ...filter, unviewed: !filter.unviewed })}
 		onopensheet={() => (sheetOpen = true)}
@@ -689,6 +691,8 @@
 			<div class="empty">
 				{#if !feed.complete}
 					loading…
+				{:else if filter.since}
+					<span data-testid="empty-window">no items in {describeSince(filter.since)}</span>
 				{:else}
 					no items — waiting for feeds...
 				{/if}

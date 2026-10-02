@@ -132,6 +132,7 @@ proto/nyttig/v1/nyttig.proto   Source-of-truth API definition
 buf.yaml, buf.gen.yaml      buf config for codegen; run `buf generate` from the repo root
 internal/proto/nyttig/v1/   GENERATED Go from the proto (do not hand-edit)
 internal/config/            TOML config loading + ~ expansion
+internal/since/             Parser for rolling windows (7d, 1mo): Parse + Cutoff, shared rules with web/src/lib/since.ts
 internal/client/            gRPC client wrapper + StreamSub helper used by the TUI
 internal/mtls/              Mutual-TLS credential loading shared by daemon and client
 internal/tui/               Bubble Tea Model, filter bar, table, status bar, view tracking;
@@ -144,7 +145,7 @@ internal/api/               nyttig-api's HTTP API: routing (server.go), JSON han
 cmd/nyttig-api/main.go      nyttig-api entrypoint: flags, listen-address guard, HTTP server
 web/                        The SvelteKit app (pnpm); "pnpm build" writes a Node server to web/build/
 web/src/lib/                Pure modules (reducer, keymap, filter, query, command, highlight,
-                            fuzzy, history, help, sanitize, viewed, forms, latest, meta,
+                            fuzzy, history, help, sanitize, viewed, forms, latest, meta, since,
                             format, tagtree, views, scores) with Vitest tests next to them, plus the
                             Svelte components (ViewTabs.svelte is the saved views' tab row above
                             the filter bar); metadata.svelte.ts holds the sources, tags and
@@ -174,8 +175,8 @@ deploy/README.md            VPS guide: sizing, build for Debian, mTLS for the TU
 deploy/Caddyfile            Example reverse proxy (TLS, basic auth, /api/* vs the app)
 docs/web-client-plan.md     Plan for the nyttig-api browser client (phases and decisions)
 docs/tag-tree-plan.md       Plan for parent tags (the tag tree): decisions and phases
-docs/assessments-plan.md    Plan for assessments: scores and notes from external assessors
 docs/saved-views-plan.md    Plan for saved views (named filters, feed tabs): decisions and phases
+docs/date-filter-plan.md    Plan for the date window (since:7d) in filters and views: decisions and phases
 docs/assessments-plan.md    Plan for assessments (scores and notes from external assessors): decisions and phases
 CLAUDE.md                   `@AGENTS.md`: makes Claude Code load this file
 ```
@@ -268,7 +269,7 @@ which phases are done and whether they are merged; keep it current.
   `tag_exact`.
 - **Saved views** (`saved_views`, `docs/saved-views-plan.md`) are named
   filters stored in the daemon (`ViewFilter`: search, one source, one tag,
-  sort, unviewed) and shared by the web app and the CLI. They are **resolved
+  sort, unviewed, since, and the assessment fields) and shared by the web app and the CLI. They are **resolved
   client-side into a plain filter**: nothing in the stream, the Hub,
   `ListItems` or `itemMatchesFilter` knows about views. A deleted source or
   tag is `ON DELETE SET NULL` on the view, so the view stays and loses that
@@ -281,13 +282,33 @@ which phases are done and whether they are merged; keep it current.
   (`views.ts`: `isModified`). The tabs are the favorites in position order,
   and only the first nine have a number key. **nyttig-api's view JSON is not
   protojson** (`viewJSON` in `internal/api/manage.go`): a view is
-  `{id, name, filter: {q, source, tag, sort, unviewed}, favorite, position}`
+  `{id, name, filter: {q, source, tag, since, sort, unviewed, assessor, min_score, unassessed}, favorite, position}`
   with string IDs, zero values left out and `filter` always present (the
   daemon spells out `sort: "newest"`). The filter keys are the web `Filter`
   type's and the feed URL's, in requests and responses alike, and a PATCH
   with `filter` replaces the whole filter. Lists and the reorder answer are
   `{"views": [...]}`. In the web app `command.ts`'s old `View` is now `Page`
   (the routes); "view" always means a saved view.
+- **Date window** (`since`, `docs/date-filter-plan.md`): a rolling
+  duration (`24h`, `7d`, `2w`, `1mo`, `1y`; parsed by `internal/since` and
+  `web/src/lib/since.ts`, which share a table of cases) and a general filter
+  like `tag`: the `/` bar, the feed URL, `search -since`, and a saved view,
+  which stores the **duration string** (`saved_views.since`) while the
+  daemon's queries only ever see an **absolute cutoff**:
+  `SearchRequest.after` / `StreamFilter.after` (`ItemFilter.After`), HTTP
+  `after=<unix seconds>`. The client fixes one cutoff per snapshot
+  (`FeedStream.after`, set in `connect` and, after a reconnect, when the
+  daemon's reset arrives) and sends it with the stream and with every older
+  page. Taking "now" per request would let the window slide between the
+  snapshot and the next offset page and skip rows (the `ranked` invariant),
+  so never add a `since` query parameter to the API. The date is
+  `COALESCE(published, fetched_at)` compared as text against a bound with no
+  `+00:00` suffix (see "Item dates are text in UTC"); the Hub's
+  `itemInWindow` applies the same rule to pushed items, in whole seconds, and
+  `TestItemMatchesFilter_AfterAgreesWithListItems` keeps the two in step.
+  Months and years are calendar arithmetic in UTC with `AddDate`'s
+  end-of-month overflow (31 March minus 1mo is 3 March), the same in Go and
+  JS. Rows age out of an open list only on reload or reconnect, by design.
 - **Assessments.** An assessor (`assessors`) writes at most one assessment
   per `(item, assessor, tag)` (`assessments`; the tag is optional, NULL = the
   whole item). `PutAssessment` is an upsert whose conflict target is the
@@ -299,13 +320,21 @@ which phases are done and whether they are merged; keep it current.
   `TagExact`). `min_score` or the score sort without an assessor is an error
   (`ErrAssessorRequired`). Scores of different assessors are never merged.
   Deleting an assessor deletes its assessments; saved views that use it keep
-  existing (migration 7's trigger clears `min_score` and a `score` sort, the
+  existing (migration 8's trigger clears `min_score` and a `score` sort, the
   foreign keys clear the ids). Notes and assessor names are untrusted text.
   The service (`service/assessments.go`) validates scores (NaN and ±Inf
   explicitly, since every comparison with NaN is false), notes and the filter
   fields shared by `SearchRequest`, `StreamFilter` and `ViewFilter`
   (`validateAssessmentFilter`); an unknown item, assessor or tag is
   `NotFound`. A score is `optional double` on the wire so 0 differs from none.
+  The assessment filters and the date window (`ItemFilter.After`) combine with
+  AND: `itemMatchesFilter` checks `itemInWindow` first, so an `item_update`
+  for an item outside the window has `update_matches = false` and no client
+  inserts it (`TestAssessmentFilters_WithWindowAgree`). Migration 8 (the
+  assessments) follows migration 7 (`saved_views.since`); its `saved_views`
+  rebuild carries `since`. On `ViewFilter` the assessment fields are 7-9, on
+  `SearchRequest` 10-12 and on `StreamFilter` 8-10 (after main's `since` /
+  `after`).
 - **TUI assessments.** The filter bar cycles the assessor (`a`) and the
   minimum score (`m`); the score sort exists only while an assessor is
   selected, and dropping the assessor drops the minimum and the sort

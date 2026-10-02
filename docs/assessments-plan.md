@@ -1,6 +1,6 @@
 # Assessments plan: scores and notes from external assessors
 
-Status: **phases 1–8 implemented, not yet merged** (database layer, proto and RPCs, live updates, CLI and config, HTTP API, web app, TUI, rating yourself).
+Status: **phases 1–8 implemented, not yet merged** (database layer, proto and RPCs, live updates, CLI and config, HTTP API, web app, TUI, rating yourself). `main`'s date window (#25) is merged into the branch; assessments and `since:` work together everywhere.
 
 Other systems can attach a judgement to a news item: an optional **score**
 from 0.0 to 1.0, an optional **note**, and the **assessor** that made it.
@@ -60,9 +60,9 @@ real use case, but it can come later as an `assessment_history` table that
 the upsert appends to. That wouldn't change any query that reads the current
 value.
 
-## Data model: migration `000007_assessments` (both migration directories)
+## Data model: migration `000008_assessments` (both migration directories)
 
-Migration 6 is saved views. Foreign keys are already on (`db.go`).
+Migration 6 is saved views and migration 7 adds `saved_views.since` (the date window). Foreign keys are already on (`db.go`).
 
 ```sql
 CREATE TABLE assessors (
@@ -244,7 +244,7 @@ become part of a view like any other field, and **a view saves its sort,
 `score` included**. Opening the view restores the order. Changing it marks
 the tab `*` (through `sameFilter`), and `:save` writes it back.
 
-**Schema (in migration 7):**
+**Schema (in migration 8):**
 
 - `saved_views` gains:
   - `assessor_id INTEGER REFERENCES assessors(id) ON DELETE SET NULL`
@@ -389,7 +389,7 @@ Re-assessing is just another `PutAssessment`.
 ## Phases (one PR each; conventional titles)
 
 1. **`feat(db): assessments and assessors`.**
-   - Migration 7 in both directories: the two tables, the `saved_views`
+   - Migration 8 (see the first deviation) in both directories: the two tables, the `saved_views`
      rebuild and the assessor trigger.
    - `db/assessments.go`.
    - `ItemFilter` gains `AssessorID`, `MinScore *float64` and
@@ -537,6 +537,25 @@ govulncheck can't reach vuln.go.dev from the sandbox, so leave it to CI.
 
 ## Deviations from this plan
 
+- **Merge with the date window (#25).** `main` took migration 7
+  (`saved_view_since`) and proto fields while this branch was open, so the
+  branch's numbers moved (nothing was released):
+  - the migration is `000008_assessments`; its `saved_views` rebuild carries
+    `since` (`TestMigration8_RebuildKeepsSavedViews` seeds views with a
+    window)
+  - `ViewFilter`: `since = 6` (main), `assessor_id = 7`, `min_score = 8`,
+    `unassessed_by = 9`
+  - `SearchRequest`: `after = 9` (main), `assessor_id = 10`, `min_score = 11`,
+    `unassessed_by = 12`
+  - `StreamFilter`: `after = 7` (main), `assessor_id = 8`, `min_score = 9`,
+    `unassessed_by = 10`
+  - `Item.assessments = 13`, `ServerMessage.item_update = 4` and
+    `update_matches = 5` did not clash.
+  - The Hub checks the window before the assessment filters, so an
+    `item_update` for an item outside the window has `update_matches = false`
+    (`TestAssessmentFilters_WithWindowAgree`).
+  - Query syntax order is `since:` then `score:`, `unassessed:`, `sort:`
+    (`since:1d score:claude>=0.7 sort:score`).
 - **Phase 8, "created on first use" is client-side.** The daemon has no
   special assessor: `client.EnsureMe` (Go: CLI, TUI) and `ensureMe` in
   `web/src/lib/rate.ts` look `me` up by name and add it when it is missing,

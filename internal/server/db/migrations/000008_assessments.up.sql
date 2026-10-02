@@ -27,9 +27,10 @@ CREATE INDEX idx_assessments_assessor_score ON assessments (assessor_id, score);
 -- ON DELETE CASCADE from tags looks rows up by tag_id.
 CREATE INDEX idx_assessments_tag_id ON assessments (tag_id);
 
--- Saved views gain the assessor filter. SQLite cannot change a CHECK in
--- place, so the table is rebuilt to let sort be 'score'. Nothing references
--- saved_views, so the rebuild is safe with foreign keys on.
+-- Saved views gain the assessor filter (and keep migration 7's since column).
+-- SQLite cannot change a CHECK in place, so the table is rebuilt to let sort
+-- be 'score'. Nothing references saved_views, so the rebuild is safe with
+-- foreign keys on.
 CREATE TABLE saved_views_new (
     id            INTEGER PRIMARY KEY,
     name          TEXT    NOT NULL UNIQUE COLLATE NOCASE,
@@ -41,14 +42,15 @@ CREATE TABLE saved_views_new (
     favorite      INTEGER NOT NULL DEFAULT 0,
     position      INTEGER NOT NULL DEFAULT 0,
     created_at    TEXT    NOT NULL DEFAULT (datetime('now')),
+    since         TEXT    NOT NULL DEFAULT '',
     assessor_id   INTEGER REFERENCES assessors(id) ON DELETE SET NULL,
     min_score     REAL,
     unassessed_by INTEGER REFERENCES assessors(id) ON DELETE SET NULL
 );
 
 INSERT INTO saved_views_new
-    (id, name, search, source_id, tag_id, sort, unviewed_only, favorite, position, created_at)
-SELECT id, name, search, source_id, tag_id, sort, unviewed_only, favorite, position, created_at
+    (id, name, search, source_id, tag_id, sort, unviewed_only, favorite, position, created_at, since)
+SELECT id, name, search, source_id, tag_id, sort, unviewed_only, favorite, position, created_at, since
 FROM saved_views;
 
 DROP TABLE saved_views;
