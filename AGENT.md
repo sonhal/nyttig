@@ -269,7 +269,9 @@ container), with the Go version taken from `go.mod`:
 - golangci-lint runs with `only-new-issues: true` because the code has a
   backlog of existing findings (mostly unchecked `Close()` errors). Don't add
   new ones; fixing old ones is welcome, and once they're gone the setting
-  should be removed.
+  should be removed. golangci-lint is skipped on `v*` tag runs: a new tag
+  has no baseline commit, so `only-new-issues` would report the whole
+  backlog and block the release. Tag commits that have been through `main`.
 - The govulncheck job sets `go-version-input: ""`. Without it the action uses
   the latest stable Go instead of `go.mod`'s, so it would scan a different
   standard library from the one the binaries are built with.
