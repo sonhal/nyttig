@@ -213,6 +213,10 @@ func TestStreamErrors(t *testing.T) {
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Errorf("bad filter: status %d, want 400", resp.StatusCode)
 	}
+	resp, _ = getStream(t, srv, "?after=yesterday")
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("bad after: status %d, want 400", resp.StatusCode)
+	}
 }
 
 // blockingWriter is an http.ResponseWriter whose Write blocks, like a
@@ -318,5 +322,21 @@ func TestStreamOverflowClosesConnection(t *testing.T) {
 	}
 	if fs.ctx.Err() == nil {
 		t.Error("gRPC stream not cancelled on overflow")
+	}
+}
+
+// The cutoff the browser fixed for this snapshot reaches the daemon as is.
+func TestStreamAfter(t *testing.T) {
+	fs := newFakeStream(4)
+	fs.msgs <- completeMsg
+	srv := startStreamServer(t, &fakeClient{stream: fs}, Config{PingInterval: 50 * time.Millisecond})
+
+	resp, _ := getStream(t, srv, "?after=1788264000&unviewed=1")
+	if resp.StatusCode != 200 {
+		t.Fatalf("status %d", resp.StatusCode)
+	}
+	f := fs.filter()
+	if f == nil || f.GetAfter().AsTime().Unix() != 1788264000 || !f.UnviewedOnly {
+		t.Errorf("filter sent to daemon = %v", f)
 	}
 }

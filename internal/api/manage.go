@@ -526,7 +526,7 @@ func (a *handlers) testRule(w http.ResponseWriter, r *http.Request) {
 
 var (
 	viewFields   = []string{"name", "filter", "favorite"}
-	filterFields = []string{"q", "source", "tag", "sort", "unviewed"}
+	filterFields = []string{"q", "source", "tag", "since", "sort", "unviewed"}
 )
 
 // viewJSON is a saved view as the browser sees it. Its filter uses the same
@@ -544,6 +544,7 @@ type filterJSON struct {
 	Q        string `json:"q,omitempty"`
 	Source   string `json:"source,omitempty"`
 	Tag      string `json:"tag,omitempty"`
+	Since    string `json:"since,omitempty"`
 	Sort     string `json:"sort,omitempty"`
 	Unviewed bool   `json:"unviewed,omitempty"`
 }
@@ -562,7 +563,7 @@ func toViewJSON(v *pb.SavedView) viewJSON {
 		Name: v.GetName(),
 		Filter: filterJSON{
 			Q: f.GetSearch(), Source: idString(f.GetSourceId()), Tag: idString(f.GetTagId()),
-			Sort: f.GetSort(), Unviewed: f.GetUnviewedOnly(),
+			Since: f.GetSince(), Sort: f.GetSort(), Unviewed: f.GetUnviewedOnly(),
 		},
 		Favorite: v.GetFavorite(),
 		Position: v.GetPosition(),
@@ -588,10 +589,11 @@ func viewFilter(b jsonBody) (*pb.ViewFilter, bool, error) {
 	tag, err3 := o.id("tag")
 	sort, err4 := o.str("sort")
 	unviewed, err5 := o.boolean("unviewed")
-	if err := firstErr(err1, err2, err3, err4, err5); err != nil {
+	since, err6 := o.str("since")
+	if err := firstErr(err1, err2, err3, err4, err5, err6); err != nil {
 		return nil, true, fmt.Errorf("%w: filter: %s", errBody, strings.TrimPrefix(err.Error(), errBody.Error()+": "))
 	}
-	return &pb.ViewFilter{Search: valueOr(q, ""), SourceId: src, TagId: tag, Sort: valueOr(sort, ""), UnviewedOnly: valueOr(unviewed, false)}, true, nil
+	return &pb.ViewFilter{Search: valueOr(q, ""), SourceId: src, TagId: tag, Sort: valueOr(sort, ""), UnviewedOnly: valueOr(unviewed, false), Since: valueOr(since, "")}, true, nil
 }
 
 func (a *handlers) listViews(w http.ResponseWriter, r *http.Request) {
