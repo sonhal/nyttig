@@ -1,6 +1,6 @@
 # Date filter plan
 
-Status: **planned, not started**.
+Status: **phases 1–6 implemented, not yet merged** (the database, the daemon, the CLI, the HTTP API and the web app).
 
 Views (and the feed filter in general) get a rolling time window: "only items
 from the last day / week / month". A view called `today` is `since:24h`, one
@@ -191,4 +191,30 @@ Then `buf generate` (local plugins; never hand-edit `internal/proto/`).
 
 ## Deviations
 
-None yet.
+- The plan says 31 March − 1mo is "28/29 February, the same as Go's
+  `AddDate` normalisation". `AddDate` (and JS `setUTCMonth`) overflow forward
+  instead: 31 March − 1mo is **3 March** (2 March in a leap year) and 29
+  February − 1y is **1 March**. Both implementations do that and the shared
+  case table pins it; clamping to the end of the month would have been a
+  second rule to keep in step.
+- `since.Parse` and `parseSince` accept leading zeros (`07d` is 7 days, kept
+  as typed) and reject five or more digits, so `00007d` is an error.
+- A cutoff is never before the Unix epoch: `sinceAfter` (web) and
+  `cutoffFromSince` (CLI) clamp, because `9999y` reaches before year 1, which
+  a protobuf Timestamp cannot hold and `after` (≥ 0) cannot carry.
+- `after` on `GET /api/items` and `/api/stream` is also capped at the last
+  second a Timestamp can hold (253402300799), so nyttig-api answers 400
+  instead of passing a value the daemon would reject mid-stream.
+- The stream applies its cutoff in two steps: `connect` (a new filter) takes
+  it at once, but after a reconnect `FeedStream.after` changes only when the
+  daemon's reset arrives. Until then the rows on screen belong to the old
+  snapshot, and an older page requested for them must keep the old cutoff.
+- The feed's count of unviewed items (`loadUnviewed`) sends the stream's
+  cutoff too, so the status bar counts inside the window.
+- The desktop chip is a button that cycles any time, 24h, 7d, 30d and 1y (the
+  presets of the phone select); a window typed in the bar that is not one of
+  them goes back to any time on the next click. The plan only asked that the
+  chip show the window.
+- The e2e feed server's "hour" item is 1.5 hours old (not 1), so that a
+  `since:1h` window is empty however fast the test runs.
+- The TUI is unchanged, as planned.
