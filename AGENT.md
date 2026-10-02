@@ -1,6 +1,95 @@
 # AGENT.md
 
 Guidance for AI coding agents working in the **nyttig** repository.
+`CLAUDE.md` imports this file, and `AGENTS.md` links to it, so every agent
+session loads it. Read the whole file before changing code; the sections
+below the first two are reference, not optional.
+
+## Read this first
+
+- **Build tag.** Every `go build`, `go run` and `go test` of the daemon needs
+  `-tags sqlite_fts5`, or `db.Open` fails with `db.ErrNoFTS5`. See
+  [Build, test, run](#build-test-run).
+- **Before every push, run the CI checks locally**, exactly as listed under
+  [Build, test, run](#build-test-run): gofmt, `go mod tidy -diff`, `go vet`,
+  golangci-lint on the new code (see [Linting](#linting)), the race tests,
+  and in `web/` `pnpm check`, `pnpm test`, `pnpm build` and the e2e suite
+  when you touched the web app. CI runs the same and fails on any of them.
+- **Commit subjects and PR titles are Conventional Commits.** The PR title
+  becomes the squash commit on `main`, and that subject alone decides
+  whether a release is cut. See
+  [Commits and pull requests](#commits-and-pull-requests).
+- **Don't merge.** Push the branch, make CI green, and leave merging to the
+  owner unless they ask you to merge.
+- **One writer per working tree.** If you delegate to a sub-agent in this
+  checkout, it commits and pushes its own work; don't edit or commit in the
+  tree while it runs. See [Feature work and delegation](#feature-work-and-delegation).
+- **Keep the docs in step.** Behaviour changes update `README.md`, this
+  file, and the feature's plan under `docs/` (its `Status:` line included).
+- **Generated code is never hand-edited** (`internal/proto/`); run
+  `buf generate`. Both migration directories must stay identical.
+- **The cloud sandbox has quirks** (blocked hosts, a golangci-lint that
+  refuses the module, `pkill -f` killing your own shell). See
+  [Working in the Claude cloud sandbox](#working-in-the-claude-cloud-sandbox).
+
+## Commits and pull requests
+
+PRs are squash-merged, so **the PR title is the commit subject on `main`**,
+and the Tag release job reads only that subject (`scripts/next-version.sh`,
+see [Releases](#releases)). Use a
+[Conventional Commits](https://www.conventionalcommits.org) prefix on every
+commit subject and on the PR title:
+
+| Subject prefix | Release it cuts |
+|---|---|
+| `feat: ...` / `feat(web): ...` | minor |
+| `fix: ...`, `perf: ...` | patch |
+| `feat!: ...`, or a `BREAKING CHANGE:` footer | major (minor while on `0.x`) |
+| `docs:`, `ci:`, `chore:`, `build:`, `refactor:`, `test:` | none |
+
+- A plain title such as "Add tag hierarchy support" cuts **no release**,
+  even if the branch's own commits are conventional: the squash puts them in
+  the commit body, which the script ignores. Two features merged this way
+  on 2026-10-02 (#19 and #21) and silently skipped their minor bump.
+- PRs are often created from the Claude Code UI with a title you didn't
+  pick. When the session is told "A pull request was just created for this
+  branch", **set the PR title yourself** to a conventional subject before
+  anything else happens to it. Renaming a PR before merge is free; a missed
+  release is not.
+- Scope names in use: `web`, `api`, `db`, `service`, `fetcher`, `scheduler`,
+  `tagger`, `tui`, `cli`, `deploy`, `ci`. Pick the one that names the part
+  that changed; leave it out when the change spans the repo.
+- Dependabot's `build(deps):` titles are correct as they are and never
+  release.
+- Write the PR body as the record of the change: what, why, deviations from
+  the plan, and what was checked. The owner merges; don't merge unless asked.
+
+## Feature work and delegation
+
+This is the workflow the owner uses; follow it unless told otherwise.
+
+1. **Plan before code.** For a new feature, read the code paths it touches,
+   then ask the design questions that change the shape of the work, with
+   options and a recommendation. Don't start implementing while the owner
+   has asked only for a plan.
+2. **Write the plan to `docs/<feature>-plan.md`** in the style of the
+   existing plans: a `Status:` line at the top, decisions, and numbered
+   phases that each fit one PR. The plan is the spec for whoever implements
+   it, possibly another session, so it must stand on its own.
+3. **Implement in phases**, one commit (or PR) per phase, with the tests the
+   plan lists. Record deviations in the plan's "Deviations" or phase notes.
+4. **Keep the `Status:` line true.** Update it when a phase lands and again
+   when the PR merges; "implemented, not yet merged" must not outlive the
+   merge.
+5. **Delegating.** When you hand work to a sub-agent or a fresh session,
+   the brief can say "read `AGENT.md` and `docs/<feature>-plan.md`" instead
+   of restating the checks and conventions; add only what is specific to
+   the task (branch name, which phases, decisions already made). A
+   sub-agent that works in this checkout owns the working tree until it
+   returns: it runs the checks, commits per phase and pushes. Don't edit
+   files or commit in that tree in parallel, and don't let a Stop hook
+   push its half-finished work. If it stops without committing, run the
+   checks on what it left and commit it yourself.
 
 ## What this project is
 
@@ -78,7 +167,11 @@ deploy/README.md            VPS guide: sizing, build for Debian, mTLS for the TU
 deploy/Caddyfile            Example reverse proxy (TLS, basic auth, /api/* vs the app)
 docs/web-client-plan.md     Plan for the nyttig-api browser client (phases and decisions)
 docs/tag-tree-plan.md       Plan for parent tags (the tag tree): decisions and phases
+CLAUDE.md, AGENTS.md        Load this file: CLAUDE.md is an @import, AGENTS.md a symlink
 ```
+
+Plan documents under `docs/` carry a `Status:` line at the top that says
+which phases are done and whether they are merged; keep it current.
 
 ## Architecture notes (read before changing server code)
 
@@ -238,6 +331,24 @@ go run ./cmd/nyttig list-sources     # CLI subcommand
 go run ./cmd/nyttig-api --origin http://localhost:5173   # web API, for "pnpm dev" in web/ (daemon must be running)
 ```
 
+### Linting
+
+CI runs golangci-lint with `only-new-issues: true` (see [CI](#ci)), so a
+clean local run of `golangci-lint run ./...` is not the bar: the backlog
+makes it fail anyway, and new findings hide in the noise. Run it the way CI
+does, against the merge base:
+
+```bash
+GOBIN=$PWD/.deps/bin go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest   # .deps/ is gitignored
+.deps/bin/golangci-lint run --new-from-rev=origin/main --max-issues-per-linter=0 --max-same-issues=0 ./...
+```
+
+It must print no findings. The one that keeps coming back is `errcheck` on
+`Close`: the backlog has bare `rows.Close()` calls, but a new one fails CI.
+On new lines write `defer func() { _ = rows.Close() }()` or `_ = f.Close()`,
+and check the error where it matters. The same goes for `fmt.Fprintf` to
+stdout in the CLI (`_, _ = fmt.Fprintf(...)` or `fmt.Printf`).
+
 ### Web app (`web/`)
 
 Node.js 22+ and pnpm (the version is pinned by `packageManager` in
@@ -295,6 +406,42 @@ build tag decides which SQLite library a binary gets:
 nyttigd logs the library's version at startup (`sqlite_version` in the
 `database opened` line).
 
+### Working in the Claude cloud sandbox
+
+Sessions started from the Claude Code UI run in a cloud container with an
+egress allowlist. What that changes, learned the hard way:
+
+- **golangci-lint:** the preinstalled binary was built with Go 1.25 and
+  refuses this module ("the Go language version used to build golangci-lint
+  is lower than the targeted Go version"). Install your own as shown under
+  [Linting](#linting); the download takes about a minute.
+- **govulncheck can't run:** `vuln.go.dev` is blocked, so it fails to fetch
+  the database. Say so in the PR and let CI's Vulnerability check run it;
+  don't bump dependencies you can't check.
+- **`buf.build` is blocked.** Codegen already uses local plugins installed
+  with `go install` (see [Regenerating protobuf code](#regenerating-protobuf-code)),
+  so `buf generate` works offline.
+- **No Docker.** The release Build job's `golang:1.26-trixie` container
+  can't be reproduced here; test the bundle with a native build and let CI
+  do the container build.
+- **Most external sites are blocked** (feed hosts, `bsky.app`, package
+  registries other than the Go proxy and npm). Use the e2e feed server
+  (`web/e2e/feeds.mjs`) or hand-written fixtures instead of live feeds.
+- **Playwright:** Chromium is preinstalled; run the e2e suite with
+  `PLAYWRIGHT_CHROMIUM_EXECUTABLE=/opt/pw-browsers/chromium` and never run
+  `playwright install`. A script that launches Chromium directly (not
+  through `playwright.config.ts`) must pass `executablePath` itself, or it
+  fails looking for the headless shell.
+- **`pkill -f` kills your own shell** when the pattern matches the command
+  line of the Bash call that runs it (exit code 144 with no output). Stop
+  the e2e stack by killing the PIDs you started, or use a pattern that can't
+  match your own command, e.g. `pkill -f '[s]tack.mjs'`.
+- **The Stop hook** (`~/.claude/stop-hook-git-check.sh`) asks for every
+  uncommitted change to be committed and pushed. Commit your own finished
+  work; don't commit a running sub-agent's files to satisfy it.
+- `.deps/`, `.modcache/` and `.pi/` are gitignored for tool installs and
+  caches; use the session scratchpad for everything else.
+
 ### CI
 
 `.github/workflows/ci.yml` runs on pull requests, on pushes to `main`, on
@@ -342,8 +489,9 @@ commits since the latest stable `v*` tag and takes the largest bump:
 | `type!: ...`, or a `BREAKING CHANGE:` footer in the body | major (minor while the version is `0.x`) |
 | anything else (`docs:`, `ci:`, `chore:`, `refactor:`, a non-conventional title) | no release |
 
-PRs are squash-merged, so **the PR title is the commit subject**: give it a
-conventional prefix, or the merge doesn't release. `scripts/next-version.sh`
+PRs are squash-merged, so the PR title is the commit subject; the rules for
+titling are under [Commits and pull requests](#commits-and-pull-requests).
+`scripts/next-version.sh`
 prints what the current branch would release (the per-commit reasoning goes to
 stderr). Leaving `0.x` is deliberate: push `v1.0.0` by hand.
 
@@ -407,6 +555,10 @@ pattern for new update RPCs rather than treating zero values as "unset".
   changes the bundled SQLite that `-tags sqlite_fts5` builds compile in;
   release builds (`-tags libsqlite3`) only get the Go binding. The Test job
   exercises the bundled copy, the Build job the system library.
+  TypeScript **major** bumps in `/web` are ignored on purpose: svelte-check 4
+  runs on TypeScript 7 only alongside TypeScript 6 and behind its
+  experimental `--tsgo` flag, so a TypeScript 7 PR breaks `pnpm check`.
+  Review a Dependabot PR by reading its CI run, not by re-deriving this.
 
 ## Conventions
 
@@ -448,6 +600,25 @@ pattern for new update RPCs rather than treating zero values as "unset".
 - The feed server in `web/e2e/feeds.mjs` escapes some descriptions twice on
   purpose: nyttigd strips tags and then unescapes entities, and that is how
   real markup reaches the browser.
+- **e2e ordering:** two items pushed in the same second have no fixed order
+  (`published` has whole-second precision). A test that pushes several items
+  must give them unique titles and must not assume the order they arrive in.
+- **Svelte 5 runes:** `$state` wraps objects in proxies, so identity
+  comparisons (`panel === p`) fail; use `$state.raw` for objects that are
+  replaced whole. Whitespace at the edge of an element is trimmed, so write
+  `{'label '}` when a trailing space matters.
+- **svelte-check covers `src/**`, tests included**, and the repo has no
+  `@types/node` on purpose. A `*.test.ts` under `src/` can't use `node:fs`,
+  `__dirname` or other Node APIs; `web/e2e/` is outside the checked set and
+  is where Node code goes.
+- **Adding a source type** (today `rss` and `atom`) touches five places,
+  and missing one fails quietly: `validateFeedType` in
+  `internal/server/service/validate.go`, the `--type` help in
+  `cmd/nyttig/main.go`, the proto comment on `Source.type`, the `type`
+  union in `web/src/lib/forms.ts` (it coerces anything that isn't `atom`
+  to `rss`, so an unknown type gets rewritten on edit) and the select in
+  `web/src/lib/SourceForm.svelte`. The fetcher itself picks the parser from
+  the document, not from `type`.
 - Build artifacts (`bin/`, `dist/`, `main`, `nyttig`, `nyttigd`, `nyttig-api`,
   and `web/build/` via `web/.gitignore`) and tool caches
   (`.deps/`, `.modcache/`, `.pi/`) are covered by `.gitignore`. Its patterns are

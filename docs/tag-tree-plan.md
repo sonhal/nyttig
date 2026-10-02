@@ -1,6 +1,6 @@
 # Tag tree plan: parent tags
 
-Status: **implemented** (phases 1 to 6, one commit each on the feature branch), not yet merged. See Deviations.
+Status: **implemented and merged** (sonhal/nyttig#19, 2026-10-02; phases 1 to 6, one commit each). See Deviations.
 
 Tags can have parent tags. Filtering by a parent shows items tagged with the
 parent **or any tag below it**. Example:
