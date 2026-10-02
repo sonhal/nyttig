@@ -395,9 +395,9 @@ func isTCP(addr string) bool {
 
 // ── Config seeding ───────────────────────────────────────────────────────────
 
-// seedFromConfig idempotently inserts the sources, tags, and tag rules declared
-// in cfg. Sources are matched by URL, tags by name, and tag rules by their
-// (tag, field, pattern, source) tuple; anything already present is skipped so
+// seedFromConfig idempotently inserts the sources, tags, tag rules and assessors declared
+// in cfg. Sources are matched by URL, tags and assessors by name, and tag rules by
+// their (tag, field, pattern, source) tuple; anything already present is skipped so
 // the config file never clobbers user edits or fetch state on restart.
 func seedFromConfig(database *sql.DB, cfg *config.Config, logger *slog.Logger) error {
 	// ── Sources ──
@@ -537,6 +537,25 @@ func seedFromConfig(database *sql.DB, cfg *config.Config, logger *slog.Logger) e
 		}
 		haveRule[key] = true
 		logger.Info("seeded tag rule from config", "tag", cr.Tag, "pattern", cr.Pattern)
+	}
+
+	// ── Assessors ──
+	for _, ca := range cfg.Assessors {
+		if ca.Name == "" {
+			logger.Warn("skipping config assessor with empty name")
+			continue
+		}
+		existing, err := db.GetAssessorByName(database, ca.Name)
+		if err != nil {
+			return fmt.Errorf("look up assessor %q: %w", ca.Name, err)
+		}
+		if existing != nil {
+			continue
+		}
+		if _, err := db.InsertAssessor(database, &db.Assessor{Name: ca.Name, Description: ca.Description, Color: ca.Color}); err != nil {
+			return fmt.Errorf("insert assessor %q: %w", ca.Name, err)
+		}
+		logger.Info("seeded assessor from config", "name", ca.Name)
 	}
 
 	return nil

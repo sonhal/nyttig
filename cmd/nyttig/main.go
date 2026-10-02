@@ -108,6 +108,18 @@ func main() {
 		removeViewCmd()
 	case "reorder-views":
 		reorderViewsCmd()
+	case "list-assessors":
+		listAssessorsCmd()
+	case "add-assessor":
+		addAssessorCmd()
+	case "update-assessor":
+		updateAssessorCmd()
+	case "remove-assessor":
+		removeAssessorCmd()
+	case "assess":
+		assessCmd()
+	case "unassess":
+		unassessCmd()
 	case "refresh":
 		refreshCmd()
 	default:
@@ -136,6 +148,12 @@ func printHelp() {
 	fmt.Fprintf(os.Stderr, "  update-view    Change a view (only the given flags change)\n")
 	fmt.Fprintf(os.Stderr, "  remove-view    Remove a view by ID or name\n")
 	fmt.Fprintf(os.Stderr, "  reorder-views  Set the order of the views\n")
+	fmt.Fprintf(os.Stderr, "  list-assessors List assessors (systems that score items)\n")
+	fmt.Fprintf(os.Stderr, "  add-assessor   Register an assessor\n")
+	fmt.Fprintf(os.Stderr, "  update-assessor Change an assessor (only the given flags change)\n")
+	fmt.Fprintf(os.Stderr, "  remove-assessor Remove an assessor and its assessments\n")
+	fmt.Fprintf(os.Stderr, "  assess         Score and/or note an item as an assessor\n")
+	fmt.Fprintf(os.Stderr, "  unassess       Remove an assessor's assessment of an item\n")
 	fmt.Fprintf(os.Stderr, "  search         Full-text search stored items (-view NAME runs a saved view)\n")
 	fmt.Fprintf(os.Stderr, "  refresh        Force immediate fetch of all sources (or one with -i)\n")
 	fmt.Fprintf(os.Stderr, "\nGlobal flags:\n")
@@ -848,6 +866,10 @@ func searchCmd() {
 		unviewed bool
 		exact    bool
 		viewRef  string
+
+		assessorRef   string
+		minScore      float64
+		unassessedRef string
 	)
 
 	flags.StringVar(&viewRef, "view", "", "Run this saved view's filter (name or ID); flags you pass override its filter")
@@ -860,8 +882,11 @@ func searchCmd() {
 	flags.IntVar(&limit, "l", 20, "Maximum number of results")
 	flags.IntVar(&limit, "limit", 20, "Maximum number of results")
 	flags.IntVar(&offset, "offset", 0, "Skip this many results (for paging)")
-	flags.StringVar(&sort, "sort", "newest", "Sort order: newest or oldest")
+	flags.StringVar(&sort, "sort", "newest", "Sort order: newest, oldest or score (needs -assessor)")
 	flags.BoolVar(&unviewed, "unviewed", false, "Only items not yet viewed")
+	flags.StringVar(&assessorRef, "assessor", "", "Whose scores -min-score and -sort score use (name or ID); shown first")
+	flags.Float64Var(&minScore, "min-score", 0, "Only items this assessor scored at least this (0 to 1; needs -assessor)")
+	flags.StringVar(&unassessedRef, "unassessed-by", "", "Only items this assessor has not assessed (name or ID)")
 
 	args := os.Args[2:]
 	if len(args) > 0 && args[0] == "--help" {
@@ -884,7 +909,11 @@ func searchCmd() {
 	defer c.Close()
 
 	ctx := context.Background()
-	var tagID int64
+	var tagID, assessorID, unassessedID int64
+	var minScoreSet *float64
+	if set["min-score"] {
+		minScoreSet = &minScore
+	}
 	if viewRef != "" {
 		// The view supplies the filter; whatever was passed explicitly wins.
 		views, err := c.ListSavedViews(ctx)
@@ -913,7 +942,22 @@ func searchCmd() {
 			if !set["unviewed"] {
 				unviewed = f.UnviewedOnly
 			}
+			if assessorRef == "" {
+				assessorID = f.AssessorId
+			}
+			if !set["min-score"] && f.MinScore != nil {
+				minScoreSet = f.MinScore
+			}
+			if unassessedRef == "" {
+				unassessedID = f.UnassessedBy
+			}
 		}
+	}
+	if assessorRef != "" {
+		assessorID = mustAssessorID(ctx, c, assessorRef)
+	}
+	if unassessedRef != "" {
+		unassessedID = mustAssessorID(ctx, c, unassessedRef)
 	}
 	if tagRef != "" {
 		var err error
@@ -932,6 +976,9 @@ func searchCmd() {
 		Offset:       int32(offset),
 		Sort:         sort,
 		UnviewedOnly: unviewed,
+		AssessorId:   assessorID,
+		MinScore:     minScoreSet,
+		UnassessedBy: unassessedID,
 	})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
@@ -943,9 +990,23 @@ func searchCmd() {
 		return
 	}
 
+	// A SCORES column appears only when a listed item has a score.
+	showScores := false
+	for _, it := range resp.Items {
+		if formatItemScores(it, assessorID) != "" {
+			showScores = true
+			break
+		}
+	}
+
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintf(w, "ID\tPUBLISHED\tSOURCE\tTAGS\tTITLE\tLINK\n")
-	fmt.Fprintf(w, "--\t---------\t------\t----\t-----\t----\n")
+	if showScores {
+		_, _ = fmt.Fprintf(w, "ID\tPUBLISHED\tSOURCE\tTAGS\tSCORES\tTITLE\tLINK\n")
+		_, _ = fmt.Fprintf(w, "--\t---------\t------\t----\t------\t-----\t----\n")
+	} else {
+		_, _ = fmt.Fprintf(w, "ID\tPUBLISHED\tSOURCE\tTAGS\tTITLE\tLINK\n")
+		_, _ = fmt.Fprintf(w, "--\t---------\t------\t----\t-----\t----\n")
+	}
 	for _, it := range resp.Items {
 		published := "-"
 		if it.Published != nil {
@@ -958,6 +1019,15 @@ func searchCmd() {
 		tags := strings.Join(tagNames, ",")
 		if tags == "" {
 			tags = "-"
+		}
+		if showScores {
+			scores := formatItemScores(it, assessorID)
+			if scores == "" {
+				scores = "-"
+			}
+			_, _ = fmt.Fprintf(w, "%d\t%s\t%s\t%s\t%s\t%s\t%s\n",
+				it.Id, published, tui.SanitizeLine(it.SourceName), tui.SanitizeLine(tags), scores, tui.SanitizeLine(it.Title), tui.SanitizeLine(it.Link))
+			continue
 		}
 		fmt.Fprintf(w, "%d\t%s\t%s\t%s\t%s\t%s\n",
 			it.Id, published, tui.SanitizeLine(it.SourceName), tui.SanitizeLine(tags), tui.SanitizeLine(it.Title), tui.SanitizeLine(it.Link))

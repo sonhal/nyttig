@@ -262,6 +262,14 @@ and link card.
 | `color` | no       | —       | Hex color for TUI chip, e.g. `"#FF6B35"`  |
 | `parents` | no     | —       | Names of parent tags (see [Tag tree](#tag-tree)); may be declared later in the file, an unknown name is created |
 
+### `[[assessors]]`
+
+| Field         | Required | Default | Description                                          |
+|---------------|----------|---------|------------------------------------------------------|
+| `name`        | yes      | —       | Assessor name (unique); an existing one is left as it is |
+| `description` | no       | —       | What the score means, shown with the scores          |
+| `color`       | no       | —       | Hex color for the score chip, e.g. `"#D97757"`       |
+
 ### `[[tag_rules]]`
 
 | Field      | Required | Default | Description                                              |
@@ -360,12 +368,21 @@ nyttig test-tag-rule   -p <regex> [-f title|description|both] [-s source_id] [-l
 nyttig list-tag-rules
 nyttig remove-tag-rule -id <rule_id>
 nyttig list-views                        # name, ★ for favorites, and the filter written like the web query bar
-nyttig add-view        -n <name> [-q <text>] [-source <name|id>] [-tag <name|id>] [-unviewed] [-sort newest|oldest] [-favorite]
+nyttig add-view        -n <name> [-q <text>] [-source <name|id>] [-tag <name|id>] [-unviewed] [-sort newest|oldest|score] [-favorite]
+                       [-assessor <name|id>] [-min-score <0-1>] [-unassessed-by <name|id>]
 nyttig update-view     (-id <id> | -n <name>) [-rename <name>] [-q <text>] [-source <name|id> | -no-source]
-                       [-tag <name|id> | -no-tag] [-sort newest|oldest] [-unviewed[=false]] [-favorite[=false]]
+                       [-tag <name|id> | -no-tag] [-sort newest|oldest|score] [-unviewed[=false]] [-favorite[=false]]
+                       [-assessor <name|id> | -no-assessor] [-min-score <0-1> | -no-min-score] [-unassessed-by <name|id>]
 nyttig remove-view     (-id <id> | -n <name>)
 nyttig reorder-views   <id|name>...      # every view once, in the new order
-nyttig search          [-view <name|id>] [-tag <name|id>] [-s source_id] [-l limit] [-offset N] [-sort newest|oldest] [-unviewed] [-exact] [query...]
+nyttig list-assessors
+nyttig add-assessor    -n <name> [-description <text>] [-c <hex_color>]
+nyttig update-assessor (-id <id> | -n <name>) [-rename <name>] [-description <text>] [-c <hex_color>]
+nyttig remove-assessor (-id <id> | -n <name>)   # also removes all of its assessments
+nyttig assess          <item-id> -assessor <name|id> [-tag <name|id>] [-score <0-1>] [-note <text>]
+nyttig unassess        <item-id> -assessor <name|id> [-tag <name|id>]
+nyttig search          [-view <name|id>] [-tag <name|id>] [-s source_id] [-l limit] [-offset N] [-sort newest|oldest|score] [-unviewed] [-exact]
+                       [-assessor <name|id>] [-min-score <0-1>] [-unassessed-by <name|id>] [query...]
 nyttig refresh         [-id <source_id>]   # omit -id to refresh all
 ```
 
@@ -385,6 +402,18 @@ it and just stops filtering on it. Names are unique (case-insensitive), at
 most 64 characters, and there can be at most 100 views. `search -view NAME`
 runs a view's filter headless; flags passed explicitly (`-sort`, `-unviewed`,
 `-tag`, `-s`, a query) override the view's.
+
+Assessors score items from outside the daemon (see [Assessments](#assessments)).
+`assess` stores a score from 0 to 1, a note, or both, for the item as a whole
+or, with `-tag`, for one tag; assessing again replaces the earlier assessment
+with the same assessor and tag. In `search`, `-assessor` picks whose scores
+`-min-score` and `-sort score` use (the sort is only by score when you ask for
+it), `-unassessed-by` lists the items an assessor has not assessed yet, and a
+SCORES column appears when a listed item has a score. With `-tag`, only the
+assessor's scores for that tag (including its child tags) and for the item as
+a whole count. A view saves the same fields (`score:claude>=0.7`,
+`unassessed:claude` and `sort:score` in `list-views`); deleting the assessor
+keeps the view and drops those fields (a `score` sort becomes `newest`).
 
 Tag rules added with `add-tag-rule` apply to items fetched after the rule is
 created; existing items are not retagged. Use `test-tag-rule` first to see

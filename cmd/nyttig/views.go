@@ -87,7 +87,7 @@ func queryWord(w string) string {
 	}
 	if m := operatorPrefix.FindString(w); m != "" {
 		switch strings.ToLower(strings.TrimSuffix(m, ":")) {
-		case "tag", "src", "source", "is", "sort":
+		case "tag", "src", "source", "is", "sort", "score", "unassessed":
 			return quoteQuery(w)
 		}
 	}
@@ -95,9 +95,10 @@ func queryWord(w string) string {
 }
 
 // formatViewFilter writes a view's filter the way the web `/` bar does:
-// words, src:, tag:, is:unviewed, sort: (the default sort is left out).
-// A source or tag with no known name is written as #id.
-func formatViewFilter(f *pb.ViewFilter, sources map[int64]string, tags map[int64]string) string {
+// words, src:, tag:, is:unviewed, score:<assessor>[>=N], unassessed:<assessor>
+// and sort: (the default sort is left out). A source, tag or assessor with no
+// known name is written as #id.
+func formatViewFilter(f *pb.ViewFilter, sources, tags, assessors map[int64]string) string {
 	if f == nil {
 		return ""
 	}
@@ -120,21 +121,39 @@ func formatViewFilter(f *pb.ViewFilter, sources map[int64]string, tags map[int64
 	if f.UnviewedOnly {
 		parts = append(parts, "is:unviewed")
 	}
+	if f.AssessorId != 0 {
+		term := "score:" + named(assessors, f.AssessorId)
+		if f.MinScore != nil {
+			term += ">=" + formatScore(*f.MinScore)
+		}
+		parts = append(parts, term)
+	}
+	if f.UnassessedBy != 0 {
+		parts = append(parts, "unassessed:"+named(assessors, f.UnassessedBy))
+	}
 	if f.Sort != "" && f.Sort != "newest" {
 		parts = append(parts, "sort:"+f.Sort)
 	}
 	return strings.Join(parts, " ")
 }
 
-// nameMaps loads the source and tag names used to format filters.
-func nameMaps(ctx context.Context, c *client.Client) (sources, tags map[int64]string, err error) {
+// nameMaps loads the source, tag and assessor names used to format filters.
+func nameMaps(ctx context.Context, c *client.Client) (sources, tags, assessors map[int64]string, err error) {
 	sr, err := c.ListSources(ctx)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	tr, err := c.ListTags(ctx)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
+	}
+	ar, err := c.ListAssessors(ctx)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	assessors = make(map[int64]string, len(ar.Assessors))
+	for _, a := range ar.Assessors {
+		assessors[a.Id] = a.Name
 	}
 	sources = make(map[int64]string, len(sr.Sources))
 	for _, s := range sr.Sources {
@@ -144,7 +163,7 @@ func nameMaps(ctx context.Context, c *client.Client) (sources, tags map[int64]st
 	for _, t := range tr.Tags {
 		tags[t.Id] = t.Name
 	}
-	return sources, tags, nil
+	return sources, tags, assessors, nil
 }
 
 // listViewsCmd handles the "list-views" subcommand.
@@ -165,7 +184,7 @@ func listViewsCmd() {
 		fmt.Println("No saved views.")
 		return
 	}
-	sources, tags, err := nameMaps(ctx, c)
+	sources, tags, assessors, err := nameMaps(ctx, c)
 	if err != nil {
 		fail(err)
 	}
@@ -178,7 +197,7 @@ func listViewsCmd() {
 		if v.Favorite {
 			star = "★"
 		}
-		filter := formatViewFilter(v.Filter, sources, tags)
+		filter := formatViewFilter(v.Filter, sources, tags, assessors)
 		if filter == "" {
 			filter = "(everything)"
 		}
@@ -200,6 +219,10 @@ func addViewCmd() {
 		sort     string
 		unviewed bool
 		favorite bool
+
+		assessor   string
+		minScore   float64
+		unassessed string
 	)
 	flags.StringVar(&name, "n", "", "View name (required)")
 	flags.StringVar(&name, "name", "", "View name (required)")
@@ -207,17 +230,22 @@ func addViewCmd() {
 	flags.StringVar(&query, "query", "", "Full-text search text")
 	flags.StringVar(&source, "source", "", "Only this source (name or ID)")
 	flags.StringVar(&tag, "tag", "", "Only this tag and the tags below it (name or ID)")
-	flags.StringVar(&sort, "sort", "", "Sort order: newest (default) or oldest")
+	flags.StringVar(&sort, "sort", "", "Sort order: newest (default), oldest or score (needs -assessor)")
 	flags.BoolVar(&unviewed, "unviewed", false, "Only items not yet viewed")
 	flags.BoolVar(&favorite, "favorite", false, "Show the view as a tab in the web app")
+	flags.StringVar(&assessor, "assessor", "", "Whose scores -min-score and -sort score use (name or ID)")
+	flags.Float64Var(&minScore, "min-score", 0, "Only items this assessor scored at least this (0 to 1)")
+	flags.StringVar(&unassessed, "unassessed-by", "", "Only items this assessor has not assessed (name or ID)")
 
 	args := os.Args[2:]
 	if len(args) == 0 || args[0] == "--help" {
-		_, _ = fmt.Fprintf(os.Stderr, "Usage: nyttig add-view -n <name> [-q <text>] [-source <name|id>] [-tag <name|id>] [-unviewed] [-sort oldest] [-favorite]\n\n")
+		_, _ = fmt.Fprintf(os.Stderr, "Usage: nyttig add-view -n <name> [-q <text>] [-source <name|id>] [-tag <name|id>] [-unviewed] [-sort oldest|score] [-favorite]\n")
+		_, _ = fmt.Fprintf(os.Stderr, "                      [-assessor <name|id>] [-min-score <0-1>] [-unassessed-by <name|id>]\n\n")
 		flags.PrintDefaults()
 		os.Exit(0)
 	}
 	_ = flags.Parse(args)
+	set := setFlagNames(flags)
 
 	if name == "" {
 		fail(fmt.Errorf("--name (-n) is required"))
@@ -238,6 +266,16 @@ func addViewCmd() {
 		if f.TagId, err = resolveTagID(ctx, c, tag); err != nil {
 			fail(err)
 		}
+	}
+
+	if assessor != "" {
+		f.AssessorId = mustAssessorID(ctx, c, assessor)
+	}
+	if set["min-score"] {
+		f.MinScore = &minScore
+	}
+	if unassessed != "" {
+		f.UnassessedBy = mustAssessorID(ctx, c, unassessed)
 	}
 
 	v, err := c.AddSavedView(ctx, &pb.AddSavedViewRequest{Name: name, Filter: f, Favorite: favorite})
@@ -266,6 +304,12 @@ func updateViewCmd() {
 		sort     string
 		unviewed bool
 		favorite bool
+
+		assessor     string
+		noAssessor   bool
+		minScore     float64
+		noMinScore   bool
+		unassessedBy string
 	)
 	flags.Int64Var(&id, "i", 0, "View ID to update (or use -n)")
 	flags.Int64Var(&id, "id", 0, "View ID to update (or use -n)")
@@ -278,14 +322,20 @@ func updateViewCmd() {
 	flags.StringVar(&tag, "tag", "", "Only this tag and the tags below it (name or ID)")
 	flags.BoolVar(&noSource, "no-source", false, "Stop filtering on a source")
 	flags.BoolVar(&noTag, "no-tag", false, "Stop filtering on a tag")
-	flags.StringVar(&sort, "sort", "", "Sort order: newest or oldest")
+	flags.StringVar(&sort, "sort", "", "Sort order: newest, oldest or score (needs an assessor)")
 	flags.BoolVar(&unviewed, "unviewed", false, "Only items not yet viewed (-unviewed=false clears it)")
 	flags.BoolVar(&favorite, "favorite", false, "Show the view as a tab (-favorite=false removes it)")
+	flags.StringVar(&assessor, "assessor", "", "Whose scores -min-score and -sort score use (name or ID)")
+	flags.BoolVar(&noAssessor, "no-assessor", false, "Stop using an assessor (also clears the minimum score; a score sort becomes newest)")
+	flags.Float64Var(&minScore, "min-score", 0, "Only items the assessor scored at least this (0 to 1)")
+	flags.BoolVar(&noMinScore, "no-min-score", false, "Stop filtering on a minimum score")
+	flags.StringVar(&unassessedBy, "unassessed-by", "", "Only items this assessor has not assessed (name or ID); '' clears it")
 
 	args := os.Args[2:]
 	if len(args) == 0 || args[0] == "--help" {
 		_, _ = fmt.Fprintf(os.Stderr, "Usage: nyttig update-view (-id <id> | -n <name>) [-rename <name>] [-q <text>] [-source <name|id> | -no-source]\n")
-		_, _ = fmt.Fprintf(os.Stderr, "                          [-tag <name|id> | -no-tag] [-sort newest|oldest] [-unviewed[=false]] [-favorite[=false]]\n\n")
+		_, _ = fmt.Fprintf(os.Stderr, "                          [-tag <name|id> | -no-tag] [-sort newest|oldest|score] [-unviewed[=false]] [-favorite[=false]]\n")
+		_, _ = fmt.Fprintf(os.Stderr, "                          [-assessor <name|id> | -no-assessor] [-min-score <0-1> | -no-min-score] [-unassessed-by <name|id>]\n\n")
 		_, _ = fmt.Fprintf(os.Stderr, "Only the given flags are changed.\n\n")
 		flags.PrintDefaults()
 		os.Exit(0)
@@ -309,7 +359,14 @@ func updateViewCmd() {
 
 	// The view's current state: for the ID when -id is used with no filter
 	// change we need nothing, otherwise the filter is merged with it.
-	filterChange := set["q"] || set["query"] || set["source"] || set["tag"] || noSource || noTag || set["sort"] || set["unviewed"]
+	if set["assessor"] && noAssessor {
+		fail(fmt.Errorf("-assessor and -no-assessor cannot be used together"))
+	}
+	if set["min-score"] && noMinScore {
+		fail(fmt.Errorf("-min-score and -no-min-score cannot be used together"))
+	}
+	filterChange := set["q"] || set["query"] || set["source"] || set["tag"] || noSource || noTag || set["sort"] || set["unviewed"] ||
+		set["assessor"] || noAssessor || set["min-score"] || noMinScore || set["unassessed-by"]
 	var cur *pb.SavedView
 	if id == 0 || filterChange {
 		resp, err := c.ListSavedViews(ctx)
@@ -343,6 +400,7 @@ func updateViewCmd() {
 		if cur.Filter != nil {
 			f.Search, f.SourceId, f.TagId = cur.Filter.Search, cur.Filter.SourceId, cur.Filter.TagId
 			f.Sort, f.UnviewedOnly = cur.Filter.Sort, cur.Filter.UnviewedOnly
+			f.AssessorId, f.MinScore, f.UnassessedBy = cur.Filter.AssessorId, cur.Filter.MinScore, cur.Filter.UnassessedBy
 		}
 		var err error
 		if set["q"] || set["query"] {
@@ -362,6 +420,29 @@ func updateViewCmd() {
 		if set["tag"] {
 			if f.TagId, err = resolveTagID(ctx, c, tag); err != nil {
 				fail(err)
+			}
+		}
+		if noAssessor {
+			// A minimum score or a score sort has no meaning without an
+			// assessor, so they go too (an explicit -sort still wins).
+			f.AssessorId, f.MinScore = 0, nil
+			if f.Sort == "score" {
+				f.Sort = "newest"
+			}
+		}
+		if set["assessor"] {
+			f.AssessorId = mustAssessorID(ctx, c, assessor)
+		}
+		if noMinScore {
+			f.MinScore = nil
+		}
+		if set["min-score"] {
+			f.MinScore = &minScore
+		}
+		if set["unassessed-by"] {
+			f.UnassessedBy = 0
+			if unassessedBy != "" {
+				f.UnassessedBy = mustAssessorID(ctx, c, unassessedBy)
 			}
 		}
 		if set["sort"] {

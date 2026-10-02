@@ -125,7 +125,8 @@ via a **bidirectional gRPC stream**.
 ## Repository layout
 
 ```
-cmd/nyttig/main.go          Client entrypoint: TUI launch + CLI subcommands
+cmd/nyttig/main.go          Client entrypoint: TUI launch + CLI subcommands (views.go: saved
+                            views, assess.go: assessors and assessments)
 cmd/nyttigd/main.go         Daemon entrypoint: wires db → fetcher → tagger → scheduler → gRPC
 proto/nyttig/v1/nyttig.proto   Source-of-truth API definition
 buf.yaml, buf.gen.yaml      buf config for codegen; run `buf generate` from the repo root
@@ -356,7 +357,8 @@ which phases are done and whether they are merged; keep it current.
   removing the old one.
 - **Config** (`internal/config`): `socket`, `db_path` and `log_level` are
   top-level keys (there is no `[server]` table), followed by `[tls]`,
-  `[[sources]]`, `[[tags]]` and `[[tag_rules]]`. `config.Load` rejects unknown
+  `[[sources]]`, `[[tags]]`, `[[tag_rules]]` and `[[assessors]]` (seeded by
+  name, never overwritten). `config.Load` rejects unknown
   keys. The daemon reads a file only when `--config` is passed (no default
   path), and flags override file values. If you change the config structs,
   update `sample_config.toml` and the README's example and reference tables.

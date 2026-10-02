@@ -1,6 +1,6 @@
 # Assessments plan: scores and notes from external assessors
 
-Status: **phases 1–3 implemented, not yet merged** (database layer, proto and RPCs, live updates).
+Status: **phases 1–4 implemented, not yet merged** (database layer, proto and RPCs, live updates, CLI and config).
 
 Other systems can attach a judgement to a news item: an optional **score**
 from 0.0 to 1.0, an optional **note**, and the **assessor** that made it.
@@ -536,6 +536,20 @@ govulncheck can't reach vuln.go.dev from the sandbox, so leave it to CI.
 
 ## Deviations from this plan
 
+- **Phase 4, query syntax.** The CLI writes a view's `unassessed_by` as
+  `unassessed:<assessor>` (and `score:<assessor>[>=N]`, `sort:score`); phase 6's
+  `query.ts` must read and write the same. The plan listed only `score:` and
+  `sort:score`, and a view needs a way to show the unassessed filter.
+- **Phase 4, CLI details.** `assess` and `unassess` take the item ID as the
+  first argument (or `-item`) because the flag package stops at the first
+  non-flag. A numeric assessor reference is an ID when an assessor has it,
+  else a name. `update-view` also has `-no-min-score` and
+  `-unassessed-by ''` (clear), and `-no-assessor` clears the minimum score and
+  turns a `score` sort into `newest`, because the daemon rejects them
+  without an assessor. `search` adds a SCORES column only when a listed item
+  has a score.
+- **Phase 4, sample config.** `sample_config.toml` declares `claude` and
+  `cvss` assessors.
 - **Phase 3, `ServerMessage.update_matches`.** The plan has the server send
   `item_update` both when the updated item matches the stream's filter and
   when it does not, and has the client insert it only in the first case. The
