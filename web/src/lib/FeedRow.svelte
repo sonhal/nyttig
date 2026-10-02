@@ -2,8 +2,8 @@
 	One feed row. Desktop: a single 20px line, columns in the TUI's order
 	(unviewed dot, date, source, tags, title, description, domain). Mobile:
 	one line in 44px (a touch target) with a short date and no description
-	or domain; the tags clip before the title gets narrower than half the
-	row. Viewed (read) rows are dimmed.
+	or domain, and the first tag with a count of the others; the tag name is
+	cut with an ellipsis before the title gets narrower than 40% of the row. Viewed (read) rows are dimmed.
 
 	All feed text is rendered as text; colors are validated before use.
 -->
@@ -81,10 +81,11 @@
 				{#each item.tags as tag, i (tag.id ?? i)}
 					{@const cur = tag.id ? tags.get(tag.id) : undefined}
 					<span class="chip"
-						>[<span style:color={cur ? cur.color : safeColor(tag.color)}>{oneLine(cur?.name || tag.name)}</span
+						>[<span class="name" style:color={cur ? cur.color : safeColor(tag.color)}>{oneLine(cur?.name || tag.name)}</span
 						>]</span
 					>
 				{/each}
+				{#if item.tags.length > 1}<span class="more">+{item.tags.length - 1}</span>{/if}
 			</span>
 		{/if}
 		<span class="title"><Highlight text={title} {terms} /></span>
@@ -146,6 +147,9 @@
 	.src {
 		flex: none;
 	}
+	.more {
+		display: none;
+	}
 	.tags {
 		flex: 0 1 auto;
 		display: flex;
@@ -185,17 +189,32 @@
 		.date.short {
 			display: inline;
 		}
-		/* Tags that don't fit wrap onto a second line, which the row's
-		   height hides, so a chip is shown whole or not at all. */
-		.tags {
-			flex-wrap: wrap;
-			height: 20px;
+		/* One tag and a count of the others. A name that doesn't fit is cut
+		   with an ellipsis inside its brackets, so a chip is never cut in
+		   half. The expanded row lists them all. */
+		.tags .chip:not(:first-child) {
+			display: none;
 		}
-		/* The title takes what the tags leave, and at least half the row:
+		.more {
+			display: inline;
+			flex: none;
+			color: var(--dim);
+		}
+		.tags .chip {
+			display: flex;
+			min-width: 0;
+		}
+		/* At least a letter and the ellipsis, never "[]". */
+		.tags .name {
+			min-width: 2ch;
+			overflow: hidden;
+			text-overflow: ellipsis;
+		}
+		/* The title takes what the tags leave, and at least 40% of the row:
 		   with a basis of 0 and that floor, the tags shrink first. */
 		.title {
 			flex: 1 1 0;
-			min-width: 50%;
+			min-width: 40%;
 			max-width: none;
 		}
 	}
