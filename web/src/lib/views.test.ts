@@ -30,7 +30,7 @@ const views = [security, linux, misc, nofilter];
 
 describe('viewToFilter / filterToViewBody', () => {
 	it('fills in the defaults the API leaves out', () => {
-		expect(viewToFilter(security)).toEqual({ q: 'openssl', source: '5', tag: '4', sort: 'oldest', unviewed: true });
+		expect(viewToFilter(security)).toEqual({ q: 'openssl', source: '5', tag: '4', sort: 'oldest', unviewed: true, since: '' });
 		expect(viewToFilter(linux)).toEqual({ ...defaultFilter, tag: '7' });
 		expect(viewToFilter(misc)).toEqual(defaultFilter);
 		expect(viewToFilter(nofilter)).toEqual(defaultFilter);
@@ -41,6 +41,21 @@ describe('viewToFilter / filterToViewBody', () => {
 		expect(filterToViewBody(defaultFilter)).toEqual({});
 		expect(filterToViewBody(viewToFilter(security))).toEqual(security.filter);
 		expect(filterToViewBody({ ...defaultFilter, sort: 'oldest' })).toEqual({ sort: 'oldest' });
+	});
+
+	it('carries the window as the user typed it', () => {
+		const week: SavedView = { id: '5', name: 'Week', filter: { tag: '4', since: '30d' } };
+		expect(viewToFilter(week)).toEqual({ ...defaultFilter, tag: '4', since: '30d' });
+		expect(filterToViewBody(viewToFilter(week))).toEqual({ tag: '4', since: '30d' });
+		expect(filterToViewBody(defaultFilter)).toEqual({});
+		// A window the API should never send is treated as none rather than trusted.
+		expect(viewToFilter({ filter: { since: '1m' } }).since).toBe('');
+		expect(viewToFilter({ filter: { since: '7D' } }).since).toBe('');
+		expect(viewHref(week)).toBe('/?view=5&tag=4&since=30d');
+		expect(isModified(week, viewToFilter(week))).toBe(false);
+		expect(isModified(week, { ...viewToFilter(week), since: '7d' })).toBe(true);
+		expect(isModified(week, { ...viewToFilter(week), since: '' })).toBe(true);
+		expect(isModified(misc, { ...defaultFilter, since: '24h' })).toBe(true);
 	});
 
 	it('round-trips', () => {

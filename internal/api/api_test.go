@@ -173,6 +173,36 @@ func TestItems(t *testing.T) {
 	}
 }
 
+func TestItemsAfter(t *testing.T) {
+	fc := &fakeClient{search: &pb.SearchResponse{}}
+	th := newTestHandler(t, fc)
+
+	if rec := th.do("GET", "/api/items?after=1788264000&q=x", "", nil); rec.Code != 200 ||
+		fc.lastSrch.GetAfter().AsTime().Unix() != 1788264000 || fc.lastSrch.GetAfter().GetNanos() != 0 {
+		t.Errorf("after: %d, SearchRequest = %v", rec.Code, fc.lastSrch)
+	}
+	if rec := th.do("GET", "/api/items?after=0", "", nil); rec.Code != 200 || fc.lastSrch.GetAfter() == nil {
+		t.Errorf("after=0 is a cutoff at the epoch: %d, %v", rec.Code, fc.lastSrch)
+	}
+	for _, q := range []string{"", "q=x"} {
+		if rec := th.do("GET", "/api/items?"+q, "", nil); rec.Code != 200 || fc.lastSrch.After != nil {
+			t.Errorf("no after (%q): %d, After = %v", q, rec.Code, fc.lastSrch.After)
+		}
+	}
+	fc.lastSrch = nil
+	for _, q := range []string{
+		"after=-1", "after=abc", "after=1.5", "after=1e9", "after=%2B5", "after=0x10", "after=%201", "after=7d",
+		"after=253402300800", "after=99999999999999999999",
+	} {
+		if rec := th.do("GET", "/api/items?"+q, "", nil); rec.Code != http.StatusBadRequest || fc.lastSrch != nil {
+			t.Errorf("%s: status %d (RPC %v), want 400 and no RPC", q, rec.Code, fc.lastSrch)
+		}
+	}
+	if rec := th.do("GET", "/api/items?after=253402300799", "", nil); rec.Code != 200 {
+		t.Errorf("last valid second: %d", rec.Code)
+	}
+}
+
 func TestViewed(t *testing.T) {
 	fc := &fakeClient{}
 	th := newTestHandler(t, fc)

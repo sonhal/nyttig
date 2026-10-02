@@ -360,12 +360,13 @@ nyttig test-tag-rule   -p <regex> [-f title|description|both] [-s source_id] [-l
 nyttig list-tag-rules
 nyttig remove-tag-rule -id <rule_id>
 nyttig list-views                        # name, ★ for favorites, and the filter written like the web query bar
-nyttig add-view        -n <name> [-q <text>] [-source <name|id>] [-tag <name|id>] [-unviewed] [-sort newest|oldest] [-favorite]
+nyttig add-view        -n <name> [-q <text>] [-source <name|id>] [-tag <name|id>] [-unviewed] [-since <window>] [-sort newest|oldest] [-favorite]
 nyttig update-view     (-id <id> | -n <name>) [-rename <name>] [-q <text>] [-source <name|id> | -no-source]
-                       [-tag <name|id> | -no-tag] [-sort newest|oldest] [-unviewed[=false]] [-favorite[=false]]
+                       [-tag <name|id> | -no-tag] [-sort newest|oldest] [-unviewed[=false]]
+                       [-since <window> | -no-since] [-favorite[=false]]
 nyttig remove-view     (-id <id> | -n <name>)
 nyttig reorder-views   <id|name>...      # every view once, in the new order
-nyttig search          [-view <name|id>] [-tag <name|id>] [-s source_id] [-l limit] [-offset N] [-sort newest|oldest] [-unviewed] [-exact] [query...]
+nyttig search          [-view <name|id>] [-tag <name|id>] [-s source_id] [-l limit] [-offset N] [-sort newest|oldest] [-unviewed] [-since <window>] [-exact] [query...]
 nyttig refresh         [-id <source_id>]   # omit -id to refresh all
 ```
 
@@ -376,15 +377,24 @@ Each subcommand calls the corresponding gRPC RPC against the daemon. The daemon 
 refresh interval takes effect immediately and triggers a fetch.
 
 Saved views are named feed filters (search text, one source, one tag with its
-child tags, unviewed only, sort order) stored in the daemon, so every client
+child tags, unviewed only, a time window, sort order) stored in the daemon, so every client
 shares them. `-favorite` marks a view for the tab bar of clients that have
 one. `update-view` changes only the flags you pass; any filter flag replaces
 the stored filter's matching part and keeps the rest, and `-no-source` /
-`-no-tag` drop that part. Deleting a source or tag keeps the views that used
+`-no-tag` / `-no-since` drop that part. Deleting a source or tag keeps the views that used
 it and just stops filtering on it. Names are unique (case-insensitive), at
 most 64 characters, and there can be at most 100 views. `search -view NAME`
 runs a view's filter headless; flags passed explicitly (`-sort`, `-unviewed`,
-`-tag`, `-s`, a query) override the view's.
+`-tag`, `-s`, `-since`, a query) override the view's.
+
+`-since` limits `search` and views to a rolling window counted back from now:
+`<n><unit>` with `n` from 1 to 9999 and the unit `h` (hours), `d` (days), `w`
+(weeks), `mo` (calendar months) or `y` (calendar years), for example `24h`,
+`7d`, `2w`, `1mo`, `1y`. The unit is lower case and `m` is rejected because it
+could mean minutes or months. An item's date is its published date, or the
+time nyttigd fetched it when the feed gives none. A view stores the window as
+you typed it (`30d` stays `30d`), and `search -view NAME -since 1y` replaces
+the view's window.
 
 Tag rules added with `add-tag-rule` apply to items fetched after the rule is
 created; existing items are not retagged. Use `test-tag-rule` first to see
@@ -637,9 +647,9 @@ nyttig-api starts even when the daemon is down; the status bar then shows
 
 ### Using it
 
-The filter (search, source, tag, sort, unviewed) is kept in the URL as
-separate parameters (`?q=&source=&tag=&sort=&unviewed=1`, IDs for source and
-tag), so a view can be bookmarked, survives a rename, and the back button
+The filter (search, source, tag, sort, unviewed, since) is kept in the URL as
+separate parameters (`?q=&source=&tag=&sort=&unviewed=1&since=7d`, IDs for
+source and tag), so a view can be bookmarked, survives a rename, and the back button
 works. `?` lists every key of the current view; the list is generated from
 the keymap, so it is always current.
 
@@ -663,15 +673,31 @@ the keymap, so it is always current.
 | `:`                | Command line (see below)                           |
 | `?`                | Help: all keys, the query syntax and the commands  |
 
-**Query bar.** `kernel tag:rust src:"Hacker News" is:unviewed sort:oldest`:
-`tag:` (also matches child tags), `src:` (a name or abbreviation, any case), `is:unviewed` and
-`sort:newest|oldest` set the filter; every other word is the full-text
+**Query bar.** `kernel tag:rust src:"Hacker News" is:unviewed since:7d sort:oldest`:
+`tag:` (also matches child tags), `src:` (a name or abbreviation, any case), `is:unviewed`,
+`since:<window>` and `sort:newest|oldest` set the filter; every other word is the full-text
 search. Names with spaces are quoted. Names are completed as you type
 (`Tab` accepts, `↑`/`↓` choose; on a phone tap a suggestion), and an
 unknown name is an error under the bar instead of being ignored. The bar
 always shows the current filter in this syntax. Matching words are
 highlighted in titles and descriptions (whole words, any case; FTS5
 tokenization is approximated).
+
+**Time window.** `since:7d` shows only items from the last seven days:
+`<n><unit>` with `n` from 1 to 9999 and the unit `h`, `d`, `w`, `mo` (calendar
+months) or `y` (calendar years), in lower case (`24h`, `7d`, `2w`, `1mo`,
+`1y`; `m` is rejected because it could mean minutes or months). The window
+rolls with the clock, and an item's date is its published date, or when
+nyttigd first fetched it if the feed gives none. It is a filter like the
+others: it is in the URL (`since=7d`), a `since:[..]` chip on the desktop
+bar cycles any time / 24h / 7d / 30d / 1y, the phone's `⚙` sheet has a
+"since" select, and a saved view can hold one (`today` is `since:24h`,
+`this week in security` is `tag:security since:7d`). Rows leave the window
+only when the list is loaded again (a filter or tab change, a reconnect or a
+reload), not while the page is open. An empty list says "no items in the last
+7d". The browser turns the window into one absolute cutoff per list load and
+sends that as `after=<unix seconds>` to `GET /api/items` and `GET
+/api/stream`, so older pages line up with the first.
 
 **Follow.** At the top of a newest-first list, new items flow in and the
 view sticks to the newest (`follow` in the status bar). After you scroll
@@ -697,7 +723,7 @@ expands a row (with an explicit "open ↗" link), `⚙` opens the filters
 #### Saved views
 
 A saved view is a named filter (search text, one source, one tag with its
-child tags, unviewed only, sort order) that the daemon stores, so the web
+child tags, unviewed only, a time window, sort order) that the daemon stores, so the web
 app and the CLI (`nyttig list-views`, `add-view`, ...) share them. The
 favorite ones are tabs in a row above the filter bar:
 `all │ 1 security │ 2 linux* │ + save`. A tab is a link to

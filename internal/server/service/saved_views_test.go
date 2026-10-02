@@ -29,6 +29,13 @@ func TestValidateViewFilter(t *testing.T) {
 		{"control char", &pb.ViewFilter{Search: "a\nb"}, "control"},
 		{"negative source", &pb.ViewFilter{SourceId: -1}, "source_id"},
 		{"negative tag", &pb.ViewFilter{TagId: -1}, "tag_id"},
+		{"since hours", &pb.ViewFilter{Since: "24h"}, ""},
+		{"since months", &pb.ViewFilter{Since: "1mo"}, ""},
+		{"since minutes", &pb.ViewFilter{Since: "1m"}, "ambiguous"},
+		{"since zero", &pb.ViewFilter{Since: "0d"}, "since"},
+		{"since no unit", &pb.ViewFilter{Since: "7"}, "since"},
+		{"since upper case", &pb.ViewFilter{Since: "7D"}, "since"},
+		{"since too big", &pb.ViewFilter{Since: "10000d"}, "since"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

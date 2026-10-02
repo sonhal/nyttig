@@ -136,6 +136,7 @@ message ViewFilter {
     int64 tag_id = 3;
     string sort = 4;          // "newest" (default) or "oldest"
     bool unviewed_only = 5;
+    string since = 6;         // rolling window: "24h", "7d", "2w", "1mo", "1y"; "" = no window
 }
 
 message SavedView {
@@ -217,6 +218,7 @@ message SearchRequest {
     string sort      = 6;  // newest, oldest; default newest
     bool   unviewed_only = 7;
     bool   tag_exact = 8;  // match tag_id only, not its descendants
+    google.protobuf.Timestamp after = 9;  // only items dated at or after this (published, else fetched); unset = no window
 }
 
 message SearchResponse {
@@ -245,6 +247,7 @@ message StreamFilter {
     string sort      = 4;  // newest, oldest; default newest
     int32  limit     = 5;
     bool   unviewed_only = 6;
+    google.protobuf.Timestamp after = 7;  // only items dated at or after this (published, else fetched); unset = no window
 }
 
 message ServerMessage {

@@ -3,6 +3,7 @@
 	import { onMount } from 'svelte';
 	import type { TimeMode } from './command';
 	import { oneLine } from './sanitize';
+	import { SINCE_PRESETS } from './since';
 	import { treeOrder } from './tagtree';
 	import type { Filter, Source, Tag } from './types';
 
@@ -20,6 +21,8 @@
 
 	// Tree order, children indented (non-breaking spaces survive in <option>).
 	const tagRows = $derived(treeOrder(tags));
+	// A window typed in the query bar (2w) is not one of the presets: list it too.
+	const sinceOptions = $derived(SINCE_PRESETS.includes(filter.since) ? SINCE_PRESETS : [...SINCE_PRESETS, filter.since]);
 
 	let first: HTMLSelectElement | undefined = $state();
 	onMount(() => first?.focus());
@@ -47,6 +50,14 @@
 			<option value="">all</option>
 			{#each tagRows as r (r.key)}
 				<option value={r.tag.id}>{'\u00a0\u00a0'.repeat(r.depth)}{oneLine(r.tag.name)}</option>
+			{/each}
+		</select>
+	</label>
+	<label>
+		<span>since</span>
+		<select value={filter.since} onchange={(e) => set('since', e.currentTarget.value)} data-testid="sheet-since">
+			{#each sinceOptions as w (w)}
+				<option value={w}>{w === '' ? 'any time' : 'last ' + w}</option>
 			{/each}
 		</select>
 	</label>

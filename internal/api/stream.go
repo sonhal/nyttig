@@ -79,6 +79,7 @@ func (h *streamHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		Search:       f.Query,
 		Sort:         f.Sort,
 		UnviewedOnly: f.UnviewedOnly,
+		After:        f.After,
 	}}}); err != nil {
 		writeRPCError(w, recvError(stream, err))
 		return

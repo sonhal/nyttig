@@ -1,8 +1,8 @@
 // The query syntax of the "/" bar:
 //
-//   kernel panic tag:rust src:"Hacker News" is:unviewed sort:oldest
+//   kernel panic tag:rust src:"Hacker News" is:unviewed since:7d sort:oldest
 //
-// "tag:", "src:", "is:unviewed" and "sort:newest|oldest" set the filter,
+// "tag:", "src:", "is:unviewed", "since:7d" and "sort:newest|oldest" set the filter,
 // every other word is free text (the FTS search, matched as a phrase). A
 // name with spaces is quoted; inside quotes \" and \\ are escapes. A
 // quoted token is always free text or a literal name, so "tag:x" searches
@@ -17,6 +17,7 @@
 
 import { defaultFilter } from './filter';
 import { oneLine } from './sanitize';
+import { parseSince, SINCE_SUGGESTIONS } from './since';
 import type { Filter, Sort, Source, Tag } from './types';
 
 export interface QueryError {
@@ -36,14 +37,25 @@ export interface ParseResult {
 const ID_RE = /^[1-9][0-9]{0,18}$/;
 export const MAX_QUERY = 500;
 
-type Key = 'tag' | 'src' | 'is' | 'sort';
-const KEY_ALIASES: Record<string, Key> = { tag: 'tag', src: 'src', source: 'src', is: 'is', sort: 'sort' };
+type Key = 'tag' | 'src' | 'is' | 'since' | 'sort';
+const KEY_ALIASES: Record<string, Key> = {
+	tag: 'tag',
+	src: 'src',
+	source: 'src',
+	is: 'is',
+	since: 'since',
+	sort: 'sort'
+};
 
 /** The operators, for the help overlay. */
 export const QUERY_KEYS: readonly { usage: string; desc: string }[] = [
 	{ usage: 'tag:<name>', desc: 'only items with this tag or a child tag (tag:rust, tag:"Release notes")' },
 	{ usage: 'src:<name>', desc: 'only this source, by name or abbreviation' },
 	{ usage: 'is:unviewed', desc: 'only unviewed items' },
+	{
+		usage: 'since:<n>h|d|w|mo|y',
+		desc: 'only items from the last n hours, days, weeks, months or years (since:24h, since:7d, since:1mo)'
+	},
 	{ usage: 'sort:newest|oldest', desc: 'the sort order' },
 	{ usage: '<words>', desc: 'full-text search, matched as a phrase ("quoted" to stop a word being read as an operator)' }
 ];
@@ -168,6 +180,7 @@ export function parse(text: string, sources: readonly Source[], tags: readonly T
 	const err = (t: Token, message: string) => errors.push({ start: t.start, end: t.end, message });
 
 	let sortSet = false;
+	let sinceSet = false;
 
 	for (const t of tokenize(text)) {
 		switch (t.key) {
@@ -200,6 +213,16 @@ export function parse(text: string, sources: readonly Source[], tags: readonly T
 				if (t.value.toLowerCase() === 'unviewed') filter.unviewed = true;
 				else err(t, t.value ? `unknown is: value: ${t.value} (try unviewed)` : 'is: needs a value (unviewed)');
 				break;
+			case 'since': {
+				const r = parseSince(t.value);
+				if (!r.ok) err(t, r.error);
+				else if (sinceSet && filter.since !== t.value) err(t, 'since given twice');
+				else {
+					filter.since = t.value;
+					sinceSet = true;
+				}
+				break;
+			}
 			case 'sort': {
 				const v = t.value.toLowerCase();
 				const s = SORT_VALUES.find((x) => x === v);
@@ -259,6 +282,7 @@ export function format(f: Filter, sources: readonly Source[], tags: readonly Tag
 	if (f.source) parts.push('src:' + named(sources, f.source));
 	if (f.tag) parts.push('tag:' + named(tags, f.tag));
 	if (f.unviewed) parts.push('is:unviewed');
+	if (f.since) parts.push('since:' + f.since);
 	if (f.sort !== defaultFilter.sort) parts.push('sort:' + f.sort);
 	return parts.join(' ');
 }
@@ -270,7 +294,7 @@ export interface Candidate {
 	label: string;
 	/** What replaces the token, e.g. `tag:"Hacker News"`. */
 	insert: string;
-	kind: 'tag' | 'src' | 'is' | 'sort';
+	kind: 'tag' | 'src' | 'is' | 'since' | 'sort';
 	color?: string;
 }
 
@@ -309,6 +333,9 @@ export function complete(
 			break;
 		case 'is':
 			entries = IS_VALUES.map((label) => ({ label }));
+			break;
+		case 'since':
+			entries = SINCE_SUGGESTIONS.map((label) => ({ label }));
 			break;
 		case 'sort':
 			entries = SORT_VALUES.map((label) => ({ label }));

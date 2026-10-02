@@ -390,6 +390,13 @@ func TestViews(t *testing.T) {
 	if !strings.Contains(rec.Body.String(), `"id":"6"`) || !strings.Contains(rec.Body.String(), `"source":"2"`) {
 		t.Errorf("add view body: %s", rec.Body)
 	}
+	// A view's window travels as the string the user chose, in both directions.
+	rec = th.do("POST", "/api/views", `{"name":"week","filter":{"since":"7d","tag":"3"}}`, nil)
+	if rec.Code != http.StatusCreated ||
+		!proto.Equal(fc.lastReq, &pb.AddSavedViewRequest{Name: "week", Filter: &pb.ViewFilter{TagId: 3, Since: "7d"}}) ||
+		!strings.Contains(rec.Body.String(), `"filter":{"tag":"3","since":"7d"}`) {
+		t.Errorf("add view with since: %d %s, %v", rec.Code, rec.Body, fc.lastReq)
+	}
 	// A minimal view: no filter, not a favorite.
 	if rec := th.do("POST", "/api/views", `{"name":"plain"}`, nil); rec.Code != http.StatusCreated ||
 		!proto.Equal(fc.lastReq, &pb.AddSavedViewRequest{Name: "plain"}) {
@@ -405,6 +412,8 @@ func TestViews(t *testing.T) {
 		{`{"name":"renamed"}`, &pb.UpdateSavedViewRequest{Id: 3, Name: ptr("renamed")}},
 		{`{"favorite":false}`, &pb.UpdateSavedViewRequest{Id: 3, Favorite: ptr(false)}},
 		{`{"filter":{}}`, &pb.UpdateSavedViewRequest{Id: 3, Filter: &pb.ViewFilter{}}},
+		{`{"filter":{"since":"7d","q":"x"}}`, &pb.UpdateSavedViewRequest{Id: 3, Filter: &pb.ViewFilter{Search: "x", Since: "7d"}}},
+		{`{"filter":{"since":""}}`, &pb.UpdateSavedViewRequest{Id: 3, Filter: &pb.ViewFilter{}}},
 		{`{"filter":{"tag":"7","q":""}}`, &pb.UpdateSavedViewRequest{Id: 3, Filter: &pb.ViewFilter{TagId: 7}}},
 		{`{"name":"n","favorite":true,"filter":{"sort":"oldest"}}`,
 			&pb.UpdateSavedViewRequest{Id: 3, Name: ptr("n"), Favorite: ptr(true), Filter: &pb.ViewFilter{Sort: "oldest"}}},
@@ -428,6 +437,9 @@ func TestViews(t *testing.T) {
 		{"POST", "/api/views", `{"filter":{"tag":"-1"}}`},
 		{"POST", "/api/views", `{"filter":{"unviewed":"yes"}}`},
 		{"POST", "/api/views", `{"filter":{"sort":1}}`},
+		{"POST", "/api/views", `{"filter":{"since":7}}`},
+		{"POST", "/api/views", `{"filter":{"since":null}}`},
+		{"POST", "/api/views", `{"filter":{"since":"7d","since":"1y"}}`},
 		{"POST", "/api/views", `{"filter":{},"filter":{}}`},
 		{"POST", "/api/views", `{"name":"x","position":1}`},
 		{"POST", "/api/views", `{"name":1}`},
