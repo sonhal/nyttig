@@ -34,6 +34,7 @@
 	import { treeOrder } from '$lib/tagtree';
 	import { applyCompletion, complete, format, parse, type Candidate } from '$lib/query';
 	import { markViewed, moveCursor, setFollow } from '$lib/reducer';
+	import { ensureMe } from '$lib/rate';
 	import { oneLine, safeLink } from '$lib/sanitize';
 	import { tagScope, type ScoreScope } from '$lib/scores';
 	import { FeedStream } from '$lib/stream.svelte';
@@ -404,8 +405,26 @@
 		filter: () => filter,
 		setFilter,
 		activeView: () => openView?.id ?? '',
-		follow
+		follow,
+		rate: (score, note) => void rate(score, note)
 	};
+
+	/** :rate: scores the selected item as the assessor "me", which is created the first time. */
+	async function rate(score: number, note: string) {
+		const it = items[cursor];
+		if (!it) {
+			flash('error: no item selected');
+			return;
+		}
+		try {
+			const id = await ensureMe(metadata.assessors);
+			if (!metadata.assessors.some((a) => a.id === id)) void metadata.reloadAssessors();
+			await api.putAssessment(it.id, { assessor: id, score, ...(note ? { note } : {}) });
+			flash(`rated ${oneLine(it.title) || 'the item'}: ${score}`);
+		} catch (e) {
+			flash('error: ' + (e instanceof Error ? e.message : String(e)));
+		}
+	}
 
 	/** Runs an action; false means the key was not used, so the browser keeps it. */
 	function run(a: Action): boolean | void {
@@ -466,6 +485,8 @@
 				return closePicker();
 			case 'toggleSort':
 				return setFilter({ ...filter, sort: nextSort(filter.sort) });
+			case 'rate':
+				return cl.start('rate ');
 			case 'toggleTime':
 				prefs.toggleTime();
 				return flash('times: ' + prefs.timeMode);

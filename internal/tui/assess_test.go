@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"errors"
 	"reflect"
 	"strings"
 	"testing"
@@ -460,5 +461,129 @@ func TestListenStream_ItemUpdate(t *testing.T) {
 		if !ok || got.Item.Id != want.Item.Id || got.Matches != want.Matches {
 			t.Errorf("got %+v, want %+v", got, want)
 		}
+	}
+}
+
+// ── Rating ──
+
+func TestParseRateText(t *testing.T) {
+	for _, tc := range []struct {
+		in    string
+		score float64
+		note  string
+	}{
+		{"0.8", 0.8, ""},
+		{" .5   worth reading ", 0.5, "worth reading"},
+		{"1 a\tb  c", 1, "a\tb  c"},
+		{"0", 0, ""},
+	} {
+		score, note, err := parseRateText(tc.in)
+		if err != nil || score != tc.score || note != tc.note {
+			t.Errorf("parseRateText(%q) = %v, %q, %v; want %v, %q", tc.in, score, note, err, tc.score, tc.note)
+		}
+	}
+	for _, bad := range []string{"", "  ", "1.5", "-1", "high", "0.5x note", "1e-1", "NaN", "Inf"} {
+		if _, _, err := parseRateText(bad); err == nil || !strings.Contains(err.Error(), "a score from 0 to 1") {
+			t.Errorf("parseRateText(%q) error = %v", bad, err)
+		}
+	}
+}
+
+func typeText(t *testing.T, m Model, s string) Model {
+	t.Helper()
+	for _, r := range s {
+		var msg tea.KeyMsg
+		if r == ' ' {
+			msg = tea.KeyMsg{Type: tea.KeySpace, Runes: []rune{' '}}
+		} else {
+			msg = key(r)
+		}
+		next, _ := m.Update(msg)
+		m = asModel(t, next)
+	}
+	return m
+}
+
+func TestModel_RatingPrompt(t *testing.T) {
+	m := NewModel(nil)
+	next, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 20})
+	m = asModel(t, next)
+
+	// No item, nothing to rate.
+	next, _ = m.Update(key('='))
+	m = asModel(t, next)
+	if m.rating || !strings.Contains(stripANSI(m.View()), "no item selected") {
+		t.Errorf("rating without an item: rating=%v view=%q", m.rating, stripANSI(m.View()))
+	}
+	// The message goes away with the next key.
+	next, _ = m.Update(key('j'))
+	m = asModel(t, next)
+	if m.note != "" || m.tableHeight() != 18 {
+		t.Errorf("note stayed: %q (height %d)", m.note, m.tableHeight())
+	}
+
+	m.table.SetItems([]*pb.Item{scored(5, 1)})
+	next, _ = m.Update(key('='))
+	m = asModel(t, next)
+	if !m.rating || m.tableHeight() != 17 {
+		t.Fatalf("the prompt did not open: rating=%v height=%d", m.rating, m.tableHeight())
+	}
+	m = typeText(t, m, "0.7 good one")
+	if v := stripANSI(m.View()); !strings.Contains(v, "rate: 0.7 good one█") {
+		t.Errorf("prompt text: %q", v)
+	}
+	// Keys type into the prompt: they are not the TUI's keys.
+	if m.quitting || m.showInfo {
+		t.Error("a typed q or i acted on the TUI")
+	}
+	next, _ = m.Update(tea.KeyMsg{Type: tea.KeyBackspace})
+	m = asModel(t, next)
+	if m.rateText != "0.7 good on" {
+		t.Errorf("backspace: %q", m.rateText)
+	}
+
+	// Enter with a good score closes the prompt and starts the RPC.
+	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = asModel(t, next)
+	if m.rating || cmd == nil {
+		t.Errorf("enter: rating=%v cmd=%v", m.rating, cmd != nil)
+	}
+	next, _ = m.Update(rateDoneMsg{score: 0.7})
+	m = asModel(t, next)
+	if !strings.Contains(stripANSI(m.View()), "rated 0.7") {
+		t.Errorf("result not shown: %q", stripANSI(m.View()))
+	}
+	next, _ = m.Update(rateDoneMsg{err: errors.New("daemon\x1b[2J unavailable\n")})
+	m = asModel(t, next)
+	if v := m.View(); !strings.Contains(stripANSI(v), "rate failed: daemon[2J unavailable") || strings.Contains(v, "\x1b[2J") {
+		t.Errorf("failure not shown as text: %q", v)
+	}
+}
+
+func TestModel_RatingPromptErrorsAndCancel(t *testing.T) {
+	m := NewModel(nil)
+	next, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 20})
+	m = asModel(t, next)
+	m.table.SetItems([]*pb.Item{scored(5, 1)})
+	next, _ = m.Update(key('='))
+	m = asModel(t, next)
+	m = typeText(t, m, "high")
+	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = asModel(t, next)
+	if !m.rating || cmd != nil {
+		t.Fatalf("a bad score must keep the prompt open: rating=%v cmd=%v", m.rating, cmd != nil)
+	}
+	if v := stripANSI(m.View()); !strings.Contains(v, "a score from 0 to 1") {
+		t.Errorf("no complaint: %q", v)
+	}
+	// Typing again clears the complaint; Esc leaves without rating.
+	m = typeText(t, m, "x")
+	if m.rateErr != "" {
+		t.Error("complaint stayed after typing")
+	}
+	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m = asModel(t, next)
+	if m.rating || cmd != nil || m.tableHeight() != 18 {
+		t.Errorf("esc: rating=%v cmd=%v height=%d", m.rating, cmd != nil, m.tableHeight())
 	}
 }

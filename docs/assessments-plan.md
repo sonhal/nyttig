@@ -1,6 +1,6 @@
 # Assessments plan: scores and notes from external assessors
 
-Status: **phases 1–7 implemented, not yet merged** (database layer, proto and RPCs, live updates, CLI and config, HTTP API, web app, TUI).
+Status: **phases 1–8 implemented, not yet merged** (database layer, proto and RPCs, live updates, CLI and config, HTTP API, web app, TUI, rating yourself).
 
 Other systems can attach a judgement to a news item: an optional **score**
 from 0.0 to 1.0, an optional **note**, and the **assessor** that made it.
@@ -537,6 +537,18 @@ govulncheck can't reach vuln.go.dev from the sandbox, so leave it to CI.
 
 ## Deviations from this plan
 
+- **Phase 8, "created on first use" is client-side.** The daemon has no
+  special assessor: `client.EnsureMe` (Go: CLI, TUI) and `ensureMe` in
+  `web/src/lib/rate.ts` look `me` up by name and add it when it is missing,
+  handling the race with another client. Its description and color
+  (`#4EC9B0`) are constants in both places.
+- **Phase 8, CLI.** `nyttig rate <item-id> <score> [note...]` is added
+  (not in the plan) since the CLI already had `assess` and this is the same
+  one-liner for `me`.
+- **Phase 8, TUI.** The TUI has no command line, so `=` opens a one-line
+  prompt (`rate: 0.8 note`) on the line above the status bar. The web `=`
+  prefills `:rate `; the phone has no key for it, but `:rate` works wherever
+  the command line does. Ratings are for the whole item.
 - **Phase 7, no detail view.** The TUI has no detail view for the plan's
   "notes in the detail view", so `i` toggles a line above the status bar with
   the selected item's assessments and notes. The table loses a row while it

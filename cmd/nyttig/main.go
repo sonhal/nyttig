@@ -120,6 +120,8 @@ func main() {
 		assessCmd()
 	case "unassess":
 		unassessCmd()
+	case "rate":
+		rateCmd()
 	case "refresh":
 		refreshCmd()
 	default:
@@ -154,6 +156,7 @@ func printHelp() {
 	fmt.Fprintf(os.Stderr, "  remove-assessor Remove an assessor and its assessments\n")
 	fmt.Fprintf(os.Stderr, "  assess         Score and/or note an item as an assessor\n")
 	fmt.Fprintf(os.Stderr, "  unassess       Remove an assessor's assessment of an item\n")
+	fmt.Fprintf(os.Stderr, "  rate           Rate an item yourself (the assessor 'me', created on first use)\n")
 	fmt.Fprintf(os.Stderr, "  search         Full-text search stored items (-view NAME runs a saved view)\n")
 	fmt.Fprintf(os.Stderr, "  refresh        Force immediate fetch of all sources (or one with -i)\n")
 	fmt.Fprintf(os.Stderr, "\nGlobal flags:\n")

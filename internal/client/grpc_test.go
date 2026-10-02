@@ -30,6 +30,11 @@ type testServer struct {
 	items   []*pb.Item
 	viewed  map[int64]bool
 
+	assessors []*pb.Assessor
+	// assessorRace, when set, is added just before the next AddAssessor
+	// answers, as if another client had created it first.
+	assessorRace *pb.Assessor
+
 	// StreamItems control
 	streamMu sync.Mutex
 	streams  []pb.Nyttig_StreamItemsServer
@@ -44,11 +49,27 @@ func newTestServer() *testServer {
 }
 
 func (s *testServer) AddAssessor(ctx context.Context, req *pb.AddAssessorRequest) (*pb.Assessor, error) {
-	return &pb.Assessor{Id: 1, Name: req.Name, Description: req.Description}, nil
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	// Another client creating the same assessor at the same moment.
+	if s.assessorRace != nil {
+		s.assessors = append(s.assessors, s.assessorRace)
+		s.assessorRace = nil
+	}
+	for _, a := range s.assessors {
+		if a.Name == req.Name {
+			return nil, status.Error(codes.AlreadyExists, "assessor already exists")
+		}
+	}
+	a := &pb.Assessor{Id: int64(len(s.assessors) + 1), Name: req.Name, Description: req.Description, Color: req.Color}
+	s.assessors = append(s.assessors, a)
+	return a, nil
 }
 
 func (s *testServer) ListAssessors(ctx context.Context, _ *emptypb.Empty) (*pb.ListAssessorsResponse, error) {
-	return &pb.ListAssessorsResponse{Assessors: []*pb.Assessor{{Id: 1, Name: "claude"}}}, nil
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return &pb.ListAssessorsResponse{Assessors: append([]*pb.Assessor(nil), s.assessors...)}, nil
 }
 
 func (s *testServer) PutAssessment(ctx context.Context, req *pb.PutAssessmentRequest) (*pb.Assessment, error) {

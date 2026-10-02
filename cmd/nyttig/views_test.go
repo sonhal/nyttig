@@ -131,3 +131,16 @@ func TestSplitItemArg(t *testing.T) {
 		t.Error("parseItemID accepted 0")
 	}
 }
+
+func TestParseScoreArg(t *testing.T) {
+	for in, want := range map[string]float64{"0": 0, "1": 1, "0.75": 0.75, ".5": 0.5, "1.0": 1, "0.": 0} {
+		if got, err := parseScoreArg(in); err != nil || got != want {
+			t.Errorf("parseScoreArg(%q) = %v, %v; want %v", in, got, err, want)
+		}
+	}
+	for _, bad := range []string{"", "1.5", "-0.1", "high", "1e-1", "NaN", "Inf", "0.5x", "+0.5"} {
+		if _, err := parseScoreArg(bad); err == nil {
+			t.Errorf("parseScoreArg(%q) accepted", bad)
+		}
+	}
+}

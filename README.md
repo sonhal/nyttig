@@ -318,6 +318,7 @@ These are global flags accepted by every subcommand and the TUI.
 | `s`          | Cycle source filter (all → specific source → all).       |
 | `t`          | Cycle tag filter (all → specific tag → all), parents before their children. A parent's label shows how many tags it covers: `cyber security +2`. |
 | `o`          | Cycle the sort order (newest → oldest, and `score` once an assessor is selected). |
+| `=`          | Rate the selected item yourself: a prompt takes `<score> [note]` (`Enter` rates, `Esc` cancels), see [Rating items yourself](#rating-items-yourself). |
 | `a`          | Cycle the assessor whose scores are shown first and used by `m` and the `score` sort (none → each assessor → none); the bar shows `score: [claude]`. |
 | `m`          | With an assessor: cycle the minimum score (none → 0.5 → 0.7 → 0.9 → none). |
 | `i`          | Show or hide a line above the status bar with the selected item's assessments (assessor, tag, score, note). |
@@ -392,6 +393,7 @@ nyttig update-assessor (-id <id> | -n <name>) [-rename <name>] [-description <te
 nyttig remove-assessor (-id <id> | -n <name>)   # also removes all of its assessments
 nyttig assess          <item-id> -assessor <name|id> [-tag <name|id>] [-score <0-1>] [-note <text>]
 nyttig unassess        <item-id> -assessor <name|id> [-tag <name|id>]
+nyttig rate            <item-id> <score 0-1> [note...]   # you, as the assessor "me" (created on first use)
 nyttig search          [-view <name|id>] [-tag <name|id>] [-s source_id] [-l limit] [-offset N] [-sort newest|oldest|score] [-unviewed] [-exact]
                        [-assessor <name|id>] [-min-score <0-1>] [-unassessed-by <name|id>] [query...]
 nyttig refresh         [-id <source_id>]   # omit -id to refresh all
@@ -696,6 +698,7 @@ the keymap, so it is always current.
 | `S`, `T`           | Pick a source / tag by name (fuzzy, `Enter` picks, `Esc` closes) |
 | `1`-`9`, `0`       | Open favorite saved view 1-9 / the unfiltered feed (see [Saved views](#saved-views)) |
 | `v`                | Pick a saved view by name (fuzzy)                  |
+| `=`                | Rate the selected item yourself (types `:rate ` for you, see [Rating items yourself](#rating-items-yourself)) |
 | `a`, `A`           | Pick an assessor by name (its scores are shown first, see [Assessments](#assessments)) / clear it |
 | `o`                | Toggle sort (newest / oldest)                     |
 | `F`                | Follow: jump to the newest and stick to it         |
@@ -732,7 +735,7 @@ fresh snapshot (the newest 200), dropping the older pages.
 **Command line** (`:`; `Tab` completes, again to cycle; `↑`/`↓` history;
 a unique prefix is enough): `:feed` `:sources` `:tags` `:rules` `:views` (`:q` is
 the feed), `:assessors`, `:sort [newest|oldest|score]`, `:unviewed [on|off]`, `:src <name>|all`,
-`:tag <name>|all`, `:score <assessor>|all [min]`, `:unassessed <assessor>|all`, `:view <name>|all` (`:v`), `:save [name]`,
+`:tag <name>|all`, `:score <assessor>|all [min]`, `:unassessed <assessor>|all`, `:rate <score> [note]`, `:view <name>|all` (`:v`), `:save [name]`,
 `:refresh [source]`, `:time [relative|absolute]`, `:follow`, `:help`. The
 filter and view commands also work from the management pages, and go to the
 feed.
@@ -945,6 +948,24 @@ stores, filters and shows them; the assessors are separate programs (see
   `item_update` message over gRPC, `event: update` over SSE). Clients update an
   item they show and add one that now matches; they never remove one live, so
   an item whose score was lowered stays until the next reload.
+
+### Rating items yourself
+
+You are an assessor too: `me` is a built-in assessor that is created the first
+time you rate something, with the description "Your own ratings, 0 to 1".
+Your scores give a ground truth to compare Claude's and the CVE reader's
+against (look at `score:me` next to `score:claude`).
+
+- **Web:** select an item and press `=` (it types `:rate ` for you), or type
+  `:rate 0.8 worth reading`. The digit keys belong to saved views, so they do
+  not rate. The phone has no keyboard shortcut for it.
+- **TUI:** press `=`, type `0.8 worth reading` and press `Enter` (`Esc`
+  cancels). The result shows on the line above the status bar.
+- **CLI:** `nyttig rate 123 0.8 worth reading` (flags such as `--socket` go
+  right after the item id).
+
+The rating is for the item as a whole (no tag), and rating again replaces it.
+A score is a number from 0 to 1 and the note is optional.
 
 ### Writing an assessor
 

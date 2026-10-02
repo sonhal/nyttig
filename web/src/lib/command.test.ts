@@ -218,6 +218,32 @@ describe('commonPrefix', () => {
 	});
 });
 
+describe(':rate', () => {
+	it('takes a score and an optional note', () => {
+		expect(cmd('rate 0.8')).toEqual({ type: 'rate', score: 0.8, note: '' });
+		expect(cmd('rate 1 worth a read, really')).toEqual({ type: 'rate', score: 1, note: 'worth a read, really' });
+		expect(cmd('rate .25')).toEqual({ type: 'rate', score: 0.25, note: '' });
+		expect(cmd('rate 0')).toEqual({ type: 'rate', score: 0, note: '' });
+		expect(cmd('ra 0.5 x')).toEqual({ type: 'rate', score: 0.5, note: 'x' });
+	});
+
+	it('needs a score from 0 to 1', () => {
+		expect(error('rate')).toContain('a score from 0 to 1');
+		expect(error('rate high')).toContain('not high');
+		expect(error('rate 2')).toContain('not 2');
+		expect(error('rate -1')).toContain('not -1');
+	});
+
+	it('does not take over :r (rules) or :re (refresh)', () => {
+		expect(cmd('r')).toEqual({ type: 'page', page: 'rules' });
+		expect(cmd('re')).toEqual({ type: 'refresh', source: '' });
+	});
+
+	it('does nothing to the filter', () => {
+		expect(applyToFilter({ type: 'rate', score: 1, note: '' }, defaultFilter)).toBeNull();
+	});
+});
+
 describe('assessor commands', () => {
 	const assessors: Assessor[] = [
 		{ id: '1', name: 'claude' },

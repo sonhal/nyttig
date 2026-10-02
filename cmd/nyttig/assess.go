@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -401,3 +402,57 @@ func unassessCmd() {
 	}
 	fmt.Printf("Assessment of item %d removed.\n", itemID)
 }
+
+// rateCmd handles the "rate" subcommand: a score from you, as the built-in
+// assessor "me" (created the first time), for the item as a whole.
+func rateCmd() {
+	flags := flag.NewFlagSet("rate", flag.ExitOnError)
+	registerClientFlags(flags)
+
+	itemArg, args := splitItemArg(os.Args[2:])
+	if (itemArg == "" && len(args) == 0) || (len(args) > 0 && args[0] == "--help") {
+		_, _ = fmt.Fprintf(os.Stderr, "Usage: nyttig rate <item-id> <score 0-1> [note...]\n\n")
+		_, _ = fmt.Fprintf(os.Stderr, "Rates the item as the assessor %q, which is created the first time. Rating\nagain replaces your earlier rating. Your scores are a ground truth to compare\nthe other assessors against.\n\n", client.MeAssessorName)
+		flags.PrintDefaults()
+		os.Exit(0)
+	}
+	_ = flags.Parse(args)
+	rest := flags.Args()
+	if itemArg == "" && len(rest) > 0 {
+		itemArg, rest = rest[0], rest[1:]
+	}
+	itemID, err := parseItemID(itemArg)
+	if err != nil {
+		fail(err)
+	}
+	if len(rest) == 0 {
+		fail(fmt.Errorf("a score from 0 to 1 is required: nyttig rate <item-id> <score> [note...]"))
+	}
+	score, err := parseScoreArg(rest[0])
+	if err != nil {
+		fail(err)
+	}
+
+	c := newClient()
+	defer func() { _ = c.Close() }()
+	a, err := c.Rate(context.Background(), itemID, score, strings.Join(rest[1:], " "))
+	if err != nil {
+		fail(err)
+	}
+	fmt.Printf("Item %d rated %s as %s.\n", a.ItemId, formatScore(score), tui.SanitizeLine(a.AssessorName))
+}
+
+// parseScoreArg reads a score from 0 to 1: digits with an optional decimal
+// point (no exponent, sign, NaN or Inf).
+func parseScoreArg(s string) (float64, error) {
+	if !scoreArgRe.MatchString(s) {
+		return 0, fmt.Errorf("score %q is not a number from 0 to 1", s)
+	}
+	v, err := strconv.ParseFloat(s, 64)
+	if err != nil || v < 0 || v > 1 {
+		return 0, fmt.Errorf("score %q is not a number from 0 to 1", s)
+	}
+	return v, nil
+}
+
+var scoreArgRe = regexp.MustCompile(`^(\d+\.?\d*|\.\d+)$`)

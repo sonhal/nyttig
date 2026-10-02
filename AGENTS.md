@@ -313,6 +313,12 @@ which phases are done and whether they are merged; keep it current.
   replaces a shown item in place, inserts a matching one in `itemOrder` and
   never removes one. `itemOrder` and `scoreOf` (`assess.go`) mirror the
   daemon's order and scope rules; keep them in step with `db.ListItems`.
+- **Rating yourself** (phase 8). `me` is an ordinary assessor that the
+  *clients* create the first time they need it: `client.EnsureMe` (CLI and
+  TUI, `nyttig rate`, `=` in the TUI) and `ensureMe` in `web/src/lib/rate.ts`
+  (`:rate`, `=` in the web app). Both look it up by name and, on
+  `AlreadyExists` / 409, look again, so two clients racing is fine. The daemon
+  knows nothing special about it. Ratings are for the item as a whole.
 - **Tagging** is rule-based only (no manual tagging). Rules are regex over
   `title`/`description`/`both`, global or per-source, evaluated by `priority`.
 - **View tracking** is K9s-style: the TUI marks items viewed as they scroll

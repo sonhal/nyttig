@@ -13,6 +13,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/sonhal/nyttig/internal/client"
 	pb "github.com/sonhal/nyttig/internal/proto/nyttig/v1"
@@ -65,6 +66,20 @@ type Model struct {
 	// showInfo shows the selected item's assessments (with their notes) in
 	// a line above the status bar.
 	showInfo bool
+
+	// Rating (the = key): a prompt on that line takes "<score> [note]" and
+	// rates the selected item as the assessor "me". note is the result (or a
+	// complaint) shown on the line until the next key.
+	rating   bool
+	rateText string
+	rateErr  string
+	note     string
+}
+
+// rateDoneMsg is the result of rating an item.
+type rateDoneMsg struct {
+	score float64
+	err   error
 }
 
 // NewModel creates the root TUI model with a connected gRPC client.
@@ -240,6 +255,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case rateDoneMsg:
+		if msg.err != nil {
+			m.note = "rate failed: " + SanitizeLine(msg.err.Error())
+		} else {
+			m.note = "rated " + formatScore(msg.score)
+		}
+		m.layout()
+		return m, nil
+
 	case StreamErrorMsg:
 		if msg.Err != nil {
 			m.status.SetConnected(false)
@@ -289,6 +313,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // handleKey processes keyboard input, delegating to filter or table actions.
 func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// The rating prompt takes the keys while it is open.
+	if m.rating {
+		return m.handleRateKey(msg)
+	}
+	// A result message goes away with the next key.
+	if m.note != "" {
+		m.note = ""
+		m.layout()
+	}
+
 	// If search is active, handle text input there first.
 	if m.filter.IsSearching() {
 		switch msg.String() {
@@ -345,6 +379,15 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.layout()
 		return m, nil
 
+	case "=":
+		if m.table.SelectedItem() == nil {
+			m.note = "no item selected"
+		} else {
+			m.rating, m.rateText, m.rateErr = true, "", ""
+		}
+		m.layout()
+		return m, nil
+
 	case "r":
 		return m, m.refreshAll()
 
@@ -383,13 +426,86 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 // minus the filter bar, the status bar and, when shown, the detail line.
 func (m *Model) tableHeight() int {
 	th := m.height - 2
-	if m.showInfo {
+	if m.lineShown() {
 		th--
 	}
 	if th < 1 {
 		return 1
 	}
 	return th
+}
+
+// lineShown reports whether the line above the status bar is in use: the
+// assessments of the selected item, the rating prompt, or a result.
+func (m *Model) lineShown() bool {
+	return m.showInfo || m.rating || m.note != ""
+}
+
+// handleRateKey edits the rating prompt: Enter rates, Esc cancels.
+func (m *Model) handleRateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "esc", "ctrl+c":
+		m.rating = false
+		m.layout()
+		return m, nil
+	case "enter":
+		score, note, err := parseRateText(m.rateText)
+		if err != nil {
+			m.rateErr = err.Error()
+			return m, nil
+		}
+		item := m.table.SelectedItem()
+		m.rating = false
+		m.layout()
+		if item == nil {
+			return m, nil
+		}
+		id, cl := item.Id, m.client
+		return m, func() tea.Msg {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			_, err := cl.Rate(ctx, id, score, note)
+			return rateDoneMsg{score: score, err: err}
+		}
+	case "backspace":
+		if r := []rune(m.rateText); len(r) > 0 {
+			m.rateText = string(r[:len(r)-1])
+		}
+		m.rateErr = ""
+		return m, nil
+	}
+	if msg.Type == tea.KeySpace {
+		m.rateText += " "
+		m.rateErr = ""
+		return m, nil
+	}
+	if msg.Type == tea.KeyRunes {
+		for _, r := range msg.Runes {
+			if r >= 32 && r != 127 {
+				m.rateText += string(r)
+			}
+		}
+		m.rateErr = ""
+	}
+	return m, nil
+}
+
+// line renders the line above the status bar: the rating prompt, a result,
+// or the selected item's assessments.
+func (m *Model) line() string {
+	switch {
+	case m.rating:
+		prompt := truncateEllipsis("rate: "+SanitizeLine(m.rateText)+"█", m.width)
+		out := filterActiveSearchStyle.Render(prompt)
+		// An error follows the text when there is room for it.
+		if room := m.width - lipgloss.Width(prompt) - 2; m.rateErr != "" && room > 4 {
+			out += filterLabelStyle.Render("  " + truncateEllipsis(m.rateErr, room))
+		}
+		return out
+	case m.note != "":
+		return filterLabelStyle.Render(truncateEllipsis(m.note, m.width))
+	}
+	return m.infoLine()
 }
 
 // layout sizes the table for the current window and detail line.
@@ -510,8 +626,8 @@ func (m Model) View() string {
 	tableView := m.table.View()
 	statusView := m.status.View(m.width)
 
-	if m.showInfo {
-		return filterView + "\n" + tableView + "\n" + m.infoLine() + "\n" + statusView
+	if m.lineShown() {
+		return filterView + "\n" + tableView + "\n" + m.line() + "\n" + statusView
 	}
 	return filterView + "\n" + tableView + "\n" + statusView
 }

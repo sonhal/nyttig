@@ -327,3 +327,53 @@ test('assessments: the assessors page adds, edits and removes', async ({ page })
 		for (const a of list) if (a.name === name) await page.request.delete(`/api/assessors/${a.id}`, { headers, data: {} });
 	}
 });
+
+test('assessments: :rate rates the selected item as "me", created on first use', async ({ page }) => {
+	// = types ":rate " for you; the phone has no keys, so this is desktop only.
+	test.skip(isMobile(page), 'the = key is a keyboard feature');
+	const f = fx!;
+	const meIds = async () =>
+		(((await (await page.request.get('/api/assessors')).json()) as { assessors?: { id: string; name: string }[] }).assessors ?? [])
+			.filter((a) => a.name === 'me')
+			.map((a) => a.id);
+	// A leftover "me" from another test would hide the creation.
+	for (const id of await meIds()) await page.request.delete(`/api/assessors/${id}`, { headers, data: {} });
+	try {
+		await open(page, `/?source=${f.sourceId}`);
+		const row1 = rows(page).filter({ has: page.locator('.title', { hasText: new RegExp(`^${f.title(1)}$`) }) });
+		await expect(row1).toBeVisible();
+		expect(await meIds()).toEqual([]);
+
+		await page.keyboard.press('=');
+		await expect(page.getByTestId('command')).toHaveValue('rate ');
+		await page.keyboard.type('0.8 a good one');
+		await page.keyboard.press('Enter');
+		await expect(row1.getByTestId('score-chip')).toContainText('me 0.8');
+		expect(await meIds()).toHaveLength(1);
+		const item = (await (await page.request.get(`/api/items?source=${f.sourceId}&limit=10`)).json()) as {
+			items: { id: string; assessments?: { assessor_name?: string; score?: number; note?: string; tag_id?: string }[] }[];
+		};
+		const mine = item.items.find((i) => i.id === f.items[0])!.assessments!.find((a) => a.assessor_name === 'me')!;
+		expect(mine).toMatchObject({ score: 0.8, note: 'a good one' });
+		expect(mine.tag_id).toBeUndefined();
+
+		// Rating again replaces it, and reuses "me".
+		await page.keyboard.press('=');
+		await page.keyboard.type('0.2');
+		await page.keyboard.press('Enter');
+		await expect(row1.getByTestId('score-chip')).toContainText('me 0.2');
+		expect(await meIds()).toHaveLength(1);
+
+		// A bad score stays in the line and says why.
+		await page.keyboard.press('=');
+		await page.keyboard.type('high');
+		await page.keyboard.press('Enter');
+		await expect(page.getByTestId('command-line')).toContainText('a score from 0 to 1');
+		await page.keyboard.press('Escape');
+		// The digits are still the saved views' keys.
+		await page.keyboard.press('9');
+		await expect(page.getByText('no favorite view 9')).toBeVisible();
+	} finally {
+		for (const id of await meIds()) await page.request.delete(`/api/assessors/${id}`, { headers, data: {} });
+	}
+});

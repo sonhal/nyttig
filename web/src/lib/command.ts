@@ -11,6 +11,7 @@
 // is given, so the result carries IDs and the caller only has to act.
 
 import { parseScore, withAssessor } from './filter';
+import { parseRate } from './rate';
 import { findAssessor, findSource, findTag } from './query';
 import type { Assessor, Filter, SavedView, Sort, Source, Tag } from './types';
 import { findView } from './views';
@@ -46,6 +47,8 @@ export type Command =
 	| { type: 'score'; id: string; min: number | null }
 	/** Only items this assessor has not assessed ("" is off). */
 	| { type: 'unassessed'; id: string }
+	/** Rates the selected item yourself, as the assessor "me". */
+	| { type: 'rate'; score: number; note: string }
 	/** id "" is every source. */
 	| { type: 'refresh'; source: string }
 	| { type: 'time'; mode: TimeMode | 'toggle' }
@@ -85,6 +88,7 @@ export const COMMANDS: readonly Spec[] = [
 	{ name: 'save', args: '[name]', desc: 'save the filter into the active view, or as a new favorite view' },
 	{ name: 'score', args: '<assessor>|all [min]', desc: "show an assessor's scores, optionally only those of at least min" },
 	{ name: 'unassessed', args: '<assessor>|all', desc: 'only items this assessor has not assessed' },
+	{ name: 'rate', args: '<score> [note]', desc: 'rate the selected item yourself (assessor "me", score 0 to 1)' },
 	{ name: 'refresh', args: '[source]', desc: 'fetch all sources now, or one' },
 	{ name: 'time', args: '[relative|absolute]', desc: 'how times are shown, or toggle it' },
 	{ name: 'follow', desc: 'jump to the newest and follow' },
@@ -221,6 +225,10 @@ export function parseCommand(input: string, ctx: CommandContext = { sources: [],
 			if (ALL.has(name.toLowerCase()) && findAssessor(assessors, name) === undefined) return ok({ type: 'unassessed', id: '' });
 			const id = findAssessor(assessors, name, false);
 			return id === undefined ? fail(`unknown assessor: ${name}`) : ok({ type: 'unassessed', id });
+		}
+		case 'rate': {
+			const r = parseRate(arg);
+			return r.ok ? ok({ type: 'rate', score: r.score, note: r.note }) : fail(r.error);
 		}
 		case 'refresh': {
 			if (!arg) return ok({ type: 'refresh', source: '' });

@@ -49,6 +49,8 @@ export type Action =
 	| { type: 'pickerSelect' }
 	| { type: 'pickerCancel' }
 	| { type: 'toggleSort' }
+	/** =: starts the command line with "rate " typed. */
+	| { type: 'rate' }
 	| { type: 'toggleTime' }
 	| { type: 'follow' }
 	| { type: 'refreshAll' }
@@ -138,6 +140,7 @@ const NORMAL: FeedBinding[] = [
 	b('Feed', ['R'], { type: 'refreshSource' }, "refresh the selected item's source"),
 	b('Feed', ['Enter'], { type: 'open' }, 'open the link in a new tab'),
 	b('Feed', [' ', 'l'], { type: 'toggleExpand' }, 'expand or collapse the row'),
+	b('Feed', ['='], { type: 'rate' }, 'rate the selected item yourself (types :rate for you)'),
 	b('Feed', ['D'], { type: 'toggleTime' }, 'relative or absolute times'),
 	b('General', [':'], { type: 'openCommand' }, 'command line'),
 	b('General', ['?'], { type: 'openHelp' }, 'this help'),

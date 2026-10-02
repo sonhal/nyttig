@@ -212,7 +212,7 @@ describe('help', () => {
 	it('drift check: every key the feed handles in normal mode is in the help', () => {
 		const listed = new Set(feedHelp().flatMap((s) => s.rows.flatMap((r) => r.keys)));
 		const label = (k: string) => ({ ArrowDown: '↓', ArrowUp: '↑', Escape: 'Esc', ' ': 'Space', PageDown: 'PgDn', PageUp: 'PgUp' })[k] ?? k;
-		const keys = ['j', 'k', 'g', 'G', 'd', 'u', '/', 's', 't', 'S', 'T', 'a', 'A', 'o', 'v', '0', '1', '5', '9', 'r', 'R', 'F', 'D', 'Enter', ' ', 'l', ':', '?', 'q', 'Escape', 'Home', 'End', 'PageDown', 'PageUp', 'ArrowDown', 'ArrowUp'];
+		const keys = ['j', 'k', 'g', 'G', 'd', 'u', '/', 's', 't', 'S', 'T', 'a', 'A', '=', 'o', 'v', '0', '1', '5', '9', 'r', 'R', 'F', 'D', 'Enter', ' ', 'l', ':', '?', 'q', 'Escape', 'Home', 'End', 'PageDown', 'PageUp', 'ArrowDown', 'ArrowUp'];
 		for (const key of keys) {
 			expect(keyAction('normal', { key }), key).not.toBeNull();
 			expect(listed.has(label(key)), key).toBe(true);
@@ -229,6 +229,14 @@ describe('help', () => {
 		expect(keyAction('normal', { key: 'a', ctrlKey: true })).toBeNull();
 		expect(keyAction('search', { key: 'a' })).toBeNull();
 		expect(keyAction('picker', { key: 'a' })).toBeNull();
+	});
+
+	it('= starts a rating, and the digits stay with the saved views', () => {
+		expect(keyAction('normal', { key: '=' })).toEqual({ type: 'rate' });
+		expect(keyAction('normal', { key: '=', ctrlKey: true })).toBeNull();
+		expect(keyAction('search', { key: '=' })).toBeNull();
+		expect(find(feedHelp(), /^rate the selected item/)?.keys).toEqual(['=']);
+		for (const key of ['0', '1', '2', '9']) expect(keyAction('normal', { key })).toMatchObject({ type: 'viewTab' });
 	});
 
 	it('keeps the saved views digits and v free of the assessor keys', () => {

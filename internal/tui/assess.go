@@ -1,6 +1,9 @@
 package tui
 
 import (
+	"errors"
+	"fmt"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -180,4 +183,31 @@ func assessmentLines(item *pb.Item, tagNames map[int64]string) []string {
 		lines = append(lines, b.String())
 	}
 	return lines
+}
+
+// ── Rating items yourself ─────────────────────────────────────
+
+var rateScoreRe = regexp.MustCompile(`^(\d+\.?\d*|\.\d+)$`)
+
+const rateUsage = "a score from 0 to 1, then an optional note"
+
+// parseRateText reads what is typed after "=": a score, then the rest of the
+// line as the note.
+func parseRateText(text string) (score float64, note string, err error) {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return 0, "", errors.New(rateUsage)
+	}
+	word, rest := text, ""
+	if i := strings.IndexAny(text, " \t"); i >= 0 {
+		word, rest = text[:i], text[i:]
+	}
+	if !rateScoreRe.MatchString(word) {
+		return 0, "", fmt.Errorf("%s, not %s", rateUsage, word)
+	}
+	score, err = strconv.ParseFloat(word, 64)
+	if err != nil || score < 0 || score > 1 {
+		return 0, "", fmt.Errorf("%s, not %s", rateUsage, word)
+	}
+	return score, strings.TrimSpace(rest), nil
 }
