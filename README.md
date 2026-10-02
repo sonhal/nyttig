@@ -329,7 +329,13 @@ nyttig add-tag-rule    -tag <name|id> -p <regex> [-f title|description|both] [-s
 nyttig test-tag-rule   -p <regex> [-f title|description|both] [-s source_id] [-l limit]   # dry run
 nyttig list-tag-rules
 nyttig remove-tag-rule -id <rule_id>
-nyttig search          [-tag <name|id>] [-s source_id] [-l limit] [-offset N] [-sort newest|oldest] [-unviewed] [-exact] [query...]
+nyttig list-views                        # name, ★ for favorites, and the filter written like the web query bar
+nyttig add-view        -n <name> [-q <text>] [-source <name|id>] [-tag <name|id>] [-unviewed] [-sort newest|oldest] [-favorite]
+nyttig update-view     (-id <id> | -n <name>) [-rename <name>] [-q <text>] [-source <name|id> | -no-source]
+                       [-tag <name|id> | -no-tag] [-sort newest|oldest] [-unviewed[=false]] [-favorite[=false]]
+nyttig remove-view     (-id <id> | -n <name>)
+nyttig reorder-views   <id|name>...      # every view once, in the new order
+nyttig search          [-view <name|id>] [-tag <name|id>] [-s source_id] [-l limit] [-offset N] [-sort newest|oldest] [-unviewed] [-exact] [query...]
 nyttig refresh         [-id <source_id>]   # omit -id to refresh all
 ```
 
@@ -338,6 +344,17 @@ Each subcommand calls the corresponding gRPC RPC against the daemon. The daemon 
 `update-source` and `update-tag` change only the flags you pass. Pass
 `-color ''` or `-abbreviation ''` to clear a value. Changing a source's URL or
 refresh interval takes effect immediately and triggers a fetch.
+
+Saved views are named feed filters (search text, one source, one tag with its
+child tags, unviewed only, sort order) stored in the daemon, so every client
+shares them. `-favorite` marks a view for the tab bar of clients that have
+one. `update-view` changes only the flags you pass; any filter flag replaces
+the stored filter's matching part and keeps the rest, and `-no-source` /
+`-no-tag` drop that part. Deleting a source or tag keeps the views that used
+it and just stops filtering on it. Names are unique (case-insensitive), at
+most 64 characters, and there can be at most 100 views. `search -view NAME`
+runs a view's filter headless; flags passed explicitly (`-sort`, `-unviewed`,
+`-tag`, `-s`, a query) override the view's.
 
 Tag rules added with `add-tag-rule` apply to items fetched after the rule is
 created; existing items are not retagged. Use `test-tag-rule` first to see

@@ -1,6 +1,6 @@
 # Saved views plan
 
-Status: **phases 1–2 implemented, not yet merged** (the backend: migration, db layer, RPCs, client wrapper). Phases 3–7 are planned.
+Status: **phases 1–3 implemented, not yet merged** (the backend, and the CLI). Phases 4–7 are planned.
 
 Saved views are persistent, named feed filters, like Linear's views. You can
 bring one up with a key or a tab instead of retyping
@@ -243,3 +243,12 @@ so leave it to CI.
 - `CountViewsUsing(sourceID|tagID)` is two functions,
   `CountViewsUsingSource` and `CountViewsUsingTag`.
 - A new view's position is `max(position)+1`, with the first at 0.
+- CLI: `update-view` selects the view with `-id N` or `-n NAME`, so the new
+  name is `-rename NAME` (the plan's `-n` could not mean both). A view
+  reference is an ID when a view has it, else a name (case-insensitive).
+  `reorder-views` also accepts names. `add-view -source` and `-tag` take a
+  name or ID (a source by name or abbreviation).
+- CLI: any filter flag on `update-view` replaces the whole filter, built from
+  the stored one plus the flags given (the RPC replaces the filter as a whole).
+- CLI: `search -view` lets flags passed explicitly (query, `-s`, `-tag`,
+  `-sort`, `-unviewed`) override the view's filter.
