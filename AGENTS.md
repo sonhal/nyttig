@@ -152,7 +152,8 @@ web/e2e/                    Playwright tests; stack.mjs starts a feed server, ny
                             the app server and a Caddy-like proxy (proxy.mjs)
 internal/server/service/    gRPC service impl + Hub (broadcasts pushed items to subscribers);
                             validate.go holds all client-input validation
-internal/server/db/         SQLite layer: items, sources, tags, views; embedded migrations
+internal/server/db/         SQLite layer: items, sources, tags, views, assessors and assessments
+                            (assessments.go); embedded migrations
 internal/server/fetcher/    Feed fetch/parse + GUID-based dedup; client.go builds the HTTP
                             client, including the private-address (SSRF) block
 internal/server/tagger/     Regex-based auto-tagging engine
@@ -169,6 +170,7 @@ deploy/README.md            VPS guide: sizing, build for Debian, mTLS for the TU
 deploy/Caddyfile            Example reverse proxy (TLS, basic auth, /api/* vs the app)
 docs/web-client-plan.md     Plan for the nyttig-api browser client (phases and decisions)
 docs/tag-tree-plan.md       Plan for parent tags (the tag tree): decisions and phases
+docs/assessments-plan.md    Plan for assessments: scores and notes from external assessors
 docs/saved-views-plan.md    Plan for saved views (named filters, feed tabs): decisions and phases
 docs/assessments-plan.md    Plan for assessments (scores and notes from external assessors): decisions and phases
 CLAUDE.md                   `@AGENTS.md`: makes Claude Code load this file
@@ -276,6 +278,19 @@ which phases are done and whether they are merged; keep it current.
   with `filter` replaces the whole filter. Lists and the reorder answer are
   `{"views": [...]}`. In the web app `command.ts`'s old `View` is now `Page`
   (the routes); "view" always means a saved view.
+- **Assessments.** An assessor (`assessors`) writes at most one assessment
+  per `(item, assessor, tag)` (`assessments`; the tag is optional, NULL = the
+  whole item). `PutAssessment` is an upsert whose conflict target is the
+  expression `IFNULL(tag_id, 0)`, matching the unique index, because a plain
+  UNIQUE treats NULLs as distinct. Filters (`ItemFilter.AssessorID`,
+  `MinScore`, `UnassessedBy`, `Sort: "score"`) only count assessments **in
+  scope** for the filter's tag: no tag in the filter, a whole-item
+  assessment, or a tag in the filter tag's subtree (the tag itself with
+  `TagExact`). `min_score` or the score sort without an assessor is an error
+  (`ErrAssessorRequired`). Scores of different assessors are never merged.
+  Deleting an assessor deletes its assessments; saved views that use it keep
+  existing (migration 7's trigger clears `min_score` and a `score` sort, the
+  foreign keys clear the ids). Notes and assessor names are untrusted text.
 - **Tagging** is rule-based only (no manual tagging). Rules are regex over
   `title`/`description`/`both`, global or per-source, evaluated by `priority`.
 - **View tracking** is K9s-style: the TUI marks items viewed as they scroll

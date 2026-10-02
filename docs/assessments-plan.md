@@ -1,6 +1,6 @@
 # Assessments plan: scores and notes from external assessors
 
-Status: **planned**, no phases implemented.
+Status: **phase 1 implemented, not yet merged** (database layer).
 
 Other systems can attach a judgement to a news item: an optional **score**
 from 0.0 to 1.0, an optional **note**, and the **assessor** that made it.
@@ -334,10 +334,19 @@ item has been pushed and shown, so:
   to source, tag or rule management, and cross-check them against
   deterministic assessors such as the CVE reader. A large gap between the two
   is worth looking at.
-- **Identity.** Any client can write as any assessor, because every client
-  is trusted today (the Unix socket, mTLS, basic auth in front of
-  nyttig-api). Binding an assessor to an mTLS certificate or a token is a
-  follow-up.
+- **Identity and access model (v1).** v1 keeps the existing access model:
+  nyttig-api listens on loopback behind Caddy's basic auth, and gRPC is
+  reached over the Unix socket or mTLS. Whoever holds that credential (or
+  the socket, or a client certificate) is **full admin**. v1 cannot restrict
+  an assessor to assessments only, and any client can write as any assessor.
+  Per-assessor tokens on a narrow route group (so a credential can do
+  nothing but `PutAssessment`) are a follow-up, listed below.
+- **Recommended pattern: the program holds the credentials, the LLM never
+  does.** The assessor *program* fetches items, hands Claude the item text,
+  and only ever calls `PutAssessment` with the score and note Claude
+  returns. Claude gets no tools and no credentials. A prompt-injected feed
+  can then at worst distort scores, never cause a destructive call (remove a
+  source, delete a tag, and so on).
 
 ## Writing an assessor
 
@@ -356,7 +365,23 @@ This is for the README too. An assessor is any program that:
    - locally over the Unix socket,
    - remotely over mTLS, or
    - through nyttig-api behind the proxy's basic auth.
-5. Follows the prompt-injection advice above.
+5. Follows the prompt-injection advice above: the program holds the
+   credentials and calls the API; the model only sees item text and returns
+   a score and a note.
+
+**Over HTTP (nyttig-api).** Requests must pass nyttig-api's CSRF check
+(`csrfCheck` in `internal/api/security.go`). Every state-changing request
+(PUT, POST, PATCH, DELETE) needs `Content-Type: application/json` and an
+`Origin` header equal to nyttig-api's `--origin`, in addition to the
+basic-auth credentials Caddy asks for. Without them the answer is 415 (wrong
+content type) or 403 (wrong origin). For example:
+
+```bash
+curl -u assessor:PASSWORD -X PUT https://news.example.com/api/items/123/assessments \
+  -H 'Content-Type: application/json' \
+  -H 'Origin: https://news.example.com' \
+  -d '{"assessor": "claude", "tag": "CVE", "score": 0.9, "note": "critical in Cisco IOS"}'
+```
 
 Re-assessing is just another `PutAssessment`.
 
@@ -481,7 +506,9 @@ note), and records deviations below.
 - A structured `data` field (e.g. `{cve, cvss, vendor}`).
 - A worker in the daemon that calls the Claude API, and an MCP server for
   assessors.
-- Per-assessor credentials (mTLS certificate or token bound to an assessor).
+- Per-assessor credentials: an mTLS certificate or token bound to an
+  assessor, on a narrow route group that can only write that assessor's
+  assessments. Until then every credential is full admin (see Security).
 - Rules that turn a score into a tag ("Claude ≥ 0.8 for `CVE` → tag
   `CVE/critical`"), which would reuse every tag feature.
 - Batch `PutAssessments` for assessors that write many at a time.
