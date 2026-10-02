@@ -7,6 +7,7 @@ package db
 import (
 	"database/sql"
 	"embed"
+	"errors"
 	"fmt"
 	"sort"
 	"strconv"
@@ -18,8 +19,13 @@ import (
 //go:embed migrations/*.sql
 var migrationsFS embed.FS
 
-// Open opens (or creates) the SQLite database at dsn, runs all pending
-// migrations, and returns a connected, migrated *sql.DB.
+// ErrNoFTS5 is returned by Open when the linked SQLite library was built
+// without the FTS5 extension, which the schema's items_fts table needs.
+var ErrNoFTS5 = errors.New("the SQLite library has no FTS5 support: build with -tags sqlite_fts5 (bundled SQLite), or with -tags libsqlite3 install a libsqlite3 that was compiled with FTS5")
+
+// Open opens (or creates) the SQLite database at dsn, checks that the SQLite
+// library has FTS5, runs all pending migrations, and returns a connected,
+// migrated *sql.DB.
 func Open(dsn string) (*sql.DB, error) {
 	db, err := sql.Open("sqlite3", dsn)
 	if err != nil {
@@ -41,12 +47,46 @@ func Open(dsn string) (*sql.DB, error) {
 		return nil, fmt.Errorf("pragma foreign_keys: %w", err)
 	}
 
+	// Fail with a clear message before the first migration would fail with
+	// "no such module: fts5". The library is either the one bundled by
+	// go-sqlite3 (build tag sqlite_fts5) or the system's (build tag
+	// libsqlite3), and only the build decides whether FTS5 is in it.
+	if err := requireFTS5(db); err != nil {
+		db.Close()
+		return nil, err
+	}
+
 	if err := runMigrations(db); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("runMigrations: %w", err)
 	}
 
 	return db, nil
+}
+
+// requireFTS5 returns ErrNoFTS5 unless ENABLE_FTS5 is among the library's
+// compile options.
+func requireFTS5(db *sql.DB) error {
+	var n int
+	err := db.QueryRow(`SELECT count(*) FROM pragma_compile_options WHERE compile_options = 'ENABLE_FTS5'`).Scan(&n)
+	if err != nil {
+		return fmt.Errorf("read sqlite compile options: %w", err)
+	}
+	if n == 0 {
+		return ErrNoFTS5
+	}
+	return nil
+}
+
+// SQLiteVersion returns the version of the SQLite library the process is
+// linked against, such as "3.46.1". With the libsqlite3 build tag this is
+// the system library, so it is worth logging at startup.
+func SQLiteVersion(db *sql.DB) (string, error) {
+	var v string
+	if err := db.QueryRow(`SELECT sqlite_version()`).Scan(&v); err != nil {
+		return "", fmt.Errorf("sqlite_version: %w", err)
+	}
+	return v, nil
 }
 
 // runMigrations reads embedded .up.sql files from migrations/ and applies them

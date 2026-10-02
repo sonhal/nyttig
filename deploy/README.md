@@ -25,8 +25,8 @@ for the TUI.
 
 **Sizing:** 1 vCPU, 1 GB RAM and 20 GB disk are enough for personal use.
 nyttigd, nyttig-api and Caddy each use tens of MB and the Node server a bit
-more. Build in CI (or on your workstation), not on the server: compiling SQLite with cgo
-can run a 1 GB machine out of memory. Nothing prunes old items yet, so the
+more. Build in CI (or on your workstation), not on the server: the Go build with cgo
+and the web app's Node build are heavy for a 1 GB machine. Nothing prunes old items yet, so the
 database grows by roughly 0.2–2 GB per year depending on how many feeds you
 follow.
 
@@ -60,10 +60,11 @@ gh attestation verify "nyttig-$VERSION-linux-amd64.tar.gz" --repo sonhal/nyttig
 was built by this repository's CI workflow from the tagged commit, not
 uploaded by hand.
 
-`nyttigd` uses cgo, so it only runs on systems with the same or a newer glibc
-than it was built with. CI builds the Go binaries in a `golang:1.26-trixie`
-container for that reason. If the server runs something older than Debian 13,
-build it yourself in a matching image instead.
+`nyttigd` uses cgo and links the server's SQLite library (see
+[SQLite](#sqlite)), so it only runs on systems with the same or a newer glibc
+and libsqlite3 than it was built with. CI builds the Go binaries in a
+`golang:1.26-trixie` container for that reason. If the server runs something
+older than Debian 13, build it yourself in a matching image instead.
 
 ### Building it yourself
 
@@ -73,8 +74,9 @@ binaries in the same Debian release as the server:
 ```bash
 BUNDLE=nyttig-dev-linux-amd64
 docker run --rm -v "$PWD":/src -w /src golang:1.26-trixie \
-  sh -c "git config --global --add safe.directory /src &&
-         go build -trimpath -ldflags='-s -w' -o $BUNDLE/bin/ ./cmd/nyttigd ./cmd/nyttig ./cmd/nyttig-api"
+  sh -c "apt-get update && apt-get install -y --no-install-recommends libsqlite3-dev &&
+         git config --global --add safe.directory /src &&
+         go build -trimpath -tags libsqlite3 -ldflags='-s -w' -o $BUNDLE/bin/ ./cmd/nyttigd ./cmd/nyttig ./cmd/nyttig-api"
 
 pnpm --dir web install --frozen-lockfile
 pnpm --dir web build        # web/build/ is plain JavaScript; any OS can build it
@@ -119,7 +121,7 @@ cd nyttig-v0.1.0-linux-amd64
 Then on the server:
 
 ```bash
-sudo apt install sqlite3 ufw        # sqlite3 is only used for backups
+sudo apt install sqlite3 ufw        # sqlite3: backups, and it brings libsqlite3-0, which nyttigd links
 sudo useradd --system --home-dir /var/lib/nyttig --shell /usr/sbin/nologin nyttig
 
 # Binaries and the web app
@@ -181,7 +183,8 @@ sudo ufw enable
 
 sudo systemctl enable --now nyttigd nyttigd-backup.timer nyttig-api nyttig-web
 sudo systemctl reload caddy
-journalctl -u nyttigd -o cat        # expect "mutual TLS enabled" with addr :9090
+journalctl -u nyttigd -o cat        # expect "database opened" with sqlite_version,
+                                    # and "mutual TLS enabled" with addr :9090
 ```
 
 Also harden SSH (`PasswordAuthentication no`, `PermitRootLogin no`) and
@@ -195,6 +198,25 @@ nyttig -socket nyttig.example.com:9090 \
 ```
 
 The CLI subcommands (`add-source`, `add-tag-rule`, …) take the same flags.
+
+## SQLite
+
+The release binaries do not carry their own SQLite. They are built with
+`-tags libsqlite3` and use the server's `libsqlite3-0` package (3.46.1 on
+Debian 13), so SQLite security fixes arrive through `apt` and
+`unattended-upgrades` like glibc's do, without a new nyttig release. Two
+things follow from that:
+
+- A library upgrade only takes effect in a running `nyttigd` after
+  `sudo systemctl restart nyttigd`. `unattended-upgrades` does not restart
+  it; install `needrestart` if you want that automated.
+- The library must have the FTS5 extension. Debian's does. `nyttigd` checks
+  at startup and refuses to start with a message naming the problem rather
+  than failing in the first migration.
+
+The `database opened` line in the journal shows the version in use as
+`sqlite_version`. A development build (`-tags sqlite_fts5`, see the main
+README) compiles go-sqlite3's bundled SQLite into the binary instead.
 
 ## Upgrading
 

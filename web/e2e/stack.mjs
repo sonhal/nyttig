@@ -31,7 +31,7 @@ let binDir = process.env.NYTTIG_BIN_DIR;
 if (!binDir) {
 	binDir = path.join(tmp, 'bin');
 	console.log('stack: building nyttigd and nyttig-api');
-	execFileSync('go', ['build', '-o', binDir + '/', './cmd/nyttigd', './cmd/nyttig-api'], {
+	execFileSync('go', ['build', '-tags', 'sqlite_fts5', '-o', binDir + '/', './cmd/nyttigd', './cmd/nyttig-api'], {
 		cwd: repo,
 		stdio: 'inherit'
 	});

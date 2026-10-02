@@ -138,7 +138,12 @@ func main() {
 		os.Exit(1)
 	}
 	defer database.Close()
-	logger.Info("database opened", "dsn", dsn)
+	sqliteVersion, err := db.SQLiteVersion(database)
+	if err != nil {
+		logger.Error("cannot read sqlite version", "error", err)
+		os.Exit(1)
+	}
+	logger.Info("database opened", "dsn", dsn, "sqlite_version", sqliteVersion)
 
 	// ── Seed from config ─────────────────────────────────────────────────
 	// Idempotently insert sources/tags/tag_rules declared in the config file.

@@ -25,7 +25,7 @@ via a **bidirectional gRPC stream**.
   `toolchain go1.26.8` as the version to build with; see [Dependencies](#dependencies))
 - TUI: **Bubble Tea** + **Lipgloss** (a custom table, not the bubbles table)
 - Wire: **Protocol Buffers (proto3)** + **gRPC** (bidi streaming)
-- Storage: **SQLite** with **FTS5** full-text search (cgo; see the vendored driver note below)
+- Storage: **SQLite** with **FTS5** full-text search (cgo via mattn/go-sqlite3; see the build-tag note under [Build, test, run](#build-test-run))
 - Feed parsing: standard library `encoding/xml` (RSS 2.0 and Atom)
 - Config: **TOML**
 - Logging: `slog` with JSON output to stderr
@@ -66,7 +66,6 @@ internal/server/fetcher/    Feed fetch/parse + GUID-based dedup; client.go build
 internal/server/tagger/     Regex-based auto-tagging engine
 internal/server/scheduler/  Per-source fetch timers; refresh/enable/disable lifecycle
 migrations/                 Copy of the migrations; the DB applies the embedded set in internal/server/db/migrations
-third_party/                Vendored, patched mattn/go-sqlite3 (see note below)
 scripts/gen-certs.sh        Generates a private CA plus server/client certs for mTLS
 .github/workflows/ci.yml    CI pipeline (see below)
 .github/dependabot.yml      Weekly grouped dependency updates
@@ -188,17 +187,17 @@ These are the checks CI runs; run them before pushing. The Lint and Test jobs
 fail on any of them.
 
 ```bash
-gofmt -l $(git ls-files '*.go' | grep -v '^third_party/')   # must print nothing
+gofmt -l $(git ls-files '*.go')      # must print nothing
 go mod tidy -diff                    # must print nothing
 go vet ./...
 golangci-lint run ./...              # CI only fails on issues new in the change; see below
-go test -race -shuffle=on ./...      # CI runs the race detector with random test order
+go test -race -shuffle=on -tags sqlite_fts5 ./...   # CI runs the race detector with random test order
 govulncheck ./...                    # must report no reachable vulnerabilities
 
-go build ./...                       # build everything
-go test ./internal/server/fetcher/   # run one package's tests
+go build -tags sqlite_fts5 ./...     # build everything (the tag: see the SQLite note below)
+go test -tags sqlite_fts5 ./internal/server/fetcher/   # run one package's tests
 
-go run ./cmd/nyttigd --socket /tmp/nyttig.sock --config ./sample_config.toml --log-level debug
+go run -tags sqlite_fts5 ./cmd/nyttigd --socket /tmp/nyttig.sock --config ./sample_config.toml --log-level debug
 go run ./cmd/nyttig                  # launch the TUI (daemon must be running)
 go run ./cmd/nyttig list-sources     # CLI subcommand
 go run ./cmd/nyttig-api --origin http://localhost:5173   # web API, for "pnpm dev" in web/ (daemon must be running)
@@ -239,16 +238,27 @@ pnpm dev                             # Vite dev server on :5173, /api proxied to
   install scripts unless listed in `onlyBuiltDependencies`
   (`web/pnpm-workspace.yaml`), which also sets `minimumReleaseAge`.
 
-A C compiler is required: SQLite is built with cgo, and so is the race
-detector. `golangci-lint` must be built with Go 1.26 or newer, or it refuses to
-load the module.
+A C compiler is required: the SQLite driver (`mattn/go-sqlite3`) is cgo, and
+so is the race detector. `golangci-lint` must be built with Go 1.26 or newer,
+or it refuses to load the module.
 
-Note: `go.mod` has a `replace` directive pointing `mattn/go-sqlite3` at
-`./third_party/...`. Keep that vendored copy in place; builds depend on it.
-It carries one local addition, `sqlite3_opt_fts5_default.go`, which enables
-FTS5 without the `sqlite_fts5` build tag. The schema needs FTS5, so keep that
-file if you ever update the vendored driver. The `replace` directive is also
-why `go install github.com/sonhal/nyttig/cmd/...@latest` doesn't work.
+**SQLite and build tags.** The schema needs SQLite's FTS5 extension, and a
+build tag decides which SQLite library a binary gets:
+
+- `-tags sqlite_fts5` compiles the driver's bundled SQLite with FTS5. Use it
+  for development, `go test`, and the e2e stack (`web/e2e/stack.mjs` passes
+  it). It is the only tag the bundled copy needs.
+- `-tags libsqlite3` links the system's `libsqlite3` instead, so the server's
+  package manager keeps SQLite patched without a rebuild. The release Build
+  job uses it (and installs `libsqlite3-dev` first). Debian's and Ubuntu's
+  libraries are built with FTS5.
+- With neither tag the binary builds, but `db.Open` fails at startup with
+  `db.ErrNoFTS5` (the bundled SQLite is then compiled without FTS5). The check
+  reads `pragma_compile_options`, so it covers a system library without FTS5
+  too. `go vet`, golangci-lint and govulncheck don't need either tag.
+
+nyttigd logs the library's version at startup (`sqlite_version` in the
+`database opened` line).
 
 ### CI
 
@@ -260,9 +270,9 @@ container), with the Go version taken from `go.mod`:
 |---|---|
 | Lint | gofmt, `go mod tidy -diff`, `go vet`, golangci-lint |
 | Generated code | `buf generate` leaves `internal/proto` unchanged |
-| Test | `go test -race -shuffle=on` with coverage |
+| Test | `go test -race -shuffle=on -tags sqlite_fts5` with coverage |
 | Web | `pnpm install --frozen-lockfile`, svelte-check, vitest, vite build, Playwright end-to-end; uploads the app build (`nyttig-web`) |
-| Build | Builds the three binaries in Debian trixie (glibc of the servers, see `deploy/README.md`); runs only after Lint, Test and Web pass; stamps a `v*` tag into `internal/version.Version` with `-ldflags -X` (other builds report the git pseudo-version); uploads `nyttig-linux-amd64` |
+| Build | Builds the three binaries in Debian trixie (glibc and libsqlite3 of the servers, see `deploy/README.md`) with `-tags libsqlite3`, so nyttigd links the system SQLite; checks that with `ldd`; runs only after Lint, Test and Web pass; stamps a `v*` tag into `internal/version.Version` with `-ldflags -X` (other builds report the git pseudo-version); uploads `nyttig-linux-amd64` |
 | Vulnerability check | `govulncheck ./...` against the code paths the binaries call |
 | Release | `v*` tags only, after every other job passes: bundles the binaries, the app build, `deploy/` and `sample_config.toml` into `nyttig-<tag>-linux-amd64.tar.gz`, adds `SHA256SUMS` and a build provenance attestation, and publishes a GitHub Release (a tag with a hyphen is a pre-release) |
 
@@ -273,10 +283,11 @@ container), with the Go version taken from `go.mod`:
 - The govulncheck job sets `go-version-input: ""`. Without it the action uses
   the latest stable Go instead of `go.mod`'s, so it would scan a different
   standard library from the one the binaries are built with.
-- The Build job's `golang:1.26-trixie` image only supplies Debian's glibc and
-  gcc; the Go version still comes from `go.mod`'s `toolchain` line. Change
-  the image when the servers move to a newer Debian release, and never to a
-  newer one than they run: a cgo binary needs the glibc it was built against
+- The Build job's `golang:1.26-trixie` image only supplies Debian's glibc,
+  gcc and `libsqlite3-dev`; the Go version still comes from `go.mod`'s
+  `toolchain` line. Change the image when the servers move to a newer Debian
+  release, and never to a newer one than they run: a cgo binary needs the
+  glibc (and, with `-tags libsqlite3`, the libsqlite3) it was built against
   or newer.
 
 ### Regenerating protobuf code
@@ -328,10 +339,10 @@ pattern for new update RPCs rather than treating zero values as "unset".
 - **gRPC** is reachable from the network in `nyttigd`, so its advisories
   matter. Keep it on a release govulncheck reports clean.
 - **Dependabot** opens weekly grouped PRs for Go modules, GitHub Actions and
-  the web app's npm packages (`/web`).
-  It ignores `github.com/mattn/go-sqlite3`, because the `replace` directive means
-  a version bump would change nothing that gets built. Update the vendored copy
-  in `third_party/` by hand instead, keeping the FTS5 file.
+  the web app's npm packages (`/web`). A bump of `github.com/mattn/go-sqlite3`
+  changes the bundled SQLite that `-tags sqlite_fts5` builds compile in;
+  release builds (`-tags libsqlite3`) only get the Go binding. The Test job
+  exercises the bundled copy, the Build job the system library.
 
 ## Conventions
 
