@@ -10,6 +10,7 @@ import (
 
 	pb "github.com/sonhal/nyttig/internal/proto/nyttig/v1"
 	"github.com/sonhal/nyttig/internal/server/fetcher"
+	"github.com/sonhal/nyttig/internal/since"
 )
 
 // Input limits for values that clients send to the daemon. The daemon is the
@@ -186,8 +187,8 @@ func isUniqueViolation(err error) bool {
 }
 
 // validateViewFilter checks the filter of a saved view: sort is "", "newest"
-// or "oldest", the search text is short and free of control characters, and
-// the IDs are not negative (0 = not set). Whether the source and tag exist
+// or "oldest", the search text is short and free of control characters, since
+// is empty or a window such as 7d, and the IDs are not negative (0 = not set). Whether the source and tag exist
 // is the handler's check. A nil filter is the empty filter.
 func validateViewFilter(f *pb.ViewFilter) error {
 	if f == nil {
@@ -209,6 +210,11 @@ func validateViewFilter(f *pb.ViewFilter) error {
 	}
 	if f.TagId < 0 {
 		return fmt.Errorf("tag_id must not be negative, got %d", f.TagId)
+	}
+	if f.Since != "" {
+		if _, err := since.Parse(f.Since); err != nil {
+			return err
+		}
 	}
 	return nil
 }

@@ -1041,6 +1041,7 @@ type ViewFilter struct {
 	TagId         int64                  `protobuf:"varint,3,opt,name=tag_id,json=tagId,proto3" json:"tag_id,omitempty"`
 	Sort          string                 `protobuf:"bytes,4,opt,name=sort,proto3" json:"sort,omitempty"` // "newest" (default) or "oldest"
 	UnviewedOnly  bool                   `protobuf:"varint,5,opt,name=unviewed_only,json=unviewedOnly,proto3" json:"unviewed_only,omitempty"`
+	Since         string                 `protobuf:"bytes,6,opt,name=since,proto3" json:"since,omitempty"` // rolling window: "24h", "7d", "2w", "1mo", "1y"; "" = no window
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1108,6 +1109,13 @@ func (x *ViewFilter) GetUnviewedOnly() bool {
 		return x.UnviewedOnly
 	}
 	return false
+}
+
+func (x *ViewFilter) GetSince() string {
+	if x != nil {
+		return x.Since
+	}
+	return ""
 }
 
 type SavedView struct {
@@ -1745,6 +1753,7 @@ type SearchRequest struct {
 	Sort          string                 `protobuf:"bytes,6,opt,name=sort,proto3" json:"sort,omitempty"`                          // newest, oldest; default newest
 	UnviewedOnly  bool                   `protobuf:"varint,7,opt,name=unviewed_only,json=unviewedOnly,proto3" json:"unviewed_only,omitempty"`
 	TagExact      bool                   `protobuf:"varint,8,opt,name=tag_exact,json=tagExact,proto3" json:"tag_exact,omitempty"` // match tag_id only, not its descendants
+	After         *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=after,proto3" json:"after,omitempty"`                        // only items dated at or after this (published, else fetched); unset = no window
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1833,6 +1842,13 @@ func (x *SearchRequest) GetTagExact() bool {
 		return x.TagExact
 	}
 	return false
+}
+
+func (x *SearchRequest) GetAfter() *timestamppb.Timestamp {
+	if x != nil {
+		return x.After
+	}
+	return nil
 }
 
 type SearchResponse struct {
@@ -2005,6 +2021,7 @@ type StreamFilter struct {
 	Sort          string                 `protobuf:"bytes,4,opt,name=sort,proto3" json:"sort,omitempty"`                          // newest, oldest; default newest
 	Limit         int32                  `protobuf:"varint,5,opt,name=limit,proto3" json:"limit,omitempty"`
 	UnviewedOnly  bool                   `protobuf:"varint,6,opt,name=unviewed_only,json=unviewedOnly,proto3" json:"unviewed_only,omitempty"`
+	After         *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=after,proto3" json:"after,omitempty"` // only items dated at or after this (published, else fetched); unset = no window
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2079,6 +2096,13 @@ func (x *StreamFilter) GetUnviewedOnly() bool {
 		return x.UnviewedOnly
 	}
 	return false
+}
+
+func (x *StreamFilter) GetAfter() *timestamppb.Timestamp {
+	if x != nil {
+		return x.After
+	}
+	return nil
 }
 
 type ServerMessage struct {
@@ -2356,14 +2380,15 @@ const file_nyttig_v1_nyttig_proto_rawDesc = "" +
 	"\x10RemoveTagRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\x03R\x02id\"6\n" +
 	"\x10ListTagsResponse\x12\"\n" +
-	"\x04tags\x18\x01 \x03(\v2\x0e.nyttig.v1.TagR\x04tags\"\x91\x01\n" +
+	"\x04tags\x18\x01 \x03(\v2\x0e.nyttig.v1.TagR\x04tags\"\xa7\x01\n" +
 	"\n" +
 	"ViewFilter\x12\x16\n" +
 	"\x06search\x18\x01 \x01(\tR\x06search\x12\x1b\n" +
 	"\tsource_id\x18\x02 \x01(\x03R\bsourceId\x12\x15\n" +
 	"\x06tag_id\x18\x03 \x01(\x03R\x05tagId\x12\x12\n" +
 	"\x04sort\x18\x04 \x01(\tR\x04sort\x12#\n" +
-	"\runviewed_only\x18\x05 \x01(\bR\funviewedOnly\"\x96\x01\n" +
+	"\runviewed_only\x18\x05 \x01(\bR\funviewedOnly\x12\x14\n" +
+	"\x05since\x18\x06 \x01(\tR\x05since\"\x96\x01\n" +
 	"\tSavedView\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\x03R\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12-\n" +
@@ -2404,7 +2429,7 @@ const file_nyttig_v1_nyttig_proto_rawDesc = "" +
 	"\x05limit\x18\x04 \x01(\x05R\x05limit\"V\n" +
 	"\x13TestTagRuleResponse\x12%\n" +
 	"\x05items\x18\x01 \x03(\v2\x0f.nyttig.v1.ItemR\x05items\x12\x18\n" +
-	"\ascanned\x18\x02 \x01(\x05R\ascanned\"\xdd\x01\n" +
+	"\ascanned\x18\x02 \x01(\x05R\ascanned\"\x8f\x02\n" +
 	"\rSearchRequest\x12\x14\n" +
 	"\x05query\x18\x01 \x01(\tR\x05query\x12\x1b\n" +
 	"\tsource_id\x18\x02 \x01(\x03R\bsourceId\x12\x15\n" +
@@ -2413,7 +2438,8 @@ const file_nyttig_v1_nyttig_proto_rawDesc = "" +
 	"\x06offset\x18\x05 \x01(\x05R\x06offset\x12\x12\n" +
 	"\x04sort\x18\x06 \x01(\tR\x04sort\x12#\n" +
 	"\runviewed_only\x18\a \x01(\bR\funviewedOnly\x12\x1b\n" +
-	"\ttag_exact\x18\b \x01(\bR\btagExact\"M\n" +
+	"\ttag_exact\x18\b \x01(\bR\btagExact\x120\n" +
+	"\x05after\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\x05after\"M\n" +
 	"\x0eSearchResponse\x12%\n" +
 	"\x05items\x18\x01 \x03(\v2\x0f.nyttig.v1.ItemR\x05items\x12\x14\n" +
 	"\x05total\x18\x02 \x01(\x05R\x05total\".\n" +
@@ -2421,14 +2447,15 @@ const file_nyttig_v1_nyttig_proto_rawDesc = "" +
 	"\bitem_ids\x18\x01 \x03(\x03R\aitemIds\"I\n" +
 	"\rClientMessage\x121\n" +
 	"\x06filter\x18\x01 \x01(\v2\x17.nyttig.v1.StreamFilterH\x00R\x06filterB\x05\n" +
-	"\x03msg\"\xa9\x01\n" +
+	"\x03msg\"\xdb\x01\n" +
 	"\fStreamFilter\x12\x1b\n" +
 	"\tsource_id\x18\x01 \x01(\x03R\bsourceId\x12\x15\n" +
 	"\x06tag_id\x18\x02 \x01(\x03R\x05tagId\x12\x16\n" +
 	"\x06search\x18\x03 \x01(\tR\x06search\x12\x12\n" +
 	"\x04sort\x18\x04 \x01(\tR\x04sort\x12\x14\n" +
 	"\x05limit\x18\x05 \x01(\x05R\x05limit\x12#\n" +
-	"\runviewed_only\x18\x06 \x01(\bR\funviewedOnly\"\x9a\x01\n" +
+	"\runviewed_only\x18\x06 \x01(\bR\funviewedOnly\x120\n" +
+	"\x05after\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\x05after\"\x9a\x01\n" +
 	"\rServerMessage\x12%\n" +
 	"\x04item\x18\x01 \x01(\v2\x0f.nyttig.v1.ItemH\x00R\x04item\x12(\n" +
 	"\x05reset\x18\x02 \x01(\v2\x10.nyttig.v1.ResetH\x00R\x05reset\x121\n" +
@@ -2528,58 +2555,60 @@ var file_nyttig_v1_nyttig_proto_depIdxs = []int32{
 	15, // 11: nyttig.v1.ListSavedViewsResponse.views:type_name -> nyttig.v1.SavedView
 	3,  // 12: nyttig.v1.ListTagRulesResponse.rules:type_name -> nyttig.v1.TagRule
 	1,  // 13: nyttig.v1.TestTagRuleResponse.items:type_name -> nyttig.v1.Item
-	1,  // 14: nyttig.v1.SearchResponse.items:type_name -> nyttig.v1.Item
-	30, // 15: nyttig.v1.ClientMessage.filter:type_name -> nyttig.v1.StreamFilter
-	1,  // 16: nyttig.v1.ServerMessage.item:type_name -> nyttig.v1.Item
-	32, // 17: nyttig.v1.ServerMessage.reset:type_name -> nyttig.v1.Reset
-	33, // 18: nyttig.v1.ServerMessage.complete:type_name -> nyttig.v1.Complete
-	4,  // 19: nyttig.v1.Nyttig.AddSource:input_type -> nyttig.v1.AddSourceRequest
-	5,  // 20: nyttig.v1.Nyttig.RemoveSource:input_type -> nyttig.v1.RemoveSourceRequest
-	6,  // 21: nyttig.v1.Nyttig.UpdateSource:input_type -> nyttig.v1.UpdateSourceRequest
-	35, // 22: nyttig.v1.Nyttig.ListSources:input_type -> google.protobuf.Empty
-	8,  // 23: nyttig.v1.Nyttig.RefreshSource:input_type -> nyttig.v1.RefreshSourceRequest
-	9,  // 24: nyttig.v1.Nyttig.AddTag:input_type -> nyttig.v1.AddTagRequest
-	11, // 25: nyttig.v1.Nyttig.UpdateTag:input_type -> nyttig.v1.UpdateTagRequest
-	12, // 26: nyttig.v1.Nyttig.RemoveTag:input_type -> nyttig.v1.RemoveTagRequest
-	35, // 27: nyttig.v1.Nyttig.ListTags:input_type -> google.protobuf.Empty
-	21, // 28: nyttig.v1.Nyttig.AddTagRule:input_type -> nyttig.v1.AddTagRuleRequest
-	22, // 29: nyttig.v1.Nyttig.RemoveTagRule:input_type -> nyttig.v1.RemoveTagRuleRequest
-	35, // 30: nyttig.v1.Nyttig.ListTagRules:input_type -> google.protobuf.Empty
-	24, // 31: nyttig.v1.Nyttig.TestTagRule:input_type -> nyttig.v1.TestTagRuleRequest
-	16, // 32: nyttig.v1.Nyttig.AddSavedView:input_type -> nyttig.v1.AddSavedViewRequest
-	17, // 33: nyttig.v1.Nyttig.UpdateSavedView:input_type -> nyttig.v1.UpdateSavedViewRequest
-	18, // 34: nyttig.v1.Nyttig.RemoveSavedView:input_type -> nyttig.v1.RemoveSavedViewRequest
-	35, // 35: nyttig.v1.Nyttig.ListSavedViews:input_type -> google.protobuf.Empty
-	19, // 36: nyttig.v1.Nyttig.ReorderSavedViews:input_type -> nyttig.v1.ReorderSavedViewsRequest
-	29, // 37: nyttig.v1.Nyttig.StreamItems:input_type -> nyttig.v1.ClientMessage
-	26, // 38: nyttig.v1.Nyttig.Search:input_type -> nyttig.v1.SearchRequest
-	28, // 39: nyttig.v1.Nyttig.MarkViewed:input_type -> nyttig.v1.MarkViewedRequest
-	0,  // 40: nyttig.v1.Nyttig.AddSource:output_type -> nyttig.v1.Source
-	35, // 41: nyttig.v1.Nyttig.RemoveSource:output_type -> google.protobuf.Empty
-	0,  // 42: nyttig.v1.Nyttig.UpdateSource:output_type -> nyttig.v1.Source
-	7,  // 43: nyttig.v1.Nyttig.ListSources:output_type -> nyttig.v1.ListSourcesResponse
-	35, // 44: nyttig.v1.Nyttig.RefreshSource:output_type -> google.protobuf.Empty
-	2,  // 45: nyttig.v1.Nyttig.AddTag:output_type -> nyttig.v1.Tag
-	2,  // 46: nyttig.v1.Nyttig.UpdateTag:output_type -> nyttig.v1.Tag
-	35, // 47: nyttig.v1.Nyttig.RemoveTag:output_type -> google.protobuf.Empty
-	13, // 48: nyttig.v1.Nyttig.ListTags:output_type -> nyttig.v1.ListTagsResponse
-	3,  // 49: nyttig.v1.Nyttig.AddTagRule:output_type -> nyttig.v1.TagRule
-	35, // 50: nyttig.v1.Nyttig.RemoveTagRule:output_type -> google.protobuf.Empty
-	23, // 51: nyttig.v1.Nyttig.ListTagRules:output_type -> nyttig.v1.ListTagRulesResponse
-	25, // 52: nyttig.v1.Nyttig.TestTagRule:output_type -> nyttig.v1.TestTagRuleResponse
-	15, // 53: nyttig.v1.Nyttig.AddSavedView:output_type -> nyttig.v1.SavedView
-	15, // 54: nyttig.v1.Nyttig.UpdateSavedView:output_type -> nyttig.v1.SavedView
-	35, // 55: nyttig.v1.Nyttig.RemoveSavedView:output_type -> google.protobuf.Empty
-	20, // 56: nyttig.v1.Nyttig.ListSavedViews:output_type -> nyttig.v1.ListSavedViewsResponse
-	20, // 57: nyttig.v1.Nyttig.ReorderSavedViews:output_type -> nyttig.v1.ListSavedViewsResponse
-	31, // 58: nyttig.v1.Nyttig.StreamItems:output_type -> nyttig.v1.ServerMessage
-	27, // 59: nyttig.v1.Nyttig.Search:output_type -> nyttig.v1.SearchResponse
-	35, // 60: nyttig.v1.Nyttig.MarkViewed:output_type -> google.protobuf.Empty
-	40, // [40:61] is the sub-list for method output_type
-	19, // [19:40] is the sub-list for method input_type
-	19, // [19:19] is the sub-list for extension type_name
-	19, // [19:19] is the sub-list for extension extendee
-	0,  // [0:19] is the sub-list for field type_name
+	34, // 14: nyttig.v1.SearchRequest.after:type_name -> google.protobuf.Timestamp
+	1,  // 15: nyttig.v1.SearchResponse.items:type_name -> nyttig.v1.Item
+	30, // 16: nyttig.v1.ClientMessage.filter:type_name -> nyttig.v1.StreamFilter
+	34, // 17: nyttig.v1.StreamFilter.after:type_name -> google.protobuf.Timestamp
+	1,  // 18: nyttig.v1.ServerMessage.item:type_name -> nyttig.v1.Item
+	32, // 19: nyttig.v1.ServerMessage.reset:type_name -> nyttig.v1.Reset
+	33, // 20: nyttig.v1.ServerMessage.complete:type_name -> nyttig.v1.Complete
+	4,  // 21: nyttig.v1.Nyttig.AddSource:input_type -> nyttig.v1.AddSourceRequest
+	5,  // 22: nyttig.v1.Nyttig.RemoveSource:input_type -> nyttig.v1.RemoveSourceRequest
+	6,  // 23: nyttig.v1.Nyttig.UpdateSource:input_type -> nyttig.v1.UpdateSourceRequest
+	35, // 24: nyttig.v1.Nyttig.ListSources:input_type -> google.protobuf.Empty
+	8,  // 25: nyttig.v1.Nyttig.RefreshSource:input_type -> nyttig.v1.RefreshSourceRequest
+	9,  // 26: nyttig.v1.Nyttig.AddTag:input_type -> nyttig.v1.AddTagRequest
+	11, // 27: nyttig.v1.Nyttig.UpdateTag:input_type -> nyttig.v1.UpdateTagRequest
+	12, // 28: nyttig.v1.Nyttig.RemoveTag:input_type -> nyttig.v1.RemoveTagRequest
+	35, // 29: nyttig.v1.Nyttig.ListTags:input_type -> google.protobuf.Empty
+	21, // 30: nyttig.v1.Nyttig.AddTagRule:input_type -> nyttig.v1.AddTagRuleRequest
+	22, // 31: nyttig.v1.Nyttig.RemoveTagRule:input_type -> nyttig.v1.RemoveTagRuleRequest
+	35, // 32: nyttig.v1.Nyttig.ListTagRules:input_type -> google.protobuf.Empty
+	24, // 33: nyttig.v1.Nyttig.TestTagRule:input_type -> nyttig.v1.TestTagRuleRequest
+	16, // 34: nyttig.v1.Nyttig.AddSavedView:input_type -> nyttig.v1.AddSavedViewRequest
+	17, // 35: nyttig.v1.Nyttig.UpdateSavedView:input_type -> nyttig.v1.UpdateSavedViewRequest
+	18, // 36: nyttig.v1.Nyttig.RemoveSavedView:input_type -> nyttig.v1.RemoveSavedViewRequest
+	35, // 37: nyttig.v1.Nyttig.ListSavedViews:input_type -> google.protobuf.Empty
+	19, // 38: nyttig.v1.Nyttig.ReorderSavedViews:input_type -> nyttig.v1.ReorderSavedViewsRequest
+	29, // 39: nyttig.v1.Nyttig.StreamItems:input_type -> nyttig.v1.ClientMessage
+	26, // 40: nyttig.v1.Nyttig.Search:input_type -> nyttig.v1.SearchRequest
+	28, // 41: nyttig.v1.Nyttig.MarkViewed:input_type -> nyttig.v1.MarkViewedRequest
+	0,  // 42: nyttig.v1.Nyttig.AddSource:output_type -> nyttig.v1.Source
+	35, // 43: nyttig.v1.Nyttig.RemoveSource:output_type -> google.protobuf.Empty
+	0,  // 44: nyttig.v1.Nyttig.UpdateSource:output_type -> nyttig.v1.Source
+	7,  // 45: nyttig.v1.Nyttig.ListSources:output_type -> nyttig.v1.ListSourcesResponse
+	35, // 46: nyttig.v1.Nyttig.RefreshSource:output_type -> google.protobuf.Empty
+	2,  // 47: nyttig.v1.Nyttig.AddTag:output_type -> nyttig.v1.Tag
+	2,  // 48: nyttig.v1.Nyttig.UpdateTag:output_type -> nyttig.v1.Tag
+	35, // 49: nyttig.v1.Nyttig.RemoveTag:output_type -> google.protobuf.Empty
+	13, // 50: nyttig.v1.Nyttig.ListTags:output_type -> nyttig.v1.ListTagsResponse
+	3,  // 51: nyttig.v1.Nyttig.AddTagRule:output_type -> nyttig.v1.TagRule
+	35, // 52: nyttig.v1.Nyttig.RemoveTagRule:output_type -> google.protobuf.Empty
+	23, // 53: nyttig.v1.Nyttig.ListTagRules:output_type -> nyttig.v1.ListTagRulesResponse
+	25, // 54: nyttig.v1.Nyttig.TestTagRule:output_type -> nyttig.v1.TestTagRuleResponse
+	15, // 55: nyttig.v1.Nyttig.AddSavedView:output_type -> nyttig.v1.SavedView
+	15, // 56: nyttig.v1.Nyttig.UpdateSavedView:output_type -> nyttig.v1.SavedView
+	35, // 57: nyttig.v1.Nyttig.RemoveSavedView:output_type -> google.protobuf.Empty
+	20, // 58: nyttig.v1.Nyttig.ListSavedViews:output_type -> nyttig.v1.ListSavedViewsResponse
+	20, // 59: nyttig.v1.Nyttig.ReorderSavedViews:output_type -> nyttig.v1.ListSavedViewsResponse
+	31, // 60: nyttig.v1.Nyttig.StreamItems:output_type -> nyttig.v1.ServerMessage
+	27, // 61: nyttig.v1.Nyttig.Search:output_type -> nyttig.v1.SearchResponse
+	35, // 62: nyttig.v1.Nyttig.MarkViewed:output_type -> google.protobuf.Empty
+	42, // [42:63] is the sub-list for method output_type
+	21, // [21:42] is the sub-list for method input_type
+	21, // [21:21] is the sub-list for extension type_name
+	21, // [21:21] is the sub-list for extension extendee
+	0,  // [0:21] is the sub-list for field type_name
 }
 
 func init() { file_nyttig_v1_nyttig_proto_init() }
