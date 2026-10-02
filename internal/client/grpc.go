@@ -364,6 +364,62 @@ func (c *Client) ListTags(ctx context.Context) (*pb.ListTagsResponse, error) {
 	return client.ListTags(ctx, &emptypb.Empty{})
 }
 
+// AddSavedView creates a saved view.
+func (c *Client) AddSavedView(ctx context.Context, req *pb.AddSavedViewRequest) (*pb.SavedView, error) {
+	if err := c.ensureConn(ctx); err != nil {
+		return nil, err
+	}
+	c.mu.RLock()
+	client := c.grpc
+	c.mu.RUnlock()
+	return client.AddSavedView(ctx, req)
+}
+
+// UpdateSavedView changes a saved view; unset fields are unchanged.
+func (c *Client) UpdateSavedView(ctx context.Context, req *pb.UpdateSavedViewRequest) (*pb.SavedView, error) {
+	if err := c.ensureConn(ctx); err != nil {
+		return nil, err
+	}
+	c.mu.RLock()
+	client := c.grpc
+	c.mu.RUnlock()
+	return client.UpdateSavedView(ctx, req)
+}
+
+// RemoveSavedView deletes a saved view.
+func (c *Client) RemoveSavedView(ctx context.Context, id int64) error {
+	if err := c.ensureConn(ctx); err != nil {
+		return err
+	}
+	c.mu.RLock()
+	client := c.grpc
+	c.mu.RUnlock()
+	_, err := client.RemoveSavedView(ctx, &pb.RemoveSavedViewRequest{Id: id})
+	return err
+}
+
+// ListSavedViews returns every saved view in display order.
+func (c *Client) ListSavedViews(ctx context.Context) (*pb.ListSavedViewsResponse, error) {
+	if err := c.ensureConn(ctx); err != nil {
+		return nil, err
+	}
+	c.mu.RLock()
+	client := c.grpc
+	c.mu.RUnlock()
+	return client.ListSavedViews(ctx, &emptypb.Empty{})
+}
+
+// ReorderSavedViews sets the display order; ids must list every view once.
+func (c *Client) ReorderSavedViews(ctx context.Context, ids []int64) (*pb.ListSavedViewsResponse, error) {
+	if err := c.ensureConn(ctx); err != nil {
+		return nil, err
+	}
+	c.mu.RLock()
+	client := c.grpc
+	c.mu.RUnlock()
+	return client.ReorderSavedViews(ctx, &pb.ReorderSavedViewsRequest{Ids: ids})
+}
+
 // AddTagRule creates a new tag rule (regex pattern).
 func (c *Client) AddTagRule(ctx context.Context, req *pb.AddTagRuleRequest) (*pb.TagRule, error) {
 	if err := c.ensureConn(ctx); err != nil {

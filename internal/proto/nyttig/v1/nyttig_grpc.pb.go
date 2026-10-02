@@ -20,22 +20,27 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	Nyttig_AddSource_FullMethodName     = "/nyttig.v1.Nyttig/AddSource"
-	Nyttig_RemoveSource_FullMethodName  = "/nyttig.v1.Nyttig/RemoveSource"
-	Nyttig_UpdateSource_FullMethodName  = "/nyttig.v1.Nyttig/UpdateSource"
-	Nyttig_ListSources_FullMethodName   = "/nyttig.v1.Nyttig/ListSources"
-	Nyttig_RefreshSource_FullMethodName = "/nyttig.v1.Nyttig/RefreshSource"
-	Nyttig_AddTag_FullMethodName        = "/nyttig.v1.Nyttig/AddTag"
-	Nyttig_UpdateTag_FullMethodName     = "/nyttig.v1.Nyttig/UpdateTag"
-	Nyttig_RemoveTag_FullMethodName     = "/nyttig.v1.Nyttig/RemoveTag"
-	Nyttig_ListTags_FullMethodName      = "/nyttig.v1.Nyttig/ListTags"
-	Nyttig_AddTagRule_FullMethodName    = "/nyttig.v1.Nyttig/AddTagRule"
-	Nyttig_RemoveTagRule_FullMethodName = "/nyttig.v1.Nyttig/RemoveTagRule"
-	Nyttig_ListTagRules_FullMethodName  = "/nyttig.v1.Nyttig/ListTagRules"
-	Nyttig_TestTagRule_FullMethodName   = "/nyttig.v1.Nyttig/TestTagRule"
-	Nyttig_StreamItems_FullMethodName   = "/nyttig.v1.Nyttig/StreamItems"
-	Nyttig_Search_FullMethodName        = "/nyttig.v1.Nyttig/Search"
-	Nyttig_MarkViewed_FullMethodName    = "/nyttig.v1.Nyttig/MarkViewed"
+	Nyttig_AddSource_FullMethodName         = "/nyttig.v1.Nyttig/AddSource"
+	Nyttig_RemoveSource_FullMethodName      = "/nyttig.v1.Nyttig/RemoveSource"
+	Nyttig_UpdateSource_FullMethodName      = "/nyttig.v1.Nyttig/UpdateSource"
+	Nyttig_ListSources_FullMethodName       = "/nyttig.v1.Nyttig/ListSources"
+	Nyttig_RefreshSource_FullMethodName     = "/nyttig.v1.Nyttig/RefreshSource"
+	Nyttig_AddTag_FullMethodName            = "/nyttig.v1.Nyttig/AddTag"
+	Nyttig_UpdateTag_FullMethodName         = "/nyttig.v1.Nyttig/UpdateTag"
+	Nyttig_RemoveTag_FullMethodName         = "/nyttig.v1.Nyttig/RemoveTag"
+	Nyttig_ListTags_FullMethodName          = "/nyttig.v1.Nyttig/ListTags"
+	Nyttig_AddTagRule_FullMethodName        = "/nyttig.v1.Nyttig/AddTagRule"
+	Nyttig_RemoveTagRule_FullMethodName     = "/nyttig.v1.Nyttig/RemoveTagRule"
+	Nyttig_ListTagRules_FullMethodName      = "/nyttig.v1.Nyttig/ListTagRules"
+	Nyttig_TestTagRule_FullMethodName       = "/nyttig.v1.Nyttig/TestTagRule"
+	Nyttig_AddSavedView_FullMethodName      = "/nyttig.v1.Nyttig/AddSavedView"
+	Nyttig_UpdateSavedView_FullMethodName   = "/nyttig.v1.Nyttig/UpdateSavedView"
+	Nyttig_RemoveSavedView_FullMethodName   = "/nyttig.v1.Nyttig/RemoveSavedView"
+	Nyttig_ListSavedViews_FullMethodName    = "/nyttig.v1.Nyttig/ListSavedViews"
+	Nyttig_ReorderSavedViews_FullMethodName = "/nyttig.v1.Nyttig/ReorderSavedViews"
+	Nyttig_StreamItems_FullMethodName       = "/nyttig.v1.Nyttig/StreamItems"
+	Nyttig_Search_FullMethodName            = "/nyttig.v1.Nyttig/Search"
+	Nyttig_MarkViewed_FullMethodName        = "/nyttig.v1.Nyttig/MarkViewed"
 )
 
 // NyttigClient is the client API for Nyttig service.
@@ -58,6 +63,12 @@ type NyttigClient interface {
 	RemoveTagRule(ctx context.Context, in *RemoveTagRuleRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	ListTagRules(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*ListTagRulesResponse, error)
 	TestTagRule(ctx context.Context, in *TestTagRuleRequest, opts ...grpc.CallOption) (*TestTagRuleResponse, error)
+	// Saved views
+	AddSavedView(ctx context.Context, in *AddSavedViewRequest, opts ...grpc.CallOption) (*SavedView, error)
+	UpdateSavedView(ctx context.Context, in *UpdateSavedViewRequest, opts ...grpc.CallOption) (*SavedView, error)
+	RemoveSavedView(ctx context.Context, in *RemoveSavedViewRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	ListSavedViews(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*ListSavedViewsResponse, error)
+	ReorderSavedViews(ctx context.Context, in *ReorderSavedViewsRequest, opts ...grpc.CallOption) (*ListSavedViewsResponse, error)
 	// Core feed stream (bidirectional)
 	StreamItems(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[ClientMessage, ServerMessage], error)
 	// Full-text search
@@ -204,6 +215,56 @@ func (c *nyttigClient) TestTagRule(ctx context.Context, in *TestTagRuleRequest, 
 	return out, nil
 }
 
+func (c *nyttigClient) AddSavedView(ctx context.Context, in *AddSavedViewRequest, opts ...grpc.CallOption) (*SavedView, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SavedView)
+	err := c.cc.Invoke(ctx, Nyttig_AddSavedView_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nyttigClient) UpdateSavedView(ctx context.Context, in *UpdateSavedViewRequest, opts ...grpc.CallOption) (*SavedView, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SavedView)
+	err := c.cc.Invoke(ctx, Nyttig_UpdateSavedView_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nyttigClient) RemoveSavedView(ctx context.Context, in *RemoveSavedViewRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(emptypb.Empty)
+	err := c.cc.Invoke(ctx, Nyttig_RemoveSavedView_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nyttigClient) ListSavedViews(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*ListSavedViewsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListSavedViewsResponse)
+	err := c.cc.Invoke(ctx, Nyttig_ListSavedViews_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nyttigClient) ReorderSavedViews(ctx context.Context, in *ReorderSavedViewsRequest, opts ...grpc.CallOption) (*ListSavedViewsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListSavedViewsResponse)
+	err := c.cc.Invoke(ctx, Nyttig_ReorderSavedViews_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *nyttigClient) StreamItems(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[ClientMessage, ServerMessage], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	stream, err := c.cc.NewStream(ctx, &Nyttig_ServiceDesc.Streams[0], Nyttig_StreamItems_FullMethodName, cOpts...)
@@ -257,6 +318,12 @@ type NyttigServer interface {
 	RemoveTagRule(context.Context, *RemoveTagRuleRequest) (*emptypb.Empty, error)
 	ListTagRules(context.Context, *emptypb.Empty) (*ListTagRulesResponse, error)
 	TestTagRule(context.Context, *TestTagRuleRequest) (*TestTagRuleResponse, error)
+	// Saved views
+	AddSavedView(context.Context, *AddSavedViewRequest) (*SavedView, error)
+	UpdateSavedView(context.Context, *UpdateSavedViewRequest) (*SavedView, error)
+	RemoveSavedView(context.Context, *RemoveSavedViewRequest) (*emptypb.Empty, error)
+	ListSavedViews(context.Context, *emptypb.Empty) (*ListSavedViewsResponse, error)
+	ReorderSavedViews(context.Context, *ReorderSavedViewsRequest) (*ListSavedViewsResponse, error)
 	// Core feed stream (bidirectional)
 	StreamItems(grpc.BidiStreamingServer[ClientMessage, ServerMessage]) error
 	// Full-text search
@@ -311,6 +378,21 @@ func (UnimplementedNyttigServer) ListTagRules(context.Context, *emptypb.Empty) (
 }
 func (UnimplementedNyttigServer) TestTagRule(context.Context, *TestTagRuleRequest) (*TestTagRuleResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method TestTagRule not implemented")
+}
+func (UnimplementedNyttigServer) AddSavedView(context.Context, *AddSavedViewRequest) (*SavedView, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method AddSavedView not implemented")
+}
+func (UnimplementedNyttigServer) UpdateSavedView(context.Context, *UpdateSavedViewRequest) (*SavedView, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UpdateSavedView not implemented")
+}
+func (UnimplementedNyttigServer) RemoveSavedView(context.Context, *RemoveSavedViewRequest) (*emptypb.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RemoveSavedView not implemented")
+}
+func (UnimplementedNyttigServer) ListSavedViews(context.Context, *emptypb.Empty) (*ListSavedViewsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListSavedViews not implemented")
+}
+func (UnimplementedNyttigServer) ReorderSavedViews(context.Context, *ReorderSavedViewsRequest) (*ListSavedViewsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ReorderSavedViews not implemented")
 }
 func (UnimplementedNyttigServer) StreamItems(grpc.BidiStreamingServer[ClientMessage, ServerMessage]) error {
 	return status.Errorf(codes.Unimplemented, "method StreamItems not implemented")
@@ -576,6 +658,96 @@ func _Nyttig_TestTagRule_Handler(srv interface{}, ctx context.Context, dec func(
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Nyttig_AddSavedView_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AddSavedViewRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NyttigServer).AddSavedView(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Nyttig_AddSavedView_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NyttigServer).AddSavedView(ctx, req.(*AddSavedViewRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Nyttig_UpdateSavedView_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateSavedViewRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NyttigServer).UpdateSavedView(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Nyttig_UpdateSavedView_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NyttigServer).UpdateSavedView(ctx, req.(*UpdateSavedViewRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Nyttig_RemoveSavedView_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RemoveSavedViewRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NyttigServer).RemoveSavedView(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Nyttig_RemoveSavedView_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NyttigServer).RemoveSavedView(ctx, req.(*RemoveSavedViewRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Nyttig_ListSavedViews_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(emptypb.Empty)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NyttigServer).ListSavedViews(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Nyttig_ListSavedViews_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NyttigServer).ListSavedViews(ctx, req.(*emptypb.Empty))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Nyttig_ReorderSavedViews_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ReorderSavedViewsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NyttigServer).ReorderSavedViews(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Nyttig_ReorderSavedViews_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NyttigServer).ReorderSavedViews(ctx, req.(*ReorderSavedViewsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _Nyttig_StreamItems_Handler(srv interface{}, stream grpc.ServerStream) error {
 	return srv.(NyttigServer).StreamItems(&grpc.GenericServerStream[ClientMessage, ServerMessage]{ServerStream: stream})
 }
@@ -677,6 +849,26 @@ var Nyttig_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "TestTagRule",
 			Handler:    _Nyttig_TestTagRule_Handler,
+		},
+		{
+			MethodName: "AddSavedView",
+			Handler:    _Nyttig_AddSavedView_Handler,
+		},
+		{
+			MethodName: "UpdateSavedView",
+			Handler:    _Nyttig_UpdateSavedView_Handler,
+		},
+		{
+			MethodName: "RemoveSavedView",
+			Handler:    _Nyttig_RemoveSavedView_Handler,
+		},
+		{
+			MethodName: "ListSavedViews",
+			Handler:    _Nyttig_ListSavedViews_Handler,
+		},
+		{
+			MethodName: "ReorderSavedViews",
+			Handler:    _Nyttig_ReorderSavedViews_Handler,
 		},
 		{
 			MethodName: "Search",

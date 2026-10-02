@@ -1,6 +1,6 @@
 # Saved views plan
 
-Status: **planned** (no phases implemented yet).
+Status: **phases 1–2 implemented, not yet merged** (the backend: migration, db layer, RPCs, client wrapper). Phases 3–7 are planned.
 
 Saved views are persistent, named feed filters, like Linear's views. You can
 bring one up with a key or a tab instead of retyping
@@ -235,4 +235,11 @@ so leave it to CI.
 
 ## Deviations from this plan
 
-None yet.
+- The migration also creates `idx_saved_views_source_id` and
+  `idx_saved_views_tag_id`, so `ON DELETE SET NULL` and
+  `CountViewsUsing*` don't scan the table.
+- Adding a view past the cap of 100 is `FailedPrecondition` (nyttig-api maps
+  it to 400), a code the plan left open.
+- `CountViewsUsing(sourceID|tagID)` is two functions,
+  `CountViewsUsingSource` and `CountViewsUsingTag`.
+- A new view's position is `max(position)+1`, with the first at 0.

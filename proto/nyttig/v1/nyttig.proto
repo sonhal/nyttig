@@ -126,6 +126,54 @@ message ListTagsResponse {
     repeated Tag tags = 1;
 }
 
+// ── Saved views ─────────────────────────────────────────────
+
+// ViewFilter is the feed filter a saved view holds. Zero values mean "not
+// filtered": source_id/tag_id 0 = any, sort "" = newest.
+message ViewFilter {
+    string search = 1;
+    int64 source_id = 2;
+    int64 tag_id = 3;
+    string sort = 4;          // "newest" (default) or "oldest"
+    bool unviewed_only = 5;
+}
+
+message SavedView {
+    int64 id = 1;
+    string name = 2;
+    ViewFilter filter = 3;
+    bool favorite = 4;
+    int32 position = 5;
+}
+
+message AddSavedViewRequest {
+    string name = 1;
+    ViewFilter filter = 2;
+    bool favorite = 3;
+}
+
+// Unset fields are unchanged. A filter that is set replaces the whole saved
+// filter.
+message UpdateSavedViewRequest {
+    int64 id = 1;
+    optional string name = 2;
+    ViewFilter filter = 3;
+    optional bool favorite = 4;
+}
+
+message RemoveSavedViewRequest {
+    int64 id = 1;
+}
+
+// ids must list every saved view exactly once, in the new order.
+message ReorderSavedViewsRequest {
+    repeated int64 ids = 1;
+}
+
+message ListSavedViewsResponse {
+    repeated SavedView views = 1;
+}
+
 // ── Tag rules ───────────────────────────────────────────────
 
 message AddTagRuleRequest {
@@ -231,6 +279,13 @@ service Nyttig {
     rpc RemoveTagRule(RemoveTagRuleRequest) returns (google.protobuf.Empty);
     rpc ListTagRules(google.protobuf.Empty) returns (ListTagRulesResponse);
     rpc TestTagRule(TestTagRuleRequest) returns (TestTagRuleResponse);
+
+    // Saved views
+    rpc AddSavedView(AddSavedViewRequest) returns (SavedView);
+    rpc UpdateSavedView(UpdateSavedViewRequest) returns (SavedView);
+    rpc RemoveSavedView(RemoveSavedViewRequest) returns (google.protobuf.Empty);
+    rpc ListSavedViews(google.protobuf.Empty) returns (ListSavedViewsResponse);
+    rpc ReorderSavedViews(ReorderSavedViewsRequest) returns (ListSavedViewsResponse);
 
     // Core feed stream (bidirectional)
     rpc StreamItems(stream ClientMessage) returns (stream ServerMessage);

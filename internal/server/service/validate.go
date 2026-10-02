@@ -7,6 +7,8 @@ import (
 	"strings"
 	"unicode"
 	"unicode/utf8"
+
+	pb "github.com/sonhal/nyttig/internal/proto/nyttig/v1"
 )
 
 // Input limits for values that clients send to the daemon. The daemon is the
@@ -20,6 +22,9 @@ const (
 	maxURLLen          = 2048
 	maxPatternLen      = 1024
 	maxTagParents      = 16
+	maxViewNameLen     = 64
+	maxViewSearchLen   = 500
+	maxSavedViews      = 100
 
 	// minRefreshSec keeps a source from being polled more than once a minute.
 	minRefreshSec = 60
@@ -155,4 +160,32 @@ func compilePattern(pattern string) (*regexp.Regexp, error) {
 // isUniqueViolation reports whether err is a SQLite UNIQUE constraint error.
 func isUniqueViolation(err error) bool {
 	return err != nil && strings.Contains(err.Error(), "UNIQUE constraint failed")
+}
+
+// validateViewFilter checks the filter of a saved view: sort is "", "newest"
+// or "oldest", the search text is short and free of control characters, and
+// the IDs are not negative (0 = not set). Whether the source and tag exist
+// is the handler's check. A nil filter is the empty filter.
+func validateViewFilter(f *pb.ViewFilter) error {
+	if f == nil {
+		return nil
+	}
+	switch f.Sort {
+	case "", "newest", "oldest":
+	default:
+		return fmt.Errorf("sort must be newest or oldest, got %q", f.Sort)
+	}
+	if utf8.RuneCountInString(f.Search) > maxViewSearchLen {
+		return fmt.Errorf("search must be at most %d characters", maxViewSearchLen)
+	}
+	if strings.IndexFunc(f.Search, unicode.IsControl) >= 0 {
+		return fmt.Errorf("search must not contain control characters")
+	}
+	if f.SourceId < 0 {
+		return fmt.Errorf("source_id must not be negative, got %d", f.SourceId)
+	}
+	if f.TagId < 0 {
+		return fmt.Errorf("tag_id must not be negative, got %d", f.TagId)
+	}
+	return nil
 }
