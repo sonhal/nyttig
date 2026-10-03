@@ -793,9 +793,9 @@ func TestParseDates_NormalizedToUTCWholeSeconds(t *testing.T) {
 	}
 	for _, tc := range rss {
 		t.Run("rss/"+tc.name, func(t *testing.T) {
-			got, err := parseRSSDate(tc.in)
+			got, err := parseDate(tc.in)
 			if err != nil {
-				t.Fatalf("parseRSSDate: %v", err)
+				t.Fatalf("parseDate: %v", err)
 			}
 			if got.Location() != time.UTC {
 				t.Errorf("location = %v, want UTC", got.Location())
@@ -815,9 +815,9 @@ func TestParseDates_NormalizedToUTCWholeSeconds(t *testing.T) {
 	}
 	for _, tc := range atom {
 		t.Run("atom/"+tc.name, func(t *testing.T) {
-			got, err := parseAtomDate(tc.in)
+			got, err := parseDate(tc.in)
 			if err != nil {
-				t.Fatalf("parseAtomDate: %v", err)
+				t.Fatalf("parseDate: %v", err)
 			}
 			if got.Location() != time.UTC {
 				t.Errorf("location = %v, want UTC", got.Location())
@@ -829,6 +829,108 @@ func TestParseDates_NormalizedToUTCWholeSeconds(t *testing.T) {
 				t.Errorf("got %v, want %v", got, want)
 			}
 		})
+	}
+}
+
+// TestParseDate_Variants covers the date shapes real feeds send besides
+// the RFC 1123 and RFC 3339 ones above. The first three are copied from the
+// feeds (captured 2026-10-03).
+func TestParseDate_Variants(t *testing.T) {
+	utc := func(y int, mo time.Month, d, h, mi, s int) time.Time {
+		return time.Date(y, mo, d, h, mi, s, 0, time.UTC)
+	}
+	cases := []struct {
+		name, in string
+		want     time.Time
+	}{
+		{"CISA two-digit year", "Fri, 02 Oct 26 12:00:00 +0000", utc(2026, time.October, 2, 12, 0, 0)},
+		{"Cisco no zone, fraction", "2026-10-02 23:18:42.0", utc(2026, time.October, 2, 23, 18, 42)},
+		{"Bluesky RSS no weekday or seconds", "26 Sep 2026 11:58 +0000", utc(2026, time.September, 26, 11, 58, 0)},
+		{"one-digit day", "Fri, 2 Oct 2026 21:01:00 GMT", utc(2026, time.October, 2, 21, 1, 0)},
+		{"no seconds", "Fri, 02 Oct 2026 21:01 +0200", utc(2026, time.October, 2, 19, 1, 0)},
+		{"offset with colon", "Fri, 02 Oct 2026 21:01:00 +02:00", utc(2026, time.October, 2, 19, 1, 0)},
+		{"UT", "Fri, 02 Oct 2026 21:01:00 UT", utc(2026, time.October, 2, 21, 1, 0)},
+		{"EDT is UTC-4", "Fri, 02 Oct 2026 21:01:00 EDT", utc(2026, time.October, 3, 1, 1, 0)},
+		{"PST is UTC-8", "Fri, 02 Jan 2026 21:01:00 PST", utc(2026, time.January, 3, 5, 1, 0)},
+		{"lower-case zone", "Fri, 02 Oct 2026 21:01:00 gmt", utc(2026, time.October, 2, 21, 1, 0)},
+		{"extra spaces", "  Fri,  02 Oct 2026   21:01:00 +0000 ", utc(2026, time.October, 2, 21, 1, 0)},
+		{"RFC 822 in an Atom feed", "Fri, 02 Oct 2026 21:01:00 +0000", utc(2026, time.October, 2, 21, 1, 0)},
+		{"ISO with a space and zone", "2026-10-02 21:01:00+02:00", utc(2026, time.October, 2, 19, 1, 0)},
+		{"date only", "2026-10-02", utc(2026, time.October, 2, 0, 0, 0)},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := parseDate(tc.in)
+			if err != nil {
+				t.Fatalf("parseDate(%q): %v", tc.in, err)
+			}
+			if got.Location() != time.UTC || got.Nanosecond() != 0 {
+				t.Errorf("got %v, want UTC with whole seconds", got)
+			}
+			if !got.Equal(tc.want) {
+				t.Errorf("parseDate(%q) = %v, want %v", tc.in, got, tc.want)
+			}
+		})
+	}
+
+	for _, in := range []string{"", "yesterday", "02/10/2026", "Fri, 32 Oct 2026 21:01:00 +0000"} {
+		if got, err := parseDate(in); err == nil {
+			t.Errorf("parseDate(%q) = %v, want an error", in, got)
+		}
+	}
+}
+
+// TestFetch_StoresVariantDates fetches an RSS feed with the date shapes
+// that used to be dropped and checks every item gets its date, and that an
+// unreadable date leaves the item without one.
+func TestFetch_StoresVariantDates(t *testing.T) {
+	database := setupDB(t)
+	defer func() { _ = database.Close() }()
+
+	feed := `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"><channel><title>t</title>
+<item><title>cisa</title><guid>a</guid><pubDate>Fri, 02 Oct 26 12:00:00 +0000</pubDate></item>
+<item><title>cisco</title><guid>b</guid><pubDate>2026-10-02 23:18:42.0</pubDate></item>
+<item><title>bsky</title><guid>c</guid><pubDate>26 Sep 2026 11:58 +0000</pubDate></item>
+<item><title>bad</title><guid>d</guid><pubDate>sometime</pubDate></item>
+</channel></rss>`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(feed))
+	}))
+	defer srv.Close()
+
+	src := insertTestSource(t, database, "dates", srv.URL)
+	res, err := Fetch(database, src)
+	if err != nil || res.FetchError != "" {
+		t.Fatalf("Fetch: %v %q", err, res.FetchError)
+	}
+
+	want := map[string]string{
+		"cisa":  "2026-10-02 12:00:00+00:00",
+		"cisco": "2026-10-02 23:18:42+00:00",
+		"bsky":  "2026-09-26 11:58:00+00:00",
+		"bad":   "",
+	}
+	rows, err := database.Query(`SELECT title, IFNULL(published, '') FROM items WHERE source_id = ?`, src.ID)
+	if err != nil {
+		t.Fatalf("query: %v", err)
+	}
+	defer func() { _ = rows.Close() }()
+	got := map[string]string{}
+	for rows.Next() {
+		var title, published string
+		if err := rows.Scan(&title, &published); err != nil {
+			t.Fatalf("scan: %v", err)
+		}
+		got[title] = published
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("rows: %v", err)
+	}
+	for title, w := range want {
+		if got[title] != w {
+			t.Errorf("%s: published = %q, want %q", title, got[title], w)
+		}
 	}
 }
 

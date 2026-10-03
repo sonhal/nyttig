@@ -82,6 +82,32 @@ test.describe('feed', () => {
 		expect(overflow).toBeLessThanOrEqual(0);
 	});
 
+	test('an item without a readable date shows its fetch time, in italics', async ({ page }) => {
+		const name = `undated-${test.info().project.name}`;
+		const headers = { Origin: BASE_URL };
+		const res = await page.request.post('/api/sources', {
+			headers,
+			data: { name, url: `${FEEDS_URL}/undated/${name}.xml`, refresh_sec: 3600 }
+		});
+		expect(res.status()).toBe(201);
+		const id = ((await res.json()) as { id: string }).id;
+		try {
+			await page.goto(`/?source=${id}`);
+			const date = (title: string) => row(page, title).locator(isMobile(page) ? '.date.short' : '.date.full');
+			const time = isMobile(page) ? /^\d\d:\d\d$/ : /^\d\d\.\d\d \d\d:\d\d$/;
+			// Cisco's zoneless date is parsed: a plain date.
+			await expect(date(`${name} cisco`)).toHaveText(time);
+			await expect(date(`${name} cisco`)).toHaveCSS('font-style', 'normal');
+			await expect(date(`${name} cisco`)).not.toHaveAttribute('title');
+			// An unreadable one falls back to the fetch time, marked as such.
+			await expect(date(`${name} unreadable`)).toHaveText(time);
+			await expect(date(`${name} unreadable`)).toHaveCSS('font-style', 'italic');
+			await expect(date(`${name} unreadable`)).toHaveAttribute('title', 'fetched; the feed gave no date');
+		} finally {
+			await page.request.delete(`/api/sources/${id}`, { headers, data: {} });
+		}
+	});
+
 	test('treats feed content as untrusted', async ({ page }) => {
 		await open(page);
 		const evil = row(page, 'Evil item');

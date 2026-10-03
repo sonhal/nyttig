@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"html"
 	"io"
+	"log/slog"
 	"net/http"
 	"regexp"
 	"strings"
@@ -86,6 +87,21 @@ type parsedEntry struct {
 	Author      string
 	GUID        string
 	Published   *time.Time
+	// BadDate is the feed's date when it could not be parsed, for the log.
+	BadDate string
+}
+
+// entryDate parses an entry's date. It returns the raw string as bad when
+// there is one and it doesn't parse.
+func entryDate(s string) (*time.Time, string) {
+	if strings.TrimSpace(s) == "" {
+		return nil, ""
+	}
+	t, err := parseDate(s)
+	if err != nil {
+		return nil, strings.TrimSpace(s)
+	}
+	return &t, ""
 }
 
 // ── FetchResult ─────────────────────────────────────────────────
@@ -202,6 +218,7 @@ func fetchInternal(database *sql.DB, src *db.Source, client doer) (*FetchResult,
 
 	// 5. Insert new items with deduplication.
 	var insertErrs []string
+	badDates, badDate := 0, ""
 	for _, entry := range entries {
 		if entry.GUID == "" && entry.Link == "" {
 			continue
@@ -238,7 +255,15 @@ func fetchInternal(database *sql.DB, src *db.Source, client doer) (*FetchResult,
 		if inserted {
 			item.ID = id
 			result.NewItems = append(result.NewItems, item)
+			if entry.BadDate != "" {
+				badDates++
+				badDate = entry.BadDate
+			}
 		}
+	}
+	// Only new items count, so a feed's unreadable dates are logged once.
+	if badDates > 0 {
+		slog.Warn("unrecognized item date", "source_id", src.ID, "items", badDates, "date", badDate)
 	}
 
 	if len(insertErrs) > 0 {
@@ -315,11 +340,7 @@ func parseRSS(body []byte) ([]parsedEntry, error) {
 			Author:      cleanText(item.Author),
 			GUID:        strings.TrimSpace(item.GUID),
 		}
-		if item.PubDate != "" {
-			if t, err := parseRSSDate(item.PubDate); err == nil {
-				entry.Published = &t
-			}
-		}
+		entry.Published, entry.BadDate = entryDate(item.PubDate)
 		entries = append(entries, entry)
 	}
 
@@ -366,11 +387,7 @@ func parseAtom(body []byte) ([]parsedEntry, error) {
 		if dateStr == "" {
 			dateStr = e.Updated
 		}
-		if dateStr != "" {
-			if t, err := parseAtomDate(dateStr); err == nil {
-				entry.Published = &t
-			}
-		}
+		entry.Published, entry.BadDate = entryDate(dateStr)
 
 		entries = append(entries, entry)
 	}
@@ -380,14 +397,54 @@ func parseAtom(body []byte) ([]parsedEntry, error) {
 
 // ── Date parsing ────────────────────────────────────────────────
 
-// rssDateFormats are the formats commonly used in RSS pubDate elements.
-var rssDateFormats = []string{
-	time.RFC1123Z, // Mon, 02 Jan 2006 15:04:05 -0700
-	time.RFC1123,  // Mon, 02 Jan 2006 15:04:05 MST
-	time.RFC822Z,  // 02 Jan 06 15:04 -0700
-	time.RFC822,   // 02 Jan 06 15:04 MST
-	"Mon, 02 Jan 2006 15:04:05 GMT",
-	"Mon, 2 Jan 2006 15:04:05 -0700",
+// Feeds write dates in many shapes, whatever their format says: RSS is
+// meant to use RFC 822 but real feeds drop the weekday or the seconds, use
+// two-digit years or send an ISO date, and Atom feeds sometimes send RFC 822.
+// Both parsers therefore accept every layout below. A date that still fails
+// leaves the item without one: it sorts last, and the date window uses its
+// fetch time.
+//
+// Examples from feeds this parser has met:
+//
+//	Fri, 02 Oct 26 12:00:00 +0000   CISA (two-digit year)
+//	26 Sep 2026 11:58 +0000         Bluesky profile RSS (no weekday, no seconds)
+//	2026-10-02 23:18:42.0           Cisco PSIRT (no zone)
+var dateLayouts = func() []string {
+	var layouts []string
+	// RFC 822 / RFC 2822 and their common variants. "2" also reads a
+	// two-digit day.
+	for _, weekday := range []string{"Mon, ", ""} {
+		for _, year := range []string{"2006", "06"} {
+			for _, clock := range []string{"15:04:05", "15:04"} {
+				for _, zone := range []string{"-0700", "-07:00", "MST"} {
+					layouts = append(layouts, weekday+"2 Jan "+year+" "+clock+" "+zone)
+				}
+			}
+		}
+	}
+	// ISO 8601 / RFC 3339. time.Parse accepts a fractional second after the
+	// seconds even where a layout has none. A date without a zone is read as
+	// UTC: Cisco's feed has none, and its newest item, captured at 00:45 UTC,
+	// was 23:18 the evening before, which rules out US zones.
+	return append(layouts,
+		time.RFC3339,
+		"2006-01-02T15:04:05",
+		"2006-01-02 15:04:05Z07:00",
+		"2006-01-02 15:04:05",
+		"2006-01-02",
+	)
+}()
+
+// rfc822Zones are the zone names RFC 822 defines. time.Parse knows a zone
+// abbreviation only if the server's local zone uses it, and otherwise reads it
+// as UTC, so "EDT" would be four hours off on a server in UTC. Other
+// abbreviations are still read that way, which is closer than no date.
+var rfc822Zones = map[string]string{
+	"UT": "+0000", "UTC": "+0000", "GMT": "+0000", "Z": "+0000",
+	"EST": "-0500", "EDT": "-0400",
+	"CST": "-0600", "CDT": "-0500",
+	"MST": "-0700", "MDT": "-0600",
+	"PST": "-0800", "PDT": "-0700",
 }
 
 // normalizeTime converts a parsed feed date to UTC and drops sub-second
@@ -400,32 +457,21 @@ func normalizeTime(t time.Time) time.Time {
 	return t.UTC().Truncate(time.Second)
 }
 
-func parseRSSDate(s string) (time.Time, error) {
-	s = strings.TrimSpace(s)
-	for _, layout := range rssDateFormats {
-		if t, err := time.Parse(layout, s); err == nil {
+// parseDate parses an RSS or Atom item date into UTC with whole seconds.
+func parseDate(s string) (time.Time, error) {
+	fields := strings.Fields(s)
+	if n := len(fields); n > 1 {
+		if off, ok := rfc822Zones[strings.ToUpper(fields[n-1])]; ok {
+			fields[n-1] = off
+		}
+	}
+	norm := strings.Join(fields, " ")
+	for _, layout := range dateLayouts {
+		if t, err := time.Parse(layout, norm); err == nil {
 			return normalizeTime(t), nil
 		}
 	}
-	return time.Time{}, fmt.Errorf("unrecognized RSS date %q", s)
-}
-
-// atomDateFormats are the formats commonly used in Atom date elements.
-var atomDateFormats = []string{
-	time.RFC3339,
-	time.RFC3339Nano,
-	"2006-01-02T15:04:05",
-	"2006-01-02",
-}
-
-func parseAtomDate(s string) (time.Time, error) {
-	s = strings.TrimSpace(s)
-	for _, layout := range atomDateFormats {
-		if t, err := time.Parse(layout, s); err == nil {
-			return normalizeTime(t), nil
-		}
-	}
-	return time.Time{}, fmt.Errorf("unrecognized Atom date %q", s)
+	return time.Time{}, fmt.Errorf("unrecognized date %q", strings.TrimSpace(s))
 }
 
 // ── HTML sanitization ───────────────────────────────────────────

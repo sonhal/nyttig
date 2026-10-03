@@ -55,8 +55,13 @@
 	const desc = $derived(htmlToText(item.description));
 	const domain = $derived(domainOf(item.link));
 	const relative = $derived(timeMode === 'relative');
-	const dateFull = $derived(relative ? formatRelative(item.published, now) : formatDate(item.published));
-	const dateShort = $derived(relative ? formatRelative(item.published, now, true) : formatTime(item.published));
+	// Without a published date (the feed gave none, or one the daemon could
+	// not read) the fetch time is shown instead, in italics.
+	const fetchedOnly = $derived(!item.published && !!item.fetched_at);
+	const ts = $derived(item.published || item.fetched_at);
+	const dateTitle = $derived(fetchedOnly ? 'fetched; the feed gave no date' : undefined);
+	const dateFull = $derived(relative ? formatRelative(ts, now) : formatDate(ts));
+	const dateShort = $derived(relative ? formatRelative(ts, now, true) : formatTime(ts));
 </script>
 
 <!-- Clicks are a convenience; the grid is driven from the keyboard. -->
@@ -76,8 +81,8 @@
 >
 	<div class="cells" role="gridcell">
 		<span class="dot" aria-label={item.viewed ? undefined : 'unviewed'}>{item.viewed ? '' : '●'}</span>
-		<span class="date full">{dateFull}</span>
-		<span class="date short">{dateShort}</span>
+		<span class="date full" class:fetched={fetchedOnly} title={dateTitle}>{dateFull}</span>
+		<span class="date short" class:fetched={fetchedOnly} title={dateTitle}>{dateShort}</span>
 		{#if source?.label}
 			<span class="chip src"
 				>[<span style:color={safeColor(source.color)}>{oneLine(source.label)}</span>]</span
@@ -149,6 +154,9 @@
 	}
 	.date.full {
 		width: 11ch;
+	}
+	.date.fetched {
+		font-style: italic;
 	}
 	.date.short {
 		display: none;

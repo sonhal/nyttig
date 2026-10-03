@@ -141,6 +141,30 @@ ${items}
 </channel></rss>`;
 }
 
+// GET /undated/<name>.xml has "<name> cisco", dated an hour ago in Cisco
+// PSIRT's zoneless "2006-01-02 15:04:05.0" shape, and "<name> unreadable",
+// whose date the daemon can't parse, so it is shown with its fetch time.
+function undatedFeed(name) {
+	const cisco = new Date(Date.now() - 3600_000).toISOString().replace('T', ' ').replace(/\.\d+Z$/, '.0');
+	const items = [
+		['cisco', cisco],
+		['unreadable', 'sometime last week']
+	]
+		.map(
+			([label, date]) => `<item>
+<title>${esc(name)} ${label}</title>
+<link>https://${esc(name)}.example/${label}</link>
+<guid>${esc(name)}-${label}</guid>
+<pubDate>${date}</pubDate>
+</item>`
+		)
+		.join('\n');
+	return `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"><channel><title>${esc(name)}</title><link>https://${esc(name)}.example</link><description>undated</description>
+${items}
+</channel></rss>`;
+}
+
 export function startFeedServer() {
 	let pixelHits = 0;
 	let added = 0;
@@ -162,6 +186,12 @@ export function startFeedServer() {
 		if (extra) {
 			res.writeHead(200, { 'Content-Type': 'application/rss+xml' });
 			res.end(extraFeed(extra[1]));
+			return;
+		}
+		const undated = url.pathname.match(/^\/undated\/([\w-]+)\.xml$/);
+		if (undated) {
+			res.writeHead(200, { 'Content-Type': 'application/rss+xml' });
+			res.end(undatedFeed(undated[1]));
 			return;
 		}
 		const dated = url.pathname.match(/^\/dated\/([\w-]+)\.xml$/);
