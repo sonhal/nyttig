@@ -82,6 +82,49 @@ test.describe('feed', () => {
 		expect(overflow).toBeLessThanOrEqual(0);
 	});
 
+	test('a row with many chips and a long domain stays two lines on mobile', async ({ page }) => {
+		// The feed's items are titled "<name> story n" and link to <name>.example,
+		// so the name gives them both seeded tags and a long domain; with a long
+		// source label the first line is far wider than a phone.
+		const name = `rust-linux-a-rather-long-feed-domain-${test.info().project.name}`;
+		const headers = { Origin: BASE_URL };
+		const res = await page.request.post('/api/sources', {
+			headers,
+			data: { name, url: `${FEEDS_URL}/extra/${name}.xml`, refresh_sec: 3600, abbreviation: 'A Long Src Label' }
+		});
+		expect(res.status()).toBe(201);
+		const id = ((await res.json()) as { id: string }).id;
+		try {
+			await page.goto(`/?source=${id}`);
+			const r = row(page, `${name} story 1`);
+			await expect(r).toContainText('[linux]');
+			await expect(r).toContainText('[rust]');
+			// Nothing in the row is cut off at the top or bottom.
+			const cells = await r.locator('.cells').evaluate((c) => {
+				const box = c.getBoundingClientRect();
+				// The cells themselves: on desktop .meta has no box (display: contents).
+				const kids = [...c.querySelectorAll(':scope > :not(.meta), .meta > *')]
+					.map((e) => e.getBoundingClientRect())
+					.filter((k) => k.height > 0);
+				return { top: box.top, bottom: box.bottom, kids: kids.map((k) => [k.top, k.bottom]) };
+			});
+			for (const [top, bottom] of cells.kids) {
+				expect(top).toBeGreaterThanOrEqual(cells.top);
+				expect(bottom).toBeLessThanOrEqual(cells.bottom);
+			}
+			if (isMobile(page)) {
+				// Two lines: the meta line above the title, the domain on the first.
+				const meta = await r.locator('.meta').boundingBox();
+				const title = await r.locator('.title').boundingBox();
+				const domain = await r.locator('.domain').boundingBox();
+				expect(meta && title && meta.y + meta.height <= title.y).toBeTruthy();
+				expect(domain && meta && domain.y >= meta.y && domain.y + domain.height <= meta.y + meta.height).toBeTruthy();
+			}
+		} finally {
+			await page.request.delete(`/api/sources/${id}`, { headers, data: {} });
+		}
+	});
+
 	test('an item without a readable date shows its fetch time, in italics', async ({ page }) => {
 		const name = `undated-${test.info().project.name}`;
 		const headers = { Origin: BASE_URL };

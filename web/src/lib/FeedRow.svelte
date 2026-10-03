@@ -1,7 +1,8 @@
 <!--
 	One feed row. Desktop: a single 20px line, columns in the TUI's order
 	(unviewed dot, date, source, tags, title, description, domain). Mobile:
-	two lines in 44px, title on the second line, no description. Viewed
+	two lines in 44px, title on the second line, no description. The first
+	line (.meta) never wraps, so a row can't grow a third line. Viewed
 	(read) rows are dimmed.
 
 	All feed text is rendered as text; colors are validated before use.
@@ -80,34 +81,36 @@
 	onclick={() => onselect(index)}
 >
 	<div class="cells" role="gridcell">
-		<span class="dot" aria-label={item.viewed ? undefined : 'unviewed'}>{item.viewed ? '' : '●'}</span>
-		<span class="date full" class:fetched={fetchedOnly} title={dateTitle}>{dateFull}</span>
-		<span class="date short" class:fetched={fetchedOnly} title={dateTitle}>{dateShort}</span>
-		{#if source?.label}
-			<span class="chip src"
-				>[<span style:color={safeColor(source.color)}>{oneLine(source.label)}</span>]</span
-			>
-		{/if}
-		{#if item.tags?.length}
-			<span class="tags">
-				{#each item.tags as tag, i (tag.id ?? i)}
-					{@const cur = tag.id ? tags.get(tag.id) : undefined}
-					<span class="chip"
-						>[<span style:color={cur ? cur.color : safeColor(tag.color)}>{oneLine(cur?.name || tag.name)}</span
-						>]</span
-					>
-				{/each}
-			</span>
-		{/if}
-		{#each chips as c (c.assessorId)}
-			{@const cur = assessors.get(c.assessorId)}
-			<span class="chip score" class:selected-assessor={c.assessorId === selectedAssessor} data-testid="score-chip"
-				>[<span style:color={cur?.color}>{oneLine(cur?.name || c.name)} {formatScore(c.score)}</span>]</span
-			>
-		{/each}
+		<span class="meta">
+			<span class="dot" aria-label={item.viewed ? undefined : 'unviewed'}>{item.viewed ? '' : '●'}</span>
+			<span class="date full" class:fetched={fetchedOnly} title={dateTitle}>{dateFull}</span>
+			<span class="date short" class:fetched={fetchedOnly} title={dateTitle}>{dateShort}</span>
+			{#if source?.label}
+				<span class="chip src"
+					>[<span style:color={safeColor(source.color)}>{oneLine(source.label)}</span>]</span
+				>
+			{/if}
+			{#if item.tags?.length}
+				<span class="tags">
+					{#each item.tags as tag, i (tag.id ?? i)}
+						{@const cur = tag.id ? tags.get(tag.id) : undefined}
+						<span class="chip"
+							>[<span style:color={cur ? cur.color : safeColor(tag.color)}>{oneLine(cur?.name || tag.name)}</span
+							>]</span
+						>
+					{/each}
+				</span>
+			{/if}
+			{#each chips as c (c.assessorId)}
+				{@const cur = assessors.get(c.assessorId)}
+				<span class="chip score" class:selected-assessor={c.assessorId === selectedAssessor} data-testid="score-chip"
+					>[<span style:color={cur?.color}>{oneLine(cur?.name || c.name)} {formatScore(c.score)}</span>]</span
+				>
+			{/each}
+			<span class="domain">{domain}</span>
+		</span>
 		<span class="title"><Highlight text={title} {terms} /></span>
 		{#if desc}<span class="desc"><Highlight text={desc} {terms} /></span>{/if}
-		<span class="domain">{domain}</span>
 	</div>
 </div>
 
@@ -141,6 +144,10 @@
 		height: 100%;
 		padding: 0 1ch;
 		white-space: nowrap;
+	}
+	/* The first mobile line. On desktop its cells are plain columns of the row. */
+	.meta {
+		display: contents;
 	}
 	.dot {
 		flex: none;
@@ -196,6 +203,7 @@
 	}
 	.domain {
 		flex: none;
+		order: 1;
 		margin-left: auto;
 		color: var(--accent);
 	}
@@ -213,6 +221,22 @@
 		}
 		.date.short {
 			display: inline;
+		}
+		/* Line 1 never wraps: a row is a fixed 44px, and a third line would be
+		   clipped at the top and bottom. Tags and the domain shrink instead. */
+		.meta {
+			display: flex;
+			flex: 1 0 100%;
+			align-items: center;
+			gap: 1ch;
+			min-width: 0;
+			overflow: hidden;
+		}
+		.domain {
+			flex: 0 1 auto;
+			min-width: 0;
+			overflow: hidden;
+			text-overflow: ellipsis;
 		}
 		.title {
 			order: 10;
