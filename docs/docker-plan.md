@@ -95,4 +95,19 @@ The PR title is `feat(deploy): ...` so the merge cuts a minor release.
 
 ## Deviations
 
-None yet.
+- The Images job also **smoke-tests** each image (read-only, no
+  capabilities, as compose runs them): `-version` for the Go binaries, and
+  nyttigd and nyttig-web must reach `healthy`.
+- `useradd` without `--system`: uid 10001 is outside Debian's system range,
+  and `--system` only adds a warning.
+
+## Testing notes
+
+The cloud sandbox can't reach `deb.debian.org`, so the `apt-get` steps were
+checked only by CI. Locally the images were built from a scratchpad copy of
+the `Dockerfile` (see `AGENTS.md`, "Working in the Claude cloud sandbox") and
+the compose stack was run end to end: both healthchecks pass, the CLI works
+through `docker compose exec`, a source's items come back through nyttig-api
+from the host, a wrong `Host` gets 421, nyttig-web can't resolve `nyttigd`,
+and with the bundled config a feed at `169.254.169.254` is refused while
+Docker's DNS (127.0.0.11) keeps working.
