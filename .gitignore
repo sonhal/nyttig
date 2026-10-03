@@ -11,3 +11,7 @@
 /.modcache/
 /.pi/
 /nyttig-api
+
+# Local Docker settings and the mTLS server key (deploy/docker/README.md)
+/deploy/docker/.env
+/deploy/docker/tls/

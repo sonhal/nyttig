@@ -173,11 +173,15 @@ deploy/systemd/             Hardened system units; nyttigd runs as a dedicated `
                             (the app's Node server) as a DynamicUser
 deploy/README.md            VPS guide: sizing, build for Debian, mTLS for the TUI, backups, upgrades
 deploy/Caddyfile            Example reverse proxy (TLS, basic auth, /api/* vs the app)
+deploy/docker/              compose.yaml (the three images, their networks and volume), nyttigd's
+                            config.toml for it, .env.example, and the guide (README.md)
+Dockerfile, .dockerignore   One target per image: nyttigd, nyttig-api, nyttig-web
 docs/web-client-plan.md     Plan for the nyttig-api browser client (phases and decisions)
 docs/tag-tree-plan.md       Plan for parent tags (the tag tree): decisions and phases
 docs/saved-views-plan.md    Plan for saved views (named filters, feed tabs): decisions and phases
 docs/date-filter-plan.md    Plan for the date window (since:7d) in filters and views: decisions and phases
 docs/assessments-plan.md    Plan for assessments (scores and notes from external assessors): decisions and phases
+docs/docker-plan.md         Plan for the container images and compose setup: decisions and phases
 CLAUDE.md                   `@AGENTS.md`: makes Claude Code load this file
 ```
 
@@ -233,6 +237,21 @@ which phases are done and whether they are merged; keep it current.
   daemon also serves mTLS on that TCP address and keeps `socket` as a
   plaintext Unix socket (for nyttig-api); a TCP `socket` is then refused so
   no plaintext port opens by accident.
+- **Containers** (`Dockerfile`, `deploy/docker/`, `docs/docker-plan.md`).
+  In compose, nyttigd serves plaintext gRPC on the Unix socket
+  `/run/nyttig/nyttig.sock` in the `nyttig-socket` volume (tmpfs, uid 10001,
+  0700), which only nyttig-api also mounts; both images run as uid 10001.
+  No network carries the plaintext API. `compose.mtls.yaml` (opt-in) adds
+  `--tls-listen :9090`, published on `NYTTIG_TLS_PUBLISH`, which has no
+  default; this is the listeners split above, unchanged. Its `command`
+  replaces the base file's, so keep the two lists in step. CI's Images job
+  starts nyttigd with both listeners and checks that a client certificate
+  from another CA is refused. nyttig-api's image passes `--allow-public-listen`,
+  and compose publishes it and the app on the host's loopback only. The
+  images must keep building nyttigd the way the release does (`-tags
+  libsqlite3` on trixie, with `ldd` checked), and the clients with
+  `CGO_ENABLED=0`. A new build input outside `cmd/`, `internal/` and `web/`
+  must be added to `.dockerignore`'s allowlist.
 - **Item dates are text in UTC.** `items.published` is sorted as text, so
   every value must have one shape. The fetcher normalizes parsed dates to UTC
   with whole seconds, `db.InsertItem` does it again for any caller, and
@@ -553,9 +572,19 @@ egress allowlist. What that changes, learned the hard way:
 - **`buf.build` is blocked.** Codegen already uses local plugins installed
   with `go install` (see [Regenerating protobuf code](#regenerating-protobuf-code)),
   so `buf generate` works offline.
-- **No Docker.** The release Build job's `golang:1.26-trixie` container
-  can't be reproduced here; test the bundle with a native build and let CI
-  do the container build.
+- **Docker runs, but builds can't reach Debian's mirror.** Start the daemon
+  with `nohup dockerd > <scratchpad>/dockerd.log 2>&1 &`; Docker Hub and
+  `gcr.io` pulls work. Build containers can't use the agent proxy by
+  themselves, and `deb.debian.org` is blocked outright, so the `Dockerfile`'s
+  `apt-get` steps fail here. To test the images, build a scratchpad copy of
+  the `Dockerfile` with `docker build --network host --build-context
+  ccr=/root/.ccr -f <copy> .` that copies `ca-bundle.crt` in and sets
+  `SSL_CERT_FILE`/`NODE_EXTRA_CA_CERTS` (Go proxy, npm), replaces the
+  `apt-get` lines, takes `sqlite3.h` from go-sqlite3's `sqlite3-binding.h`
+  (the part before `#else // USE_LIBSQLITE3`), and runs nyttigd on
+  `golang:1.26-trixie`, which already has `libsqlite3-0`. Never commit that
+  copy; CI builds the real one. The sandbox has no IPv6, so publishing on an
+  IPv6 address can't be tried here; test with `127.0.0.1`.
 - **Most external sites are blocked** (feed hosts, `bsky.app`, package
   registries other than the Go proxy and npm). Use the e2e feed server
   (`web/e2e/feeds.mjs`) or hand-written fixtures instead of live feeds.
@@ -587,6 +616,8 @@ container), with the Go version taken from `go.mod`:
 | Test | `go test -race -shuffle=on -tags sqlite_fts5` with coverage |
 | Web | `pnpm install --frozen-lockfile`, svelte-check, vitest, vite build, Playwright end-to-end; uploads the app build (`nyttig-web`) |
 | Build | Builds the three binaries in Debian trixie (glibc and libsqlite3 of the servers, see `deploy/README.md`) with `-tags libsqlite3`, so nyttigd links the system SQLite; checks that with `ldd`; runs only after Lint, Test and Web pass; stamps a `v*` tag into `internal/version.Version` with `-ldflags -X` (other builds report the git pseudo-version); uploads `nyttig-linux-amd64` |
+| Images | Builds the three container images (`Dockerfile`, one matrix leg per target) with the GHA cache, then starts each read-only with no capabilities: nyttigd and nyttig-api print `-version`, nyttigd and nyttig-web must reach `healthy`; runs only after Lint, Test and Web pass |
+| Publish images | `v*` tags only, after every other job passes: rebuilds each image from the cache with the tag as `VERSION`, pushes `ghcr.io/sonhal/<target>:<version>` (plus `<major>.<minor>` and `latest` for stable releases), and attests it |
 | Vulnerability check | `govulncheck ./...` against the code paths the binaries call |
 | Tag release | Pushes to `main` only, after every other job passes: tags the commit with the version `scripts/next-version.sh` computes (see [Releases](#releases)), if any, and dispatches this workflow on the new tag to run Release |
 | Release | `v*` tags only, after every other job passes: bundles the binaries, the app build, `deploy/` and `sample_config.toml` into `nyttig-<tag>-linux-amd64.tar.gz`, adds `SHA256SUMS` and a build provenance attestation, and publishes a GitHub Release (a tag with a hyphen is a pre-release) |

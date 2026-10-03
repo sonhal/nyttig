@@ -1,0 +1,99 @@
+# Nyttig in containers: nyttigd, nyttig-api and the web app (nyttig-web).
+# The guide is README.md next to this file.
+#
+#   cp .env.example .env        # set NYTTIG_ORIGIN
+#   docker compose up -d        # pulls the released images
+#   docker compose up -d --build    # or builds them from this checkout
+#
+# A reverse proxy on the host (deploy/Caddyfile works unchanged) adds TLS
+# and authentication, and routes /api/* to 127.0.0.1:7070 and everything
+# else to 127.0.0.1:7071. Neither port is published beyond the host's
+# loopback: nyttig-api has no authentication of its own.
+#
+# nyttig-api reaches nyttigd's plaintext gRPC API (full access) only through
+# the Unix socket in the nyttig-socket volume, which no other service
+# mounts; no network carries it. compose.mtls.yaml optionally adds a mutual
+# TLS port for the TUI.
+#
+# Networks:
+#   feeds   nyttigd's way out to the internet, for fetching feeds.
+#   api     publishes nyttig-api's port.
+#   web     publishes the web app's port. The app never talks to nyttigd.
+
+name: nyttig
+
+x-hardening: &hardening
+  restart: unless-stopped
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  tmpfs: [/tmp]
+  logging:
+    driver: json-file
+    options:
+      max-size: 10m
+      max-file: "3"
+
+services:
+  nyttigd:
+    <<: *hardening
+    image: ghcr.io/sonhal/nyttigd:${NYTTIG_VERSION:-latest}
+    build:
+      context: ../..
+      target: nyttigd
+    # The flags override the config file's socket and db_path. Keep this
+    # list in step with compose.mtls.yaml, which replaces it.
+    command:
+      - --config=/etc/nyttig/config.toml
+      - --socket=/run/nyttig/nyttig.sock
+      - --db-path=/var/lib/nyttig/nyttig.db
+    volumes:
+      - nyttig-data:/var/lib/nyttig
+      - nyttig-socket:/run/nyttig
+      - ./config.toml:/etc/nyttig/config.toml:ro
+    networks: [feeds]
+
+  nyttig-api:
+    <<: *hardening
+    image: ghcr.io/sonhal/nyttig-api:${NYTTIG_VERSION:-latest}
+    build:
+      context: ../..
+      target: nyttig-api
+    # The image listens on :7070 inside the container and runs as nyttigd's
+    # uid (10001), the only one that may use the socket.
+    command:
+      - --socket=/run/nyttig/nyttig.sock
+      - --origin=${NYTTIG_ORIGIN:?set NYTTIG_ORIGIN in .env to the URL the browser uses}
+    depends_on: [nyttigd]
+    volumes:
+      - nyttig-socket:/run/nyttig
+    ports:
+      - "127.0.0.1:7070:7070"
+    networks: [api]
+
+  nyttig-web:
+    <<: *hardening
+    image: ghcr.io/sonhal/nyttig-web:${NYTTIG_VERSION:-latest}
+    build:
+      context: ../..
+      target: nyttig-web
+    environment:
+      ORIGIN: ${NYTTIG_ORIGIN:?set NYTTIG_ORIGIN in .env to the URL the browser uses}
+    ports:
+      - "127.0.0.1:7071:3000"
+    networks: [web]
+
+volumes:
+  nyttig-data:
+  # In memory, owned by uid 10001 and closed to everyone else (0700): only
+  # nyttigd and nyttig-api, which run as that uid, can reach the socket.
+  nyttig-socket:
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+      o: uid=10001,gid=10001,mode=0700
+
+networks:
+  feeds:
+  api:
+  web:
