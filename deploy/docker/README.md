@@ -5,13 +5,14 @@ Three containers, built from the repository's `Dockerfile` and run by
 
 | Service      | Image                         | Listens on                     |
 |--------------|-------------------------------|--------------------------------|
-| `nyttigd`    | `ghcr.io/sonhal/nyttigd`      | gRPC on 9000, internal only    |
+| `nyttigd`    | `ghcr.io/sonhal/nyttigd`      | a Unix socket in a shared volume; optionally mTLS on a host address you pick |
 | `nyttig-api` | `ghcr.io/sonhal/nyttig-api`   | `127.0.0.1:7070` on the host   |
 | `nyttig-web` | `ghcr.io/sonhal/nyttig-web`   | `127.0.0.1:7071` on the host   |
 
 ```
-browser: https, auth ──▶ your proxy ─┬─ /api/* ─▶ 127.0.0.1:7070 nyttig-api ── daemon network, gRPC :9000 ──▶ nyttigd ──▶ feeds
-                       (on the host) └─ /*     ─▶ 127.0.0.1:7071 nyttig-web
+browser: https, auth ──▶ your proxy ─┬─ /api/* ─▶ 127.0.0.1:7070 nyttig-api ── unix socket (volume) ──▶ nyttigd ──▶ feeds
+                       (on the host) └─ /*     ─▶ 127.0.0.1:7071 nyttig-web                                ▲
+laptop:  nyttig (TUI) ── mTLS, optional (compose.mtls.yaml) ─────────────────────────────────────────────┘
 ```
 
 The compose file doesn't include a reverse proxy: bring your own for TLS and
@@ -74,48 +75,92 @@ the public manifest and icons.
 Every service runs read-only, with no capabilities, `no-new-privileges` and
 log files capped at 30 MB.
 
-## Networks and what can reach the daemon
+## What can reach the daemon
 
-nyttigd serves its gRPC API in **plaintext** on port 9000. That API has full
-read and write access and no authentication, so the compose file keeps it on
-networks only nyttigd and nyttig-api join:
+nyttigd serves its gRPC API in **plaintext** on the Unix socket
+`/run/nyttig/nyttig.sock`. That API has full read and write access and no
+authentication, so no network carries it:
 
-- `daemon` (internal: no route out): nyttigd and nyttig-api.
-- `feeds`: nyttigd's way out to the internet.
-- `api` and `web`: one service each, for their published ports. The web app
-  can't reach nyttigd at all; it only serves the app, and the browser talks
-  to `/api`.
+- The socket lives in the `nyttig-socket` volume, an in-memory tmpfs owned
+  by uid 10001 with mode 0700. Only nyttigd and nyttig-api mount it, and
+  both run as uid 10001. nyttig-api never mounts the database volume.
+- Networks: `feeds` is nyttigd's way out to the internet; `api` and `web`
+  each hold one service, for its published port. The web app can't reach
+  nyttigd at all: it only serves the app, and the browser talks to `/api`.
+- The only way in from outside is the optional mTLS port (below), which
+  requires a client certificate signed by your CA at the TLS handshake.
 
-Never publish port 9000 on a public address. On the host, root (and members
-of the `docker` group, who are root in effect) can reach the port through
-the container's IP. That's the trust boundary here, where the systemd setup
-limits its Unix socket to the `nyttig` group.
+On the host, root (and members of the `docker` group, who are root in
+effect) can still reach the socket, as with any container's files.
 
 ## Using the TUI and CLI
 
-The nyttigd image contains the `nyttig` client. On the server:
+The nyttigd image contains the `nyttig` client. On the server, it uses the
+socket:
 
 ```bash
-docker compose exec nyttigd nyttig --socket 127.0.0.1:9000          # the TUI
-docker compose exec nyttigd nyttig list-sources --socket 127.0.0.1:9000
+docker compose exec nyttigd nyttig --socket /run/nyttig/nyttig.sock          # the TUI
+docker compose exec nyttigd nyttig list-sources --socket /run/nyttig/nyttig.sock
 ```
 
 Subcommands read their flags before positional arguments:
-`nyttig refresh --socket 127.0.0.1:9000 3`.
+`nyttig refresh --socket /run/nyttig/nyttig.sock 3`.
 
-From your laptop, tunnel the port over SSH. Uncomment the `ports` lines
-under `nyttigd` in `compose.yaml`, which publish 9000 on the server's loopback
-only, then:
+### The TUI over mutual TLS (opt-in)
 
-```bash
-ssh -N -L 9000:127.0.0.1:9000 vps &
-nyttig --socket 127.0.0.1:9000
-```
+`compose.mtls.yaml` makes nyttigd also serve mutual TLS on port 9090,
+published on a host address you choose. This is the same listener as
+`[tls] listen` in the systemd setup, so the daemon checks client
+certificates itself. Nothing else changes: nyttig-api keeps using the socket.
 
-SSH then provides the encryption and authentication. The mTLS listener of
-the systemd setup (`[tls] listen = ":9090"`) isn't available here: nyttigd
-refuses `[tls] listen` together with a TCP `socket`, so it can't open a
-plaintext port by accident.
+1. **Certificates, on your workstation.** List every name and address the
+   TUI will dial; a client dialing an IP address only accepts an IP entry in
+   the certificate. Brackets around an IPv6 address are optional.
+
+   ```bash
+   scripts/gen-certs.sh ./certs nyttig.example.com 2001:db8::10
+   ```
+
+   Copy `server.pem`, `server.key` and `ca.pem` to `deploy/docker/tls/` on
+   the server, and keep `ca.key` offline (see the limitations under
+   "Certificates" in [`../README.md`](../README.md#2-certificates-on-your-workstation)).
+
+2. **Make the key readable by nyttigd only** (uid 10001 in the container):
+
+   ```bash
+   sudo chown -R 10001:10001 tls
+   sudo chmod 0400 tls/server.key
+   ```
+
+3. **Turn it on in `.env`** with the address to publish on:
+
+   ```bash
+   COMPOSE_FILE=compose.yaml:compose.mtls.yaml
+   NYTTIG_TLS_PUBLISH=[2001:db8::10]:9090
+   ```
+
+   There is no default on purpose. Docker's published ports bypass the host
+   firewall (ufw doesn't see them), so bind one interface address rather than
+   every address, and restrict the port further with your provider's
+   firewall if you can. An IPv6 address works with Docker's default
+   userland proxy, which forwards to the container over IPv4; nyttigd then
+   logs Docker's gateway as the peer, not your laptop.
+
+4. **Start it and connect:**
+
+   ```bash
+   docker compose up -d
+   docker compose logs nyttigd | grep 'mutual TLS enabled'
+   ```
+
+   ```bash
+   nyttig --socket '[2001:db8::10]:9090' \
+     --tls-cert certs/client.pem --tls-key certs/client.key --tls-ca certs/ca.pem
+   ```
+
+A client certificate from another CA fails at the handshake (`unknown
+certificate authority`). There is no revocation: if a client key leaks,
+generate a new CA and re-issue every certificate.
 
 ## Backups
 

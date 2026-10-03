@@ -272,6 +272,8 @@ jobs:
           cache-to: type=gha,mode=max,scope=image-${{ matrix.target }}
 
       # Each image starts as compose runs it: read-only, no capabilities.
+      # nyttigd also serves mutual TLS (compose.mtls.yaml), with
+      # certificates from scripts/gen-certs.sh.
       - name: Smoke test
         env:
           TARGET: ${{ matrix.target }}
@@ -280,10 +282,18 @@ jobs:
           case "$TARGET" in
             nyttigd)
               "${run[@]}" "nyttig-ci/$TARGET" -version
-              # Starts, opens its database in the volume and passes its
-              # healthcheck (nyttig list-sources over the TCP listener).
+              scripts/gen-certs.sh "$RUNNER_TEMP/certs" >/dev/null
+              scripts/gen-certs.sh "$RUNNER_TEMP/certs/other" >/dev/null   # a CA nyttigd doesn't trust
+              chmod 0644 "$RUNNER_TEMP"/certs/*.key "$RUNNER_TEMP"/certs/other/*.key   # readable by the image's uid
+              # Opens its database in the volume, its socket in the tmpfs
+              # (as compose's nyttig-socket volume) and the mTLS port; the
+              # healthcheck uses the socket.
               docker run -d --name smoke --read-only --cap-drop ALL --tmpfs /tmp \
-                --health-interval 2s "nyttig-ci/$TARGET"
+                --tmpfs /run/nyttig:uid=10001,gid=10001,mode=0700 \
+                -v "$RUNNER_TEMP/certs:/certs:ro" --health-interval 2s "nyttig-ci/$TARGET" \
+                --socket /run/nyttig/nyttig.sock --db-path /var/lib/nyttig/nyttig.db \
+                --tls-listen :9090 --tls-cert /certs/server.pem --tls-key /certs/server.key \
+                --tls-client-ca /certs/ca.pem
               ;;
             nyttig-api)
               "${run[@]}" "nyttig-ci/$TARGET" -version
@@ -301,6 +311,15 @@ jobs:
           done
           docker logs smoke
           [ "$status" = healthy ] || { echo "::error::$TARGET is $status"; exit 1; }
+          if [ "$TARGET" = nyttigd ]; then
+            docker exec smoke nyttig list-sources --socket 127.0.0.1:9090 \
+              --tls-cert /certs/client.pem --tls-key /certs/client.key --tls-ca /certs/ca.pem
+            # A client certificate from another CA must fail the handshake.
+            if docker exec smoke nyttig list-sources --socket 127.0.0.1:9090 --tls-ca /certs/ca.pem \
+                --tls-cert /certs/other/client.pem --tls-key /certs/other/client.key; then
+              echo "::error::the mTLS port accepted a client certificate from an untrusted CA"; exit 1
+            fi
+          fi
 
   # Runs only for a v* tag, after everything else has passed: pushes
   # ghcr.io/<owner>/<target>:<version> (and <major>.<minor> and latest for a

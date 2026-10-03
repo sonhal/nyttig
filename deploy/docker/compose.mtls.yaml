@@ -1,0 +1,30 @@
+# Opt-in: nyttigd also serves mutual TLS for the TUI and CLI on a host
+# address. Turn it on with both files, e.g. in .env:
+#
+#   COMPOSE_FILE=compose.yaml:compose.mtls.yaml
+#   NYTTIG_TLS_PUBLISH=[2001:db8::10]:9090
+#
+# and put server.pem, server.key and ca.pem from scripts/gen-certs.sh in
+# ./tls, readable by uid 10001 (see README.md, "The TUI over mutual TLS").
+# Only clients with a certificate signed by ca.pem get past the handshake;
+# the plaintext socket stays private to nyttig-api.
+
+services:
+  nyttigd:
+    # Replaces compose.yaml's command; keep the two in step.
+    command:
+      - --config=/etc/nyttig/config.toml
+      - --socket=/run/nyttig/nyttig.sock
+      - --db-path=/var/lib/nyttig/nyttig.db
+      - --tls-listen=:9090
+      - --tls-cert=/etc/nyttig/tls/server.pem
+      - --tls-key=/etc/nyttig/tls/server.key
+      - --tls-client-ca=/etc/nyttig/tls/ca.pem
+    volumes:
+      - ./tls:/etc/nyttig/tls:ro
+    # The host address and port to publish on, e.g. [2001:db8::10]:9090 or
+    # 203.0.113.10:9090. There is deliberately no default: Docker's
+    # published ports bypass the host firewall (ufw), so pick the interface
+    # rather than every address.
+    ports:
+      - "${NYTTIG_TLS_PUBLISH:?set NYTTIG_TLS_PUBLISH in .env, e.g. [2001:db8::10]:9090}:9090"

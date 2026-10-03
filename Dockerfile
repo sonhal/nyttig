@@ -71,31 +71,38 @@ RUN apt-get update \
  && groupadd --gid 10001 nyttig \
  && useradd --uid 10001 --gid nyttig --no-create-home --home-dir /var/lib/nyttig \
       --shell /usr/sbin/nologin nyttig \
- && install -d -o nyttig -g nyttig -m 0700 /var/lib/nyttig
+ && install -d -o nyttig -g nyttig -m 0700 /var/lib/nyttig /run/nyttig
 # nyttig (the TUI and CLI) is the healthcheck, and the way to manage the
-# daemon: docker compose exec nyttigd nyttig --socket 127.0.0.1:9000
+# daemon: docker compose exec nyttigd nyttig --socket /run/nyttig/nyttig.sock
 COPY --from=go-build /out/nyttigd /out/nyttig /usr/local/bin/
 USER nyttig
 WORKDIR /var/lib/nyttig
 VOLUME /var/lib/nyttig
-# Plaintext gRPC: publish it on no network the daemon's clients don't need.
-EXPOSE 9000
+# The API is served in plaintext on the Unix socket in /run/nyttig, for
+# nyttig-api, which shares that directory as a volume and runs as the same
+# uid. With a read-only root, /run/nyttig must be a volume or tmpfs.
+# --tls-listen adds mutual TLS on a TCP port (9090 by convention) for the
+# TUI; deploy/docker/compose.mtls.yaml turns it on.
+EXPOSE 9090
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s \
-  CMD nyttig list-sources --socket 127.0.0.1:9000 > /dev/null || exit 1
+  CMD nyttig list-sources --socket /run/nyttig/nyttig.sock > /dev/null || exit 1
 ENTRYPOINT ["nyttigd"]
-CMD ["--socket", ":9000", "--db-path", "/var/lib/nyttig/nyttig.db"]
+CMD ["--socket", "/run/nyttig/nyttig.sock", "--db-path", "/var/lib/nyttig/nyttig.db"]
 
 # ── nyttig-api ───────────────────────────────────────────────
 
 FROM gcr.io/distroless/static-debian13:nonroot AS nyttig-api
 COPY --from=go-build /out/nyttig-api /usr/local/bin/nyttig-api
+# nyttigd's uid: only it may connect to nyttigd's socket (nyttigd's
+# /run/nyttig is mode 0700). This image never sees the database volume.
+USER 10001:10001
 EXPOSE 7070
 # A loopback listener is unreachable from outside the container, so it
 # listens on every interface; keep the published port on the host's
 # loopback, behind the reverse proxy (deploy/docker/compose.yaml does).
-# --origin (required) and --socket come from the command.
+# --origin (required) comes from the command.
 ENTRYPOINT ["/usr/local/bin/nyttig-api", "--listen", ":7070", "--allow-public-listen"]
-CMD ["--socket", "nyttigd:9000"]
+CMD ["--socket", "/run/nyttig/nyttig.sock"]
 
 # ── nyttig-web ───────────────────────────────────────────────
 

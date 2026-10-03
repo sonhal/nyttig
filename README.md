@@ -538,10 +538,11 @@ certificate signed by your CA can connect — no extra password layer needed.
 ### 1. Generate certificates
 
 A helper script issues a private CA plus a server and a client certificate.
-Pass the hostname (or IP) clients will dial:
+Pass every hostname and IP address (IPv4 or IPv6) clients will dial; a client
+dialing an address only accepts the certificate if it lists that address:
 
 ```bash
-./scripts/gen-certs.sh ./certs nyttig.example.com
+./scripts/gen-certs.sh ./certs nyttig.example.com 2001:db8::10
 # → certs/ca.pem, certs/server.pem, certs/server.key,
 #   certs/client.pem, certs/client.key
 ```
@@ -946,20 +947,21 @@ port 9090, backups and upgrades), see [`deploy/README.md`](deploy/README.md).
 The repository's [`Dockerfile`](Dockerfile) builds three images, one target
 each (`nyttigd`, `nyttig-api`, `nyttig-web`), and releases publish them as
 `ghcr.io/sonhal/<target>` (linux/amd64). [`deploy/docker/compose.yaml`](deploy/docker/compose.yaml)
-runs all three: nyttig-api reaches nyttigd over plaintext gRPC on an internal
-network, and nyttig-api and the app are published on `127.0.0.1:7070` and
-`127.0.0.1:7071` for a reverse proxy on the host (the Caddyfile above works
-unchanged).
+runs all three: nyttig-api reaches nyttigd through its Unix socket in a
+volume only the two of them share, and nyttig-api and the app are published
+on `127.0.0.1:7070` and `127.0.0.1:7071` for a reverse proxy on the host (the
+Caddyfile above works unchanged). `compose.mtls.yaml` optionally adds the TUI
+over mutual TLS on a host address you choose.
 
 ```bash
 cd deploy/docker
 cp .env.example .env        # NYTTIG_ORIGIN=https://nyttig.example.com
 docker compose up -d        # or: docker compose up -d --build
-docker compose exec nyttigd nyttig --socket 127.0.0.1:9000   # the TUI
+docker compose exec nyttigd nyttig --socket /run/nyttig/nyttig.sock   # the TUI
 ```
 
-See [`deploy/docker/README.md`](deploy/docker/README.md) for the networks,
-the TUI over SSH, backups and upgrades.
+See [`deploy/docker/README.md`](deploy/docker/README.md) for what can reach
+the daemon, the TUI over mTLS, backups and upgrades.
 
 ## Assessments
 

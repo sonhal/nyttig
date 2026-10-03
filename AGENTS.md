@@ -238,9 +238,15 @@ which phases are done and whether they are merged; keep it current.
   plaintext Unix socket (for nyttig-api); a TCP `socket` is then refused so
   no plaintext port opens by accident.
 - **Containers** (`Dockerfile`, `deploy/docker/`, `docs/docker-plan.md`).
-  In compose, nyttigd serves plaintext gRPC on `:9000` on the internal
-  `daemon` network that only nyttig-api joins (so no mTLS TUI there; see the
-  listeners note above). nyttig-api's image passes `--allow-public-listen`,
+  In compose, nyttigd serves plaintext gRPC on the Unix socket
+  `/run/nyttig/nyttig.sock` in the `nyttig-socket` volume (tmpfs, uid 10001,
+  0700), which only nyttig-api also mounts; both images run as uid 10001.
+  No network carries the plaintext API. `compose.mtls.yaml` (opt-in) adds
+  `--tls-listen :9090`, published on `NYTTIG_TLS_PUBLISH`, which has no
+  default; this is the listeners split above, unchanged. Its `command`
+  replaces the base file's, so keep the two lists in step. CI's Images job
+  starts nyttigd with both listeners and checks that a client certificate
+  from another CA is refused. nyttig-api's image passes `--allow-public-listen`,
   and compose publishes it and the app on the host's loopback only. The
   images must keep building nyttigd the way the release does (`-tags
   libsqlite3` on trixie, with `ldd` checked), and the clients with
@@ -577,7 +583,8 @@ egress allowlist. What that changes, learned the hard way:
   `apt-get` lines, takes `sqlite3.h` from go-sqlite3's `sqlite3-binding.h`
   (the part before `#else // USE_LIBSQLITE3`), and runs nyttigd on
   `golang:1.26-trixie`, which already has `libsqlite3-0`. Never commit that
-  copy; CI builds the real one.
+  copy; CI builds the real one. The sandbox has no IPv6, so publishing on an
+  IPv6 address can't be tried here; test with `127.0.0.1`.
 - **Most external sites are blocked** (feed hosts, `bsky.app`, package
   registries other than the Go proxy and npm). Use the e2e feed server
   (`web/e2e/feeds.mjs`) or hand-written fixtures instead of live feeds.
