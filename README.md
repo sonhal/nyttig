@@ -941,6 +941,26 @@ name, user and `caddy hash-password` hash, and reload Caddy.
 For a complete VPS setup (the web client behind Caddy, the TUI over mTLS on
 port 9090, backups and upgrades), see [`deploy/README.md`](deploy/README.md).
 
+### Running in Docker
+
+The repository's [`Dockerfile`](Dockerfile) builds three images, one target
+each (`nyttigd`, `nyttig-api`, `nyttig-web`), and releases publish them as
+`ghcr.io/sonhal/<target>` (linux/amd64). [`deploy/docker/compose.yaml`](deploy/docker/compose.yaml)
+runs all three: nyttig-api reaches nyttigd over plaintext gRPC on an internal
+network, and nyttig-api and the app are published on `127.0.0.1:7070` and
+`127.0.0.1:7071` for a reverse proxy on the host (the Caddyfile above works
+unchanged).
+
+```bash
+cd deploy/docker
+cp .env.example .env        # NYTTIG_ORIGIN=https://nyttig.example.com
+docker compose up -d        # or: docker compose up -d --build
+docker compose exec nyttigd nyttig --socket 127.0.0.1:9000   # the TUI
+```
+
+See [`deploy/docker/README.md`](deploy/docker/README.md) for the networks,
+the TUI over SSH, backups and upgrades.
+
 ## Assessments
 
 Other systems can attach a judgement to a news item: an optional **score**

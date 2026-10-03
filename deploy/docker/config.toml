@@ -1,0 +1,20 @@
+# nyttigd's configuration in the containers (compose.yaml mounts this file
+# at /etc/nyttig/config.toml). The command line sets socket and db_path, so
+# they are left out here. See sample_config.toml and the README for every key.
+
+log_level = "info"
+
+# Sources can be added from the internet through nyttig-api, so refuse feed
+# URLs that point at loopback, private or link-local addresses (SSRF). This
+# also keeps feed URLs away from the other containers and the host.
+block_private_addresses = true
+
+# Sources, tags, rules and assessors to seed on startup. They are added
+# once, by name, and never overwritten; manage them later in the web app or
+# with "docker compose exec nyttigd nyttig ...".
+#
+# [[sources]]
+# name = "Hacker News"
+# url = "https://news.ycombinator.com/rss"
+# refresh_sec = 600
+# type = "rss"

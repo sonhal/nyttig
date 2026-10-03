@@ -5,6 +5,9 @@ Caddy for the browser, and the TUI over mutual TLS on port 9090. The SQLite
 database is embedded in `nyttigd`, so there is no separate database server:
 it is a file in `/var/lib/nyttig`.
 
+To run it in containers instead (nyttigd, nyttig-api and the web app as
+three images, behind a proxy you bring), see [`docker/README.md`](docker/README.md).
+
 ```
 laptop:  nyttig (TUI) ── mTLS, :9090 ───────────────────────────────▶ nyttigd
 browser: https, basic auth ──▶ Caddy ─┬─ /api/* ─▶ nyttig-api ── unix socket ──┘

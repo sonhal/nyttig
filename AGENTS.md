@@ -173,11 +173,15 @@ deploy/systemd/             Hardened system units; nyttigd runs as a dedicated `
                             (the app's Node server) as a DynamicUser
 deploy/README.md            VPS guide: sizing, build for Debian, mTLS for the TUI, backups, upgrades
 deploy/Caddyfile            Example reverse proxy (TLS, basic auth, /api/* vs the app)
+deploy/docker/              compose.yaml (the three images, their networks and volume), nyttigd's
+                            config.toml for it, .env.example, and the guide (README.md)
+Dockerfile, .dockerignore   One target per image: nyttigd, nyttig-api, nyttig-web
 docs/web-client-plan.md     Plan for the nyttig-api browser client (phases and decisions)
 docs/tag-tree-plan.md       Plan for parent tags (the tag tree): decisions and phases
 docs/saved-views-plan.md    Plan for saved views (named filters, feed tabs): decisions and phases
 docs/date-filter-plan.md    Plan for the date window (since:7d) in filters and views: decisions and phases
 docs/assessments-plan.md    Plan for assessments (scores and notes from external assessors): decisions and phases
+docs/docker-plan.md         Plan for the container images and compose setup: decisions and phases
 CLAUDE.md                   `@AGENTS.md`: makes Claude Code load this file
 ```
 
@@ -233,6 +237,15 @@ which phases are done and whether they are merged; keep it current.
   daemon also serves mTLS on that TCP address and keeps `socket` as a
   plaintext Unix socket (for nyttig-api); a TCP `socket` is then refused so
   no plaintext port opens by accident.
+- **Containers** (`Dockerfile`, `deploy/docker/`, `docs/docker-plan.md`).
+  In compose, nyttigd serves plaintext gRPC on `:9000` on the internal
+  `daemon` network that only nyttig-api joins (so no mTLS TUI there; see the
+  listeners note above). nyttig-api's image passes `--allow-public-listen`,
+  and compose publishes it and the app on the host's loopback only. The
+  images must keep building nyttigd the way the release does (`-tags
+  libsqlite3` on trixie, with `ldd` checked), and the clients with
+  `CGO_ENABLED=0`. A new build input outside `cmd/`, `internal/` and `web/`
+  must be added to `.dockerignore`'s allowlist.
 - **Item dates are text in UTC.** `items.published` is sorted as text, so
   every value must have one shape. The fetcher normalizes parsed dates to UTC
   with whole seconds, `db.InsertItem` does it again for any caller, and
@@ -553,9 +566,18 @@ egress allowlist. What that changes, learned the hard way:
 - **`buf.build` is blocked.** Codegen already uses local plugins installed
   with `go install` (see [Regenerating protobuf code](#regenerating-protobuf-code)),
   so `buf generate` works offline.
-- **No Docker.** The release Build job's `golang:1.26-trixie` container
-  can't be reproduced here; test the bundle with a native build and let CI
-  do the container build.
+- **Docker runs, but builds can't reach Debian's mirror.** Start the daemon
+  with `nohup dockerd > <scratchpad>/dockerd.log 2>&1 &`; Docker Hub and
+  `gcr.io` pulls work. Build containers can't use the agent proxy by
+  themselves, and `deb.debian.org` is blocked outright, so the `Dockerfile`'s
+  `apt-get` steps fail here. To test the images, build a scratchpad copy of
+  the `Dockerfile` with `docker build --network host --build-context
+  ccr=/root/.ccr -f <copy> .` that copies `ca-bundle.crt` in and sets
+  `SSL_CERT_FILE`/`NODE_EXTRA_CA_CERTS` (Go proxy, npm), replaces the
+  `apt-get` lines, takes `sqlite3.h` from go-sqlite3's `sqlite3-binding.h`
+  (the part before `#else // USE_LIBSQLITE3`), and runs nyttigd on
+  `golang:1.26-trixie`, which already has `libsqlite3-0`. Never commit that
+  copy; CI builds the real one.
 - **Most external sites are blocked** (feed hosts, `bsky.app`, package
   registries other than the Go proxy and npm). Use the e2e feed server
   (`web/e2e/feeds.mjs`) or hand-written fixtures instead of live feeds.
