@@ -1,0 +1,14 @@
+# The Dockerfile's build context, as an allowlist: only what the images are
+# built from. Keeps .git, certificates, databases and local build output out.
+*
+!go.mod
+!go.sum
+!cmd/
+!internal/
+!web/
+
+web/node_modules
+web/build
+web/.svelte-kit
+web/test-results
+web/playwright-report
