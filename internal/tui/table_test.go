@@ -70,6 +70,22 @@ func TestRenderRow_ShowsDate(t *testing.T) {
 	}
 }
 
+// An item without a published date shows its fetch time instead; with
+// both, the published date wins.
+func TestRenderRow_FetchTimeWithoutPublished(t *testing.T) {
+	tb := newTestTable(120)
+	fetched := tsAt(time.Date(2026, 10, 2, 22, 40, 0, 0, time.UTC))
+	item := &pb.Item{Title: "Undated", Link: "https://example.com/x", Viewed: true, FetchedAt: fetched}
+	if row := stripANSI(tb.renderRow(item, false)); !strings.Contains(row, "02.10 22:40") {
+		t.Errorf("expected the fetch time in the row, got %q", row)
+	}
+	item.Published = tsAt(time.Date(2026, 10, 1, 9, 5, 0, 0, time.UTC))
+	row := stripANSI(tb.renderRow(item, false))
+	if !strings.Contains(row, "01.10 09:05") || strings.Contains(row, "02.10 22:40") {
+		t.Errorf("expected only the published date in the row, got %q", row)
+	}
+}
+
 func TestRenderRow_TruncatesDescription(t *testing.T) {
 	tb := newTestTable(120)
 	item := &pb.Item{

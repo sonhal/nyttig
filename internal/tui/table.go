@@ -33,6 +33,10 @@ var (
 	timeStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#808080"))
 
+	// fetchedTimeStyle marks a fetch time shown in place of a missing
+	// published date.
+	fetchedTimeStyle = timeStyle.Italic(true)
+
 	descStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#6A9955"))
 
@@ -299,8 +303,13 @@ func (t *Table) renderRow(item *pb.Item, selected bool) string {
 		viewedCol = unviewedDot + " "
 	}
 
-	// 2. Date (blank-padded when unknown so columns stay aligned).
+	// 2. Date: the published date, else the fetch time in italics (the
+	// order the daemon sorts by is unchanged: such items still go last).
+	// Blank-padded when both are unknown so columns stay aligned.
 	dateCol := timeStyle.Render(formatDate(item.Published))
+	if item.Published == nil && item.FetchedAt != nil {
+		dateCol = fetchedTimeStyle.Render(formatDate(item.FetchedAt))
+	}
 
 	// 3. Source chip.
 	sourceCol := t.renderSourceChip(item.SourceId)

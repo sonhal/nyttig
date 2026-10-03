@@ -239,7 +239,13 @@ which phases are done and whether they are merged; keep it current.
   migration 3 rewrote older rows. The driver stores such a time as
   `YYYY-MM-DD HH:MM:SS+00:00` (not `T...Z`); a test pins the migration's
   output to what an insert writes, so keep them in step. Migration 4 adds the
-  indexes ListItems relies on.
+  indexes ListItems relies on. RSS and Atom dates both go through
+  `parseDate` (`fetcher/fetch.go`), which accepts RFC 822 variants (no
+  weekday, no seconds, two-digit years, RFC 822 zone names mapped to their
+  offsets) and ISO dates without a zone (read as UTC); its test fixtures are
+  real feeds' dates. An unreadable date leaves `published` NULL and logs
+  `unrecognized item date` once per new item batch. Such items sort last
+  (`NULLS LAST`), and the web app and TUI show their fetch time in italics.
 - **Fetch errors.** A failure to insert an item is reported as the source's
   `fetch_error` (the first failure plus a count), and a clean fetch clears it.
 - **Removing** a source, tag or rule that does not exist is `codes.NotFound`
