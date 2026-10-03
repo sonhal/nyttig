@@ -178,6 +178,7 @@ docs/tag-tree-plan.md       Plan for parent tags (the tag tree): decisions and p
 docs/saved-views-plan.md    Plan for saved views (named filters, feed tabs): decisions and phases
 docs/date-filter-plan.md    Plan for the date window (since:7d) in filters and views: decisions and phases
 docs/assessments-plan.md    Plan for assessments (scores and notes from external assessors): decisions and phases
+docs/assessor-auth-plan.md  Plan for per-assessor tokens (Caddy basic auth, nyttig-api's assessor listener)
 CLAUDE.md                   `@AGENTS.md`: makes Claude Code load this file
 ```
 

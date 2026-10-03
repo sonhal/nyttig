@@ -537,6 +537,7 @@ note), and records deviations below.
 - Per-assessor credentials: an mTLS certificate or token bound to an
   assessor, on a narrow route group that can only write that assessor's
   assessments. Until then every credential is full admin (see Security).
+  Planned in `docs/assessor-auth-plan.md`.
 - Rules that turn a score into a tag ("Claude ≥ 0.8 for `CVE` → tag
   `CVE/critical`"), which would reuse every tag feature.
 - Batch `PutAssessments` for assessors that write many at a time.
