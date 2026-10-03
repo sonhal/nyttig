@@ -1,6 +1,6 @@
 # Assessments plan: scores and notes from external assessors
 
-Status: **phases 1–9 implemented, not yet merged** (database layer, proto and RPCs, live updates, CLI and config, HTTP API, web app, TUI, rating yourself, fetching work by saved view). `main`'s date window (#25) is merged into the branch; assessments and `since:` work together everywhere.
+Status: **phases 1–9 implemented and merged** (sonhal/nyttig#27, 2026-10-03: database layer, proto and RPCs, live updates, CLI and config, HTTP API, web app, TUI, rating yourself, fetching work by saved view). Built on the date window (#25); assessments and `since:` work together everywhere.
 
 Other systems can attach a judgement to a news item: an optional **score**
 from 0.0 to 1.0, an optional **note**, and the **assessor** that made it.

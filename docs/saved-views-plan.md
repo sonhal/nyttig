@@ -1,6 +1,6 @@
 # Saved views plan
 
-Status: **phases 1–7 implemented, not yet merged** (the backend, the CLI, the HTTP API and the web app).
+Status: **phases 1–7 implemented and merged** (sonhal/nyttig#24: the backend, the CLI, the HTTP API and the web app).
 
 Saved views are persistent, named feed filters, like Linear's views. You can
 bring one up with a key or a tab instead of retyping
