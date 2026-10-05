@@ -142,3 +142,63 @@ export interface SavedView {
 	/** The display order of the views, from 0. */
 	position?: number;
 }
+
+/**
+ * A named, registered group of digests by one assessor. Names and
+ * descriptions are untrusted text: render them as text only.
+ */
+export interface DigestSeries {
+	id?: string;
+	assessor_id?: string;
+	assessor_name?: string;
+	name?: string;
+	description?: string;
+	/** The display order across all assessors, from 0. */
+	position?: number;
+	created_at?: string;
+	digest_count?: number;
+	/** RFC 3339 timestamp; absent for an empty series. */
+	latest_period_end?: string;
+}
+
+/** An item a digest is based on. Title and link are untrusted: text and safeLink only. */
+export interface DigestItem {
+	item_id?: string;
+	title?: string;
+	link?: string;
+	source_name?: string;
+	/** RFC 3339 timestamp. */
+	published?: string;
+}
+
+/** An earlier digest a digest used as input. */
+export interface DigestRef {
+	id?: string;
+	title?: string;
+	series_name?: string;
+	/** RFC 3339 timestamp. */
+	period_end?: string;
+}
+
+/**
+ * A document an assessor wrote about one to many items. The title and the
+ * body are untrusted text (an LLM's output can repeat the markup or
+ * instructions of the feed it read): render them as text only. The body is
+ * absent in lists fetched without body=1.
+ */
+export interface Digest {
+	id?: string;
+	series_id?: string;
+	series_name?: string;
+	assessor_id?: string;
+	assessor_name?: string;
+	title?: string;
+	body?: string;
+	/** RFC 3339 timestamps. */
+	period_start?: string;
+	period_end?: string;
+	created_at?: string;
+	updated_at?: string;
+	items?: DigestItem[];
+	inputs?: DigestRef[];
+}

@@ -1,6 +1,6 @@
 # Digests plan: summaries and notes from assessors, kept as a history
 
-Status: **phases 1–4 implemented, not yet merged.** Phases 1–7 below.
+Status: **phases 1–5 implemented, not yet merged.** Phases 1–7 below.
 
 Assessments judge one item. A **digest** is a document an assessor writes
 about **one to many items**: "today's CVE news", "September in review".
@@ -454,3 +454,19 @@ By hand, with nyttigd on `sample_config.toml`:
   is 1 to 100 (the daemon's 0 = default is not exposed). Periods in requests
   must be full RFC 3339 times (`2026-10-05T00:00:00Z`); the `YYYY-MM-DD`
   shorthand is a CLI convenience only.
+- **Phase 5:** keys (desktop; the toolbar and taps on a phone): `j`/`k` older
+  / newer digest, `g`/`G` newest / oldest loaded, `]`/`[` (and arrows) next /
+  previous series, `1`-`9` open an input, `d`/`u` scroll the reading pane,
+  `r` reload, `e`/`x` edit / delete the series, `K`/`J` move the series
+  within its assessor's series (never across assessors), `:` `?` `q`. Layout:
+  the series list above the history in a left column, the digest on the
+  right; on a phone three screens (`series`, `history`, `reading`) chosen
+  by the URL and a `back` button. The page is not built on `ManageView` (it
+  is not one list) but shares its tabs (new `PageTabs.svelte`, which scrolls
+  sideways on a phone now that there are seven), forms, confirmation and
+  command line. Series cannot be added from the web app (the assessor
+  program or the CLI registers them), as the plan only listed rename,
+  description, reorder and delete. An input link carries only `digest=<id>`
+  because `DigestRef` has no series ID; the page rewrites the URL once the
+  digest is fetched. The phone's `⚙` sheet lists the manage pages in three
+  columns to make room for `digests`.

@@ -784,7 +784,7 @@ fresh snapshot (the newest 200), dropping the older pages.
 
 **Command line** (`:`; `Tab` completes, again to cycle; `↑`/`↓` history;
 a unique prefix is enough): `:feed` `:sources` `:tags` `:rules` `:views` (`:q` is
-the feed), `:assessors`, `:sort [newest|oldest|score]`, `:unviewed [on|off]`, `:src <name>|all`,
+the feed), `:assessors`, `:digests` (`:d`), `:digest <assessor>/<series>`, `:sort [newest|oldest|score]`, `:unviewed [on|off]`, `:src <name>|all`,
 `:tag <name>|all`, `:score <assessor>|all [min]`, `:unassessed <assessor>|all`, `:rate <score> [note]`, `:view <name>|all` (`:v`), `:save [name]`,
 `:refresh [source]`, `:time [relative|absolute]`, `:follow`, `:help`. The
 filter and view commands also work from the management pages, and go to the
@@ -838,7 +838,38 @@ the next reload. A view saves its assessor, minimum score, "not assessed by"
 and its sort, `score` included, so opening it restores the order. The
 `:assessors` page (also the tab and the phone's `⚙` sheet) adds, edits and
 deletes assessors; deleting one deletes its assessments, and the confirmation
-says how many views stop filtering on it.
+says how many views stop filtering on it, and how many digest series and
+digests go with it.
+
+#### Digests in the web app
+
+`:digests` (or the tab, and the phone's `⚙` sheet) reads
+[digests](#digests): a list of series grouped by assessor (in the assessor's
+color, with each series' digest count and latest period), the selected
+series' history (newest period first, `load older` for more) and the digest
+being read: its title, assessor, series, period (UTC) and update time, the
+body, "Based on N items" (links to the articles) and "Inputs" (the earlier
+digests it used; each opens that digest, also from another series). The URL is
+the state: `/digests?series=<id>&digest=<id>`, and with no `digest` the newest
+one of the series is shown. `:digest <assessor>/<series>` opens a series
+(`Tab` completes). On a phone the series list, the history and the digest are
+separate screens, with a `back` button.
+
+The body is shown as plain text for now (`white-space: pre-wrap`). Everything
+a digest carries is untrusted, so it is only ever rendered as text nodes; item
+links go through the same link check as the feed's.
+
+| Key | Does |
+|---|---|
+| `j` / `k` (`↓` / `↑`) | The next older / newer digest of the series (older pages load as needed) |
+| `g` / `G` | The newest / the oldest loaded digest |
+| `]` / `[` (`→` / `←`) | The next / previous series |
+| `1`-`9` | Open the n-th input digest |
+| `d` / `u` (`PgDn` / `PgUp`) | Scroll the digest half a page |
+| `r` | Reload the series and the history |
+| `e`, `x` | Rename or redescribe the selected series; delete it (the confirmation says how many digests go) |
+| `K` / `J` | Move the series up / down among its assessor's series |
+| `:`, `?`, `q` | Command line, help, back to the feed |
 
 #### Sources, tags and rules
 

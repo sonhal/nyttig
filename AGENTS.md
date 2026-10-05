@@ -148,13 +148,15 @@ cmd/nyttig-api/main.go      nyttig-api entrypoint: flags, listen-address guard, 
 web/                        The SvelteKit app (pnpm); "pnpm build" writes a Node server to web/build/
 web/src/lib/                Pure modules (reducer, keymap, filter, query, command, highlight,
                             fuzzy, history, help, sanitize, viewed, forms, latest, meta, since,
-                            format, tagtree, views, scores) with Vitest tests next to them, plus the
+                            format, tagtree, views, scores, digests) with Vitest tests next to them, plus the
                             Svelte components (ViewTabs.svelte is the saved views' tab row above
-                            the filter bar); metadata.svelte.ts holds the sources, tags and
-                            saved views every page shares, prefs.svelte.ts the time format
+                            the filter bar; PageTabs.svelte the page tabs of every page but
+                            the feed); metadata.svelte.ts holds the sources, tags, saved views and
+                            digest series every page shares, prefs.svelte.ts the time format
                             (localStorage)
 web/src/routes/             / is the feed; sources/, tags/, rules/, views/ and assessors/ are the
-                            management pages (ManageView.svelte is their shared frame)
+                            management pages (ManageView.svelte is their shared frame);
+                            digests/ is the reading page (its own layout and key table)
 web/e2e/                    Playwright tests; stack.mjs starts a feed server, nyttigd, nyttig-api,
                             the app server and a Caddy-like proxy (proxy.mjs)
 internal/server/service/    gRPC service impl + Hub (broadcasts pushed items to subscribers);
@@ -379,7 +381,11 @@ which phases are done and whether they are merged; keep it current.
   `db.ListDigests` pages by a `(period_end, id)` cursor (`beforeID`), so
   equal period ends page without skipping. Bodies are untrusted text (an
   LLM's output can repeat feed markup): never `{@html}`, strip control
-  characters in the TUI. The service (`service/digests.go`) validates the
+  characters in the TUI. In the web app (`routes/digests/`, pure logic in
+  `lib/digests.ts`) the URL `/digests?series=&digest=` is the state, an
+  input link carries only `digest=` and the page learns the series from the
+  fetched digest, and the keys live in `keymap.ts` (`digestsKeyAction`).
+  The service (`service/digests.go`) validates the
   title, the body (≤ 64 KiB, UTF-8, no control characters but newline and
   tab), periods (whole UTC seconds, `period_end >= period_start`, also when
   an update sets only one) and the link lists (≤ 1000 items, ≤ 100 inputs,

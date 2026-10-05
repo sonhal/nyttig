@@ -118,6 +118,7 @@
 		<a href="/rules" data-testid="manage-rules">rules</a>
 		<a href="/views" data-testid="manage-views">views</a>
 		<a href="/assessors" data-testid="manage-assessors">assess</a>
+		<a href="/digests" data-testid="manage-digests">digests</a>
 	</nav>
 	<button type="button" class="done" onclick={onclose}>done</button>
 </div>
@@ -164,9 +165,12 @@
 	}
 	.manage {
 		display: grid;
-		grid-template-columns: 10ch repeat(5, 1fr);
+		grid-template-columns: repeat(3, 1fr);
 		align-items: center;
 		gap: 8px;
+	}
+	.manage span {
+		grid-column: 1 / -1;
 	}
 	.manage a {
 		display: grid;

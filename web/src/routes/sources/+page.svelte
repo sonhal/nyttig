@@ -223,7 +223,7 @@
 	panel={panel === null ? null : panel.kind === 'delete' ? 'confirm' : 'form'}
 	{tools}
 	note={note || (metadata.error ? 'error: ' + metadata.error : '')}
-	counts={{ sources: sources.length, tags: metadata.tags.length, views: metadata.views.length, assessors: metadata.assessors.length }}
+	counts={{ sources: sources.length, tags: metadata.tags.length, views: metadata.views.length, assessors: metadata.assessors.length, digests: metadata.series.length }}
 	{loaded}
 	{onaction}
 >

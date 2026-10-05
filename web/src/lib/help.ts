@@ -4,7 +4,7 @@
 // keys, commands and query bar actually do.
 
 import { COMMANDS } from './command';
-import { feedHelp, manageHelp, type HelpSection, type Tool } from './keymap';
+import { digestsHelp, feedHelp, manageHelp, type HelpSection, type Tool } from './keymap';
 import { QUERY_KEYS } from './query';
 
 function commandHelp(): HelpSection {
@@ -26,4 +26,9 @@ export function feedSections(): HelpSection[] {
 /** A management view: the keys it has, and the commands. */
 export function manageSections(tools: readonly Tool['type'][]): HelpSection[] {
 	return [...manageHelp(tools), commandHelp()];
+}
+
+/** The digests page: its keys and the commands. */
+export function digestsSections(tools: readonly Tool['type'][]): HelpSection[] {
+	return [...digestsHelp(tools), commandHelp()];
 }

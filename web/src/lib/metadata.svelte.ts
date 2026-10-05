@@ -1,16 +1,18 @@
-// Sources, tags, saved views and assessors, shared by every page. The feed uses them for source
+// Sources, tags, saved views, assessors and digest series, shared by every page. The feed uses them for source
 // labels and tag colors; the management views edit them and reload them
 // after every change, so the feed shows new names, colors and
 // abbreviations as soon as it is back on screen.
 
 import * as api from './api';
-import type { Assessor, SavedView, Source, Tag } from './types';
+import type { Assessor, DigestSeries, SavedView, Source, Tag } from './types';
 
 class Metadata {
 	sources: Source[] = $state.raw([]);
 	tags: Tag[] = $state.raw([]);
 	views: SavedView[] = $state.raw([]);
 	assessors: Assessor[] = $state.raw([]);
+	/** The digest series of every assessor, in display order. */
+	series: DigestSeries[] = $state.raw([]);
 	/** The last load error, or "" after a successful load. */
 	error = $state('');
 	/**
@@ -55,8 +57,23 @@ class Metadata {
 		}
 	}
 
+	async reloadSeries(): Promise<void> {
+		try {
+			this.series = await api.listDigestSeries();
+			this.error = '';
+		} catch (e) {
+			this.error = e instanceof Error ? e.message : String(e);
+		}
+	}
+
 	async reload(): Promise<void> {
-		await Promise.all([this.reloadSources(), this.reloadTags(), this.reloadViews(), this.reloadAssessors()]);
+		await Promise.all([
+			this.reloadSources(),
+			this.reloadTags(),
+			this.reloadViews(),
+			this.reloadAssessors(),
+			this.reloadSeries()
+		]);
 	}
 }
 
