@@ -1,6 +1,6 @@
 # Digests plan: summaries and notes from assessors, kept as a history
 
-Status: **planned, not started.** Phases 1–7 below.
+Status: **phase 1 implemented, not yet merged.** Phases 1–7 below.
 
 Assessments judge one item. A **digest** is a document an assessor writes
 about **one to many items**: "today's CVE news", "September in review".
@@ -436,4 +436,7 @@ By hand, with nyttigd on `sample_config.toml`:
 
 ## Deviations from this plan
 
-None yet.
+- **Phase 1:** `db/digests.go` also has `FirstMissingItemID` and
+  `FirstMissingDigestID` (one batched query each), which the service uses for
+  its `NotFound` checks; `ListDigests` returns `([]*Digest, hasMore, error)`
+  and an unknown `beforeID` (or one from another series) gives an empty page.

@@ -158,7 +158,8 @@ web/e2e/                    Playwright tests; stack.mjs starts a feed server, ny
 internal/server/service/    gRPC service impl + Hub (broadcasts pushed items to subscribers);
                             validate.go holds all client-input validation
 internal/server/db/         SQLite layer: items, sources, tags, views, assessors and assessments
-                            (assessments.go); embedded migrations
+                            (assessments.go), digest series and digests (digests.go); embedded
+                            migrations
 internal/server/fetcher/    Feed fetch/parse + GUID-based dedup; client.go builds the HTTP
                             client, including the private-address (SSRF) block
 internal/server/tagger/     Regex-based auto-tagging engine
@@ -361,6 +362,22 @@ which phases are done and whether they are merged; keep it current.
   rebuild carries `since`. On `ViewFilter` the assessment fields are 7-9, on
   `SearchRequest` 10-12 and on `StreamFilter` 8-10 (after main's `since` /
   `after`).
+- **Digests** (`digest_series`, `digests`, `digest_items`, `digest_inputs`;
+  `docs/digests-plan.md`). A digest is a document one assessor writes about
+  one to many items, kept in a **registered series** (unique per assessor,
+  case-insensitive; deleting the assessor or series deletes its digests).
+  It is separate from assessments: nothing in `assessments`, `ItemFilter`,
+  the Hub or the item stream knows about digests, and there is no live push.
+  `AddDigest` always creates, `UpdateDigest` overwrites (no revisions).
+  `digest_items` (the items a digest is based on) and `digest_inputs` (the
+  earlier digests it read) are provenance only: nothing walks them, a source
+  delete removes the item links but never the digest. Digest dates are
+  written in Go as UTC with whole seconds (`db.utcSecond`), the text shape of
+  `items.published`; don't rely on `CURRENT_TIMESTAMP` for them.
+  `db.ListDigests` pages by a `(period_end, id)` cursor (`beforeID`), so
+  equal period ends page without skipping. Bodies are untrusted text (an
+  LLM's output can repeat feed markup): never `{@html}`, strip control
+  characters in the TUI.
 - **TUI assessments.** The filter bar cycles the assessor (`a`) and the
   minimum score (`m`); the score sort exists only while an assessor is
   selected, and dropping the assessor drops the minimum and the sort
