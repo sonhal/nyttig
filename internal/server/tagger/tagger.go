@@ -33,10 +33,81 @@ type Item struct {
 	Description string
 }
 
-// compiledRule pairs a TagRule with its pre-compiled regex pattern.
-type compiledRule struct {
-	rule TagRule
+// CompiledRule pairs a TagRule with its pre-compiled regex pattern.
+type CompiledRule struct {
+	Rule TagRule
 	re   *regexp.Regexp
+}
+
+// BadRule is a rule whose pattern does not compile.
+type BadRule struct {
+	Rule TagRule
+	Err  error
+}
+
+// NewCompiledRule pairs a rule with a regex its caller has already compiled
+// (and validated) itself.
+func NewCompiledRule(rule TagRule, re *regexp.Regexp) CompiledRule {
+	return CompiledRule{Rule: rule, re: re}
+}
+
+// Compile compiles each rule's pattern, keeping the input order. Rules whose
+// pattern does not compile are returned in bad instead.
+func Compile(rules []TagRule) (compiled []CompiledRule, bad []BadRule) {
+	compiled = make([]CompiledRule, 0, len(rules))
+	for _, r := range rules {
+		re, err := regexp.Compile(r.Pattern)
+		if err != nil {
+			bad = append(bad, BadRule{Rule: r, Err: err})
+			continue
+		}
+		compiled = append(compiled, CompiledRule{Rule: r, re: re})
+	}
+	return compiled, bad
+}
+
+// Matches reports whether the rule applies to the item's source (a global
+// rule, or one for that source) and its pattern matches the rule's field.
+// An unknown field matches like "both".
+func (cr CompiledRule) Matches(item Item) bool {
+	if cr.Rule.SourceID != 0 && cr.Rule.SourceID != item.SourceID {
+		return false
+	}
+	return cr.MatchesText(item.Title, item.Description)
+}
+
+// MatchesText matches the rule's pattern against the rule's field, without
+// checking the rule's source.
+func (cr CompiledRule) MatchesText(title, description string) bool {
+	switch cr.Rule.Field {
+	case "title":
+		return cr.re.MatchString(title)
+	case "description":
+		return cr.re.MatchString(description)
+	default: // "both", "" or unknown
+		return cr.re.MatchString(title) || cr.re.MatchString(description)
+	}
+}
+
+// Desired returns, for each item that any rule matches, the IDs of the tags
+// those rules give it, in ascending order without duplicates. Items no rule
+// matches are left out.
+func Desired(rules []CompiledRule, items []Item) map[int64][]int64 {
+	out := make(map[int64][]int64)
+	for _, item := range items {
+		seen := make(map[int64]bool)
+		for _, cr := range rules {
+			if seen[cr.Rule.TagID] || !cr.Matches(item) {
+				continue
+			}
+			seen[cr.Rule.TagID] = true
+			out[item.ID] = append(out[item.ID], cr.Rule.TagID)
+		}
+		if tags := out[item.ID]; len(tags) > 1 {
+			sort.Slice(tags, func(i, j int) bool { return tags[i] < tags[j] })
+		}
+	}
+	return out
 }
 
 // RuleStore is the minimal database interface the tagger needs to load rules and
@@ -66,23 +137,29 @@ func New(store RuleStore, logger *slog.Logger) *Tagger {
 
 // loadCompiledRules loads rules from the store, sorts by priority, and
 // compiles each pattern. Rules whose pattern fails to compile are logged
-// and skipped (matching the previous ruleMatches behavior).
-func (t *Tagger) loadCompiledRules() ([]compiledRule, error) {
+// and skipped, and rules with an unknown field are logged (they match like
+// "both").
+func (t *Tagger) loadCompiledRules() ([]CompiledRule, error) {
 	rules, err := t.store.LoadRules()
 	if err != nil {
 		return nil, fmt.Errorf("load rules: %w", err)
 	}
 	sort.Slice(rules, func(i, j int) bool { return rules[i].Priority < rules[j].Priority })
-	out := make([]compiledRule, 0, len(rules))
-	for _, r := range rules {
-		re, err := regexp.Compile(r.Pattern)
-		if err != nil {
-			t.logger.Warn("invalid regex pattern in rule", "rule_id", r.ID, "pattern", r.Pattern, "error", err)
-			continue
-		}
-		out = append(out, compiledRule{rule: r, re: re})
+	compiled, bad := Compile(rules)
+	for _, b := range bad {
+		t.logger.Warn("invalid regex pattern in rule", "rule_id", b.Rule.ID, "pattern", b.Rule.Pattern, "error", b.Err)
 	}
-	return out, nil
+	for _, cr := range compiled {
+		switch cr.Rule.Field {
+		case "title", "description", "both", "":
+		default:
+			t.logger.Warn("unknown field in rule, defaulting to both",
+				"rule_id", cr.Rule.ID,
+				"field", cr.Rule.Field,
+			)
+		}
+	}
+	return compiled, nil
 }
 
 // TagItem evaluates all applicable rules against a single item, inserting
@@ -99,19 +176,15 @@ func (t *Tagger) TagItem(item Item) (int, error) {
 
 	assigned := 0
 	for _, cr := range compiledRules {
-		if !t.ruleAppliesToItem(cr.rule, item) {
+		if !cr.Matches(item) {
 			continue
 		}
 
-		if !t.matchCompiled(cr, item) {
-			continue
-		}
-
-		if err := t.store.AssignTag(item.ID, cr.rule.TagID); err != nil {
+		if err := t.store.AssignTag(item.ID, cr.Rule.TagID); err != nil {
 			t.logger.Warn("failed to assign tag",
 				"item_id", item.ID,
-				"tag_id", cr.rule.TagID,
-				"tag_name", cr.rule.TagName,
+				"tag_id", cr.Rule.TagID,
+				"tag_name", cr.Rule.TagName,
 				"error", err,
 			)
 			continue
@@ -120,9 +193,9 @@ func (t *Tagger) TagItem(item Item) (int, error) {
 		assigned++
 		t.logger.Debug("tag assigned",
 			"item_id", item.ID,
-			"tag_id", cr.rule.TagID,
-			"tag_name", cr.rule.TagName,
-			"rule_id", cr.rule.ID,
+			"tag_id", cr.Rule.TagID,
+			"tag_name", cr.Rule.TagName,
+			"rule_id", cr.Rule.ID,
 		)
 	}
 
@@ -141,18 +214,14 @@ func (t *Tagger) TagItems(items []Item) (int, error) {
 	total := 0
 	for _, item := range items {
 		for _, cr := range compiledRules {
-			if !t.ruleAppliesToItem(cr.rule, item) {
+			if !cr.Matches(item) {
 				continue
 			}
 
-			if !t.matchCompiled(cr, item) {
-				continue
-			}
-
-			if err := t.store.AssignTag(item.ID, cr.rule.TagID); err != nil {
+			if err := t.store.AssignTag(item.ID, cr.Rule.TagID); err != nil {
 				t.logger.Warn("failed to assign tag",
 					"item_id", item.ID,
-					"tag_id", cr.rule.TagID,
+					"tag_id", cr.Rule.TagID,
 					"error", err,
 				)
 				continue
@@ -162,31 +231,4 @@ func (t *Tagger) TagItems(items []Item) (int, error) {
 	}
 
 	return total, nil
-}
-
-// ruleAppliesToItem returns true if the rule is global or matches the item's source.
-func (t *Tagger) ruleAppliesToItem(rule TagRule, item Item) bool {
-	// Global rule: SourceID == 0 applies to all sources.
-	if rule.SourceID == 0 {
-		return true
-	}
-	return rule.SourceID == item.SourceID
-}
-
-// matchCompiled tests a pre-compiled regex against the correct field(s) of the item.
-func (t *Tagger) matchCompiled(cr compiledRule, item Item) bool {
-	switch cr.rule.Field {
-	case "title":
-		return cr.re.MatchString(item.Title)
-	case "description":
-		return cr.re.MatchString(item.Description)
-	case "both", "": // default to both
-		return cr.re.MatchString(item.Title) || cr.re.MatchString(item.Description)
-	default:
-		t.logger.Warn("unknown field in rule, defaulting to both",
-			"rule_id", cr.rule.ID,
-			"field", cr.rule.Field,
-		)
-		return cr.re.MatchString(item.Title) || cr.re.MatchString(item.Description)
-	}
 }

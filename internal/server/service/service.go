@@ -26,6 +26,7 @@ import (
 	pb "github.com/sonhal/nyttig/internal/proto/nyttig/v1"
 	"github.com/sonhal/nyttig/internal/server/db"
 	"github.com/sonhal/nyttig/internal/server/fetcher"
+	"github.com/sonhal/nyttig/internal/server/tagger"
 )
 
 // RefreshSourceFunc is called by RefreshSource RPC. The scheduler registers
@@ -820,6 +821,7 @@ func (s *Service) TestTagRule(ctx context.Context, req *pb.TestTagRuleRequest) (
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
+	rule := tagger.NewCompiledRule(tagger.TagRule{Field: field, Pattern: req.Pattern}, re)
 	limit := int(req.Limit)
 	if limit <= 0 {
 		limit = 20
@@ -843,16 +845,7 @@ func (s *Service) TestTagRule(ctx context.Context, req *pb.TestTagRuleRequest) (
 		if item.Description != nil {
 			desc = *item.Description
 		}
-		var match bool
-		switch field {
-		case "title":
-			match = re.MatchString(item.Title)
-		case "description":
-			match = re.MatchString(desc)
-		default:
-			match = re.MatchString(item.Title) || re.MatchString(desc)
-		}
-		if match {
+		if rule.MatchesText(item.Title, desc) {
 			resp.Items = append(resp.Items, ItemToProto(item))
 			if len(resp.Items) == limit {
 				break
