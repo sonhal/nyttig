@@ -40,11 +40,17 @@ type jsonBody map[string]json.RawMessage
 // members are all in allowed and none of them null. It writes the error
 // response itself and returns false when the body is unacceptable.
 func readBody(w http.ResponseWriter, r *http.Request, allowed ...string) (jsonBody, bool) {
-	raw, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxManageBodyBytes))
+	return readBodyMax(w, r, maxManageBodyBytes, allowed...)
+}
+
+// readBodyMax is readBody with its own size cap, for the few bodies that are
+// legitimately large (a digest's text).
+func readBodyMax(w http.ResponseWriter, r *http.Request, max int64, allowed ...string) (jsonBody, bool) {
+	raw, err := io.ReadAll(http.MaxBytesReader(w, r.Body, max))
 	if err != nil {
 		var mbe *http.MaxBytesError
 		if errors.As(err, &mbe) {
-			writeError(w, http.StatusRequestEntityTooLarge, fmt.Sprintf("body must be at most %d bytes", maxManageBodyBytes))
+			writeError(w, http.StatusRequestEntityTooLarge, fmt.Sprintf("body must be at most %d bytes", max))
 			return nil, false
 		}
 		writeError(w, http.StatusBadRequest, "read body")

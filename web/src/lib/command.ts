@@ -2,7 +2,9 @@
 // ":views". Filter shortcuts: ":sort", ":unviewed", ":src", ":tag". Saved
 // views: ":view <name>|all" opens one, ":save [name]" saves the current
 // filter. Assessments: ":score <assessor>|all [min]" and ":unassessed
-// <assessor>|all" filter, ":assessors" is the management page. Also ":refresh", ":time", ":follow" and ":help". A unique prefix is enough (":sor", ":un"); a few
+// <assessor>|all" filter, ":assessors" is the management page. Digests:
+// ":digests" is the reading page and ":digest <assessor>/<series>" opens one
+// series on it. Also ":refresh", ":time", ":follow" and ":help". A unique prefix is enough (":sor", ":un"); a few
 // short forms are fixed so they keep the meaning they had before the
 // longer commands existed (":s" sources, ":r" rules, ":f" feed, ":t" tags,
 // ":q" feed).
@@ -12,13 +14,14 @@
 
 import { parseScore, withAssessor } from './filter';
 import { parseRate } from './rate';
+import { findSeries, seriesNames } from './digests';
 import { findAssessor, findSource, findTag } from './query';
-import type { Assessor, Filter, SavedView, Sort, Source, Tag } from './types';
+import type { Assessor, DigestSeries, Filter, SavedView, Sort, Source, Tag } from './types';
 import { findView } from './views';
 
-export type Page = 'feed' | 'sources' | 'tags' | 'rules' | 'views' | 'assessors';
+export type Page = 'feed' | 'sources' | 'tags' | 'rules' | 'views' | 'assessors' | 'digests';
 
-export const PAGES: readonly Page[] = ['feed', 'sources', 'tags', 'rules', 'views', 'assessors'];
+export const PAGES: readonly Page[] = ['feed', 'sources', 'tags', 'rules', 'views', 'assessors', 'digests'];
 
 /** The route of each page. */
 export const PAGE_PATHS: Record<Page, string> = {
@@ -27,13 +30,16 @@ export const PAGE_PATHS: Record<Page, string> = {
 	tags: '/tags',
 	rules: '/rules',
 	views: '/views',
-	assessors: '/assessors'
+	assessors: '/assessors',
+	digests: '/digests'
 };
 
 export type TimeMode = 'relative' | 'absolute';
 
 export type Command =
 	| { type: 'page'; page: Page }
+	/** Opens a digest series (by ID) on the digests page. */
+	| { type: 'digest'; series: string }
 	/** Opens a saved view; id "" is the unfiltered feed. */
 	| { type: 'view'; id: string }
 	/** Saves the current filter: into the active view when name is "", else as a new view. */
@@ -62,6 +68,8 @@ export interface CommandContext {
 	views?: readonly SavedView[];
 	/** The assessors; left out, there are none. */
 	assessors?: readonly Assessor[];
+	/** The digest series; left out, there are none. */
+	series?: readonly DigestSeries[];
 }
 
 export type CommandResult = { ok: true; cmd: Command } | { ok: false; error: string };
@@ -80,6 +88,8 @@ export const COMMANDS: readonly Spec[] = [
 	{ name: 'rules', desc: 'manage tag rules' },
 	{ name: 'views', desc: 'manage saved views' },
 	{ name: 'assessors', desc: 'manage assessors' },
+	{ name: 'digests', desc: 'read digests (:d too)' },
+	{ name: 'digest', args: '<assessor>/<series>', desc: 'open a digest series' },
 	{ name: 'sort', args: '[newest|oldest|score]', desc: 'set the sort order (score needs an assessor), or toggle it' },
 	{ name: 'unviewed', args: '[on|off]', desc: 'show only unviewed items, or toggle it' },
 	{ name: 'src', args: '<name>|all', desc: 'filter by source (:src alone lists sources)' },
@@ -110,6 +120,7 @@ const ALIASES: Record<string, string> = {
 	u: 'unviewed',
 	un: 'unviewed',
 	v: 'view',
+	d: 'digests',
 	h: 'help',
 	'?': 'help'
 };
@@ -155,7 +166,13 @@ export function parseCommand(input: string, ctx: CommandContext = { sources: [],
 		case 'rules':
 		case 'views':
 		case 'assessors':
+		case 'digests':
 			return arg ? fail(`${r.name} takes no argument`) : ok({ type: 'page', page: r.name });
+		case 'digest': {
+			if (!arg) return fail('digest: <assessor>/<series>');
+			const found = findSeries(ctx.series ?? [], unquote(arg));
+			return found.ok ? ok({ type: 'digest', series: found.id }) : fail(found.error);
+		}
 		case 'view': {
 			if (!arg) return fail('view: a view name, or all');
 			const name = unquote(arg);
@@ -317,6 +334,9 @@ export function completeCommand(input: string, ctx: CommandContext): CommandComp
 			break;
 		case 'view':
 			list = [...names(ctx.views ?? []), 'all'];
+			break;
+		case 'digest':
+			list = seriesNames(ctx.series ?? []);
 			break;
 	}
 	return { from: argStart, candidates: startsWith(list, typed) };

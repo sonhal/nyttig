@@ -289,6 +289,91 @@ export function manageKeyAction(mode: ManageMode, e: KeyInput): ManageAction | n
 	return lookup(MANAGE, e);
 }
 
+// ── Digests page ──────────────────────────────────────────────
+
+/**
+ * The digests page reads documents rather than managing a list, so it has
+ * its own table; its form, confirmation, command and help modes are the
+ * management views'.
+ */
+export type DigestsAction =
+	/** j: the next older digest of the series (loads more history at the end). */
+	| { type: 'olderDigest' }
+	| { type: 'newerDigest' }
+	| { type: 'newestDigest' }
+	| { type: 'oldestDigest' }
+	/** ]: the next series in the list. */
+	| { type: 'nextSeries' }
+	| { type: 'prevSeries' }
+	/** Scroll the reading pane by half a page. */
+	| { type: 'scroll'; dir: 1 | -1 }
+	/** 1-9: open the n-th input digest of the digest being read. */
+	| { type: 'openInput'; n: number }
+	| { type: 'reload' }
+	/** Rename or redescribe the series; delete it with its digests; move it in the order. */
+	| { type: 'edit' }
+	| { type: 'delete' }
+	| { type: 'moveUp' }
+	| { type: 'moveDown' }
+	| { type: 'feed' }
+	| { type: 'cancel' }
+	| { type: 'confirm' }
+	| HelpAction
+	| CommandAction;
+
+type DigestsBinding = Binding<DigestsAction>;
+
+const DIGESTS: DigestsBinding[] = [
+	b('Digests', ['j', 'ArrowDown'], { type: 'olderDigest' }, 'the next older digest of the series'),
+	b('Digests', ['k', 'ArrowUp'], { type: 'newerDigest' }, 'the next newer digest'),
+	b('Digests', ['g', 'Home'], { type: 'newestDigest' }, 'the newest digest'),
+	b('Digests', ['G', 'End'], { type: 'oldestDigest' }, 'the oldest digest loaded (load older to reach more)'),
+	b('Digests', ['1'], { type: 'openInput', n: 1 }, 'open the n-th input digest (1-9)'),
+	b('Digests', ['2'], { type: 'openInput', n: 2 }, 'open the n-th input digest (1-9)'),
+	b('Digests', ['3'], { type: 'openInput', n: 3 }, 'open the n-th input digest (1-9)'),
+	b('Digests', ['4'], { type: 'openInput', n: 4 }, 'open the n-th input digest (1-9)'),
+	b('Digests', ['5'], { type: 'openInput', n: 5 }, 'open the n-th input digest (1-9)'),
+	b('Digests', ['6'], { type: 'openInput', n: 6 }, 'open the n-th input digest (1-9)'),
+	b('Digests', ['7'], { type: 'openInput', n: 7 }, 'open the n-th input digest (1-9)'),
+	b('Digests', ['8'], { type: 'openInput', n: 8 }, 'open the n-th input digest (1-9)'),
+	b('Digests', ['9'], { type: 'openInput', n: 9 }, 'open the n-th input digest (1-9)'),
+	b('Digests', ['d', 'PageDown'], { type: 'scroll', dir: 1 }, 'scroll the digest down half a page'),
+	b('Digests', ['u', 'PageUp'], { type: 'scroll', dir: -1 }, 'scroll the digest up half a page'),
+	b('Digests', ['r'], { type: 'reload' }, 'reload the series and the digests'),
+	b('Series', [']', 'ArrowRight'], { type: 'nextSeries' }, 'the next series'),
+	b('Series', ['[', 'ArrowLeft'], { type: 'prevSeries' }, 'the previous series'),
+	b('Series', ['e', 'Enter'], { type: 'edit' }, 'rename the series or change its description', { tool: 'edit' }),
+	b('Series', ['x', 'Delete'], { type: 'delete' }, 'delete the series and all of its digests', { tool: 'delete' }),
+	b('Series', ['K'], { type: 'moveUp' }, 'move the series up the list', { tool: 'moveUp' }),
+	b('Series', ['J'], { type: 'moveDown' }, 'move the series down the list', { tool: 'moveDown' }),
+	b('General', ['q'], { type: 'feed' }, 'back to the feed'),
+	b('General', [':'], { type: 'openCommand' }, 'command line'),
+	b('General', ['?'], { type: 'openHelp' }, 'this help')
+];
+
+const DIGESTS_FORM: Binding<DigestsAction>[] = [b('Form', ['Escape'], { type: 'cancel' }, 'close the form without saving')];
+
+const DIGESTS_CONFIRM: Binding<DigestsAction>[] = [
+	b('Delete confirmation', ['y', 'Enter'], { type: 'confirm' }, 'delete'),
+	b('Delete confirmation', ['n', 'q', 'Escape'], { type: 'cancel' }, 'keep it')
+];
+
+/** Like manageKeyAction, for the digests page. */
+export function digestsKeyAction(mode: ManageMode, e: KeyInput): DigestsAction | null {
+	if (e.isComposing) return null;
+	switch (mode) {
+		case 'command':
+			return lookup(COMMAND, e);
+		case 'form':
+			return lookup(DIGESTS_FORM, e);
+		case 'confirm':
+			return lookup(DIGESTS_CONFIRM, e);
+		case 'help':
+			return lookup(HELP, e);
+	}
+	return lookup(DIGESTS, e);
+}
+
 // ── Help ──────────────────────────────────────────────────────
 
 export interface HelpRow {
@@ -346,4 +431,10 @@ export function feedHelp(): HelpSection[] {
 export function manageHelp(tools: readonly Tool['type'][]): HelpSection[] {
 	const has = (bd: Binding<ManageAction>) => !bd.tool || tools.includes(bd.tool);
 	return sections<ManageAction>([MANAGE, FORM, CONFIRM, COMMAND, HELP], has);
+}
+
+/** Every key of the digests page that has the given series tools. */
+export function digestsHelp(tools: readonly Tool['type'][]): HelpSection[] {
+	const has = (bd: Binding<DigestsAction>) => !bd.tool || tools.includes(bd.tool);
+	return sections<DigestsAction>([DIGESTS, DIGESTS_FORM, DIGESTS_CONFIRM, COMMAND, HELP], has);
 }

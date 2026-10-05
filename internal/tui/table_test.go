@@ -272,3 +272,19 @@ func TestRenderRow_SingleLineWithoutControlChars(t *testing.T) {
 		t.Errorf("row contains injected escape sequences: %q", row)
 	}
 }
+
+func TestSanitizeText(t *testing.T) {
+	for _, tc := range []struct{ in, want string }{
+		{"plain\nlines\tand tabs", "plain\nlines\tand tabs"},
+		{"red \x1b[31mtext\x1b[0m", "red [31mtext[0m"},
+		{"a\x1b]0;title\x07b", "a]0;titleb"},
+		{"cr\r\nlf", "cr\nlf"},
+		{"c1 \u009b2J \u0085 end", "c1 2J  end"},
+		{"nul\x00here", "nulhere"},
+		{"héllo ✓ 日本語", "héllo ✓ 日本語"},
+	} {
+		if got := SanitizeText(tc.in); got != tc.want {
+			t.Errorf("SanitizeText(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}

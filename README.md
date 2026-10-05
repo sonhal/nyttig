@@ -331,6 +331,7 @@ These are global flags accepted by every subcommand and the TUI.
 | `G` / `End`  | Jump to bottom of list.                                  |
 | `Ctrl+d`     | Page down (half screen).                                 |
 | `Ctrl+u`     | Page up (half screen).                                   |
+| `D`          | Open the [digests](#digests) screen (below).             |
 | `q` / `Ctrl+c`| Quit the TUI.                                           |
 
 Rows show one score chip per assessor that scored the item, `[claude 0.9]` in
@@ -340,6 +341,34 @@ position, and one that stops matching stays until the next filter change.
 Notes and assessor names are untrusted: control characters are stripped and
 they are shown on one line. The TUI has no "not assessed by" filter; use
 `nyttig search -unassessed-by` or the web app for that.
+
+### Digests screen
+
+`D` opens the digests screen over the feed (the feed keeps its stream, filter
+and selection; `q` or `Esc` returns to it). The series of every assessor are
+listed on the left, grouped by assessor in the assessor's color with each
+series' digest count, the selected series' history (newest period first) under
+them, and the digest being read on the right: its title, assessor and series,
+period, the body, the items it is based on and its inputs. It loads when it
+opens and on `r`; there are no live updates.
+
+| Key | Action |
+|---|---|
+| `j` / `k` (`↓` / `↑`) | The next older / newer digest of the series (an older page loads at the end of the history) |
+| `g` / `G` | The newest / the oldest loaded digest |
+| `]` / `[` (`l` / `h`, `→` / `←`) | The next / previous series |
+| `d` / `u` (`Ctrl+d` / `Ctrl+u`, `PgDn` / `PgUp`, `Space`) | Scroll the digest half a page |
+| `1`-`9` | Open the n-th input digest (also from another series) |
+| `r` | Reload |
+| `q` / `Esc` | Back to the feed |
+
+The body is the same Markdown subset as in the web app, as styled terminal
+text: headings bold, list bullets, quotes behind `│`, code in a dimmed color, a
+link as `text (url)` (a link that is not an http(s) URL shows only its text),
+and `[#123]` as the item's title in brackets when item 123 is one the digest is
+based on. Digests are untrusted text: control characters (so escape
+sequences) and bidirectional overrides are removed before anything is
+printed, and the terminal only ever sees the styles nyttig adds itself.
 
 ### View tracking
 
@@ -396,6 +425,18 @@ nyttig remove-assessor (-id <id> | -n <name>)   # also removes all of its assess
 nyttig assess          <item-id> -assessor <name|id> [-tag <name|id>] [-score <0-1>] [-note <text>]
 nyttig unassess        <item-id> -assessor <name|id> [-tag <name|id>]
 nyttig rate            <item-id> <score 0-1> [note...]   # you, as the assessor "me" (created on first use)
+nyttig list-series     [-assessor <name|id>]
+nyttig add-series      -assessor <name|id> -n <name> [-description <text>]
+nyttig update-series   <series> [-n <name>] [-description <text>]
+nyttig remove-series   <series>          # also removes all of its digests
+nyttig reorder-series  <series>...       # every series once, in the new order
+nyttig list-digests    <series> [-limit N] [-before <digest-id>]
+nyttig show-digest     <digest-id>       # the body, the items it is based on, its inputs
+nyttig add-digest      <series> -title <text> -start <time> -end <time> (-body <text> | -body-file <path|->)
+                       [-items 1,2] [-inputs 4,5]
+nyttig update-digest   <digest-id> [-title <text>] [-start <time>] [-end <time>] [-body <text> | -body-file <path|->]
+                       [-items 1,2] [-inputs 4,5]   # -items '' / -inputs '' removes those links
+nyttig remove-digest   <digest-id>
 nyttig search          [-view <name|id>] [-tag <name|id>] [-s source_id] [-l limit] [-offset N] [-sort newest|oldest|score] [-unviewed] [-since <window>] [-exact]
                        [-assessor <name|id>] [-min-score <0-1>] [-unassessed-by <name|id>] [query...]
 nyttig refresh         [-id <source_id>]   # omit -id to refresh all
@@ -439,6 +480,15 @@ a whole count. A view saves the same fields (`score:claude>=0.7`,
 `unassessed:claude` and `sort:score` in `list-views`); deleting the assessor
 keeps the view and drops those fields (a `score` sort becomes `newest`).
 
+Digests are documents an assessor writes about many items, kept in series (see
+[Digests](#digests)). `<series>` is `<assessor>/<name>` (the name in any case)
+or a numeric ID, and the `-start` / `-end` times are RFC 3339 or `YYYY-MM-DD`
+(UTC midnight; for `-end`, the last second of that day). `add-digest` always
+creates a new digest; `update-digest` overwrites the fields you pass, with no
+revisions. `-body-file -` reads the body from stdin (at most 64 KiB). These
+commands exist for scripts, for trying out an assessor and for parity with
+assessments; `show-digest` strips control characters from what it prints.
+
 Tag rules added with `add-tag-rule` apply to items fetched after the rule is
 created; existing items are not retagged. Use `test-tag-rule` first to see
 which of the 500 most recent items a pattern would match.
@@ -458,9 +508,11 @@ clients get the same checks:
 | Assessor        | Name ≤ 64 characters, description ≤ 500 characters without control characters, optional `#RRGGBB` color |
 | Score           | A number from 0 to 1 (NaN and infinities are rejected); `min_score` follows the same rule and, like `sort: score`, needs an assessor |
 | Note            | Valid UTF-8, at most 4096 bytes; an assessment needs a score or a note |
+| Digest series   | Name ≤ 64 characters (unique per assessor, case-insensitive), description ≤ 500 characters, both without control characters |
+| Digest          | Title ≤ 200 characters; body valid UTF-8, at most 64 KiB, no control characters except newline and tab; `period_start` and `period_end` (`period_end >= period_start`, whole seconds, UTC); at most 1000 linked items and 100 input digests, which must exist |
 | Tag rule pattern| Valid Go (RE2) regex, at most 1024 bytes; `field` is `title`, `description` or `both` |
 
-A duplicate source URL, tag name or assessor name is rejected with `AlreadyExists`. Sources,
+A duplicate source URL, tag name, assessor name or digest series name (per assessor) is rejected with `AlreadyExists`. Sources,
 tags and rules from the config file are seeded directly and are not checked.
 
 ## Fetching and SSRF
@@ -762,7 +814,7 @@ fresh snapshot (the newest 200), dropping the older pages.
 
 **Command line** (`:`; `Tab` completes, again to cycle; `↑`/`↓` history;
 a unique prefix is enough): `:feed` `:sources` `:tags` `:rules` `:views` (`:q` is
-the feed), `:assessors`, `:sort [newest|oldest|score]`, `:unviewed [on|off]`, `:src <name>|all`,
+the feed), `:assessors`, `:digests` (`:d`), `:digest <assessor>/<series>`, `:sort [newest|oldest|score]`, `:unviewed [on|off]`, `:src <name>|all`,
 `:tag <name>|all`, `:score <assessor>|all [min]`, `:unassessed <assessor>|all`, `:rate <score> [note]`, `:view <name>|all` (`:v`), `:save [name]`,
 `:refresh [source]`, `:time [relative|absolute]`, `:follow`, `:help`. The
 filter and view commands also work from the management pages, and go to the
@@ -816,7 +868,46 @@ the next reload. A view saves its assessor, minimum score, "not assessed by"
 and its sort, `score` included, so opening it restores the order. The
 `:assessors` page (also the tab and the phone's `⚙` sheet) adds, edits and
 deletes assessors; deleting one deletes its assessments, and the confirmation
-says how many views stop filtering on it.
+says how many views stop filtering on it, and how many digest series and
+digests go with it.
+
+#### Digests in the web app
+
+`:digests` (or the tab, and the phone's `⚙` sheet) reads
+[digests](#digests): a list of series grouped by assessor (in the assessor's
+color, with each series' digest count and latest period), the selected
+series' history (newest period first, `load older` for more) and the digest
+being read: its title, assessor, series, period (UTC) and update time, the
+body, "Based on N items" (links to the articles) and "Inputs" (the earlier
+digests it used; each opens that digest, also from another series). The URL is
+the state: `/digests?series=<id>&digest=<id>`, and with no `digest` the newest
+one of the series is shown. `:digest <assessor>/<series>` opens a series
+(`Tab` completes). On a phone the series list, the history and the digest are
+separate screens, with a `back` button.
+
+The body is a **Markdown subset**: headings (`#` to `###`), paragraphs (a line
+break stays a line break), bullet and numbered lists (nested), block quotes,
+fenced code blocks, horizontal rules, `**strong**`, `*emphasis*`, `` `code` ``,
+`[text](url)`, plain `https://` addresses, and `[#123]`, which links to item
+123's article (its title is the tooltip) when that item is one the digest is
+based on and stays literal text otherwise. Everything a digest carries is
+untrusted, so it is rendered as elements and text nodes only, never as HTML: a
+`<script>` or `<img>` in the body shows as the text it is, there are no
+images, a link whose address is not an http(s) URL shows only its text, and
+nesting and work are bounded (a body of 64 KiB of `*` is parsed in linear
+time). Item links go through the same link check as the feed's.
+
+| Key | Does |
+|---|---|
+| `j` / `k` (`↓` / `↑`) | The next older / newer digest of the series (older pages load as needed) |
+| `g` / `G` | The newest / the oldest loaded digest |
+| `]` / `[` (`→` / `←`) | The next / previous series |
+| `1`-`9` | Open the n-th input digest |
+| `d` / `u` (`PgDn` / `PgUp`) | Scroll the digest half a page |
+| `r` | Reload the series and the history |
+| `e`, `x` | Rename or redescribe the selected series; delete it (the confirmation says how many digests go) |
+| `K` / `J` | Move the series up / down among its assessor's series |
+| `:`, `?`, `q` | Command line, help, back to the feed |
 
 #### Sources, tags and rules
 
@@ -1113,6 +1204,102 @@ curl -u assessor:PASSWORD \
 A paged read (`offset`) of a view with a window counts "now" per request; pass
 `after=<unix seconds>` taken once to keep the window fixed between pages.
 
+## Digests
+
+An assessment judges one item. A **digest** is a document an assessor writes
+about **one to many items**: "today's CVE news", "September in review". Digests
+are kept as a history, grouped in **series**, and an assessor can read its
+earlier digests as input to the next one (a monthly digest built from thirty
+dailies instead of three thousand items).
+
+```
+assessor claude
+  +- series daily-cve
+  |    +- digest #41  2026-10-04
+  |    `- digest #42  2026-10-05   (input: #41)
+  `- series monthly
+       `- digest #43  2026-09      (inputs: #12 ... #40)
+```
+
+Like assessments, digests are written by programs outside the daemon (see
+[Writing a digest](#writing-a-digest)); nyttig stores, links and shows them and
+never calls a model.
+
+- **Series** are registered (`add-series`) and belong to one assessor:
+  `claude/daily-cve` and `gpt/daily-cve` are different series. Names are unique
+  per assessor, in any case. Every digest belongs to exactly one series.
+- **Period.** Every digest records the `period_start` and `period_end` it
+  covers (UTC, whole seconds, `period_end >= period_start`). What "today" or
+  "this month" means is the assessor's business. A series' history is ordered
+  by `period_end`, newest first.
+- **Always append, overwrite on edit.** Adding a digest always creates a new one
+  (re-running for the same period is just another digest). Updating one
+  overwrites it, with no revisions; `updated_at` says when.
+- **Links are provenance.** A digest links to the items it is based on and to
+  the earlier digests it used as input, so a claim can be traced back. Nothing
+  follows the links recursively. The body must make sense without them: items
+  go when their source is deleted, which removes the links but never the digest.
+  Deleting a digest removes it from other digests' inputs; deleting a series
+  or an assessor deletes the digests below it.
+- **Limits:** the body is at most 64 KiB, the title 200 characters, a digest
+  links at most 1000 items and 100 input digests.
+- **No live updates.** Clients load digests when they open them.
+
+### Writing a digest
+
+A digest is written the same way as an assessment, by a program that holds the
+credentials (the model gets none):
+
+1. Register the assessor (as above) and its series once, with `nyttig
+   add-series` or on first use with `client.EnsureDigestSeries` (it finds the
+   series, creates it, and looks it up again if another client was faster:
+   accept `AlreadyExists` by looking the series up again).
+2. Collect the input: items through `Search` (or `GET /api/items`; a saved view
+   works well, e.g. `?view=cve&after=<start of day>`), and earlier digests
+   through `ListDigests` with `include_body`.
+3. Write the digest with `AddDigest`: the title, the Markdown body, the period
+   covered, the items it is based on (`item_ids`) and the digests it read
+   (`input_ids`). From a shell: `nyttig add-digest claude/daily-cve -title
+   "CVE news, 5 Oct" -start 2026-10-05 -end 2026-10-05 -body-file notes.md
+   -items 12,15 -inputs 41`.
+4. Fix one later with `UpdateDigest` (or `nyttig update-digest`).
+
+**Over HTTP** (the same CSRF rules as for assessments apply to every write),
+IDs are strings and periods are RFC 3339 strings:
+
+| Route | Does |
+|---|---|
+| `GET /api/digest-series?assessor=<id>` | List series (all assessors without the parameter), with `digest_count` and `latest_period_end` |
+| `POST /api/digest-series` `{assessor, name, description?}` | Register a series (409 if the assessor has it) |
+| `PATCH /api/digest-series/{id}` `{name?, description?}` | Rename or redescribe |
+| `PUT /api/digest-series/order` `{"ids": [...]}` | Set the display order (every series once) |
+| `DELETE /api/digest-series/{id}` | Delete the series and its digests |
+| `GET /api/digests?series=<id>&before=<id>&limit=&body=1` | A page of a series' digests, newest period first (`has_more`); bodies only with `body=1` |
+| `POST /api/digests` `{series, title, body, period_start, period_end, items?, inputs?}` | Write a digest (always creates) |
+| `GET /api/digests/{id}` | One digest with its body, linked items and inputs |
+| `PATCH /api/digests/{id}` | Overwrite any of the add fields except `series`; `items: []` removes the links |
+| `DELETE /api/digests/{id}` | Delete a digest |
+
+```bash
+curl -u assessor:PASSWORD -X POST https://news.example.com/api/digests \
+  -H 'Content-Type: application/json' \
+  -H 'Origin: https://news.example.com' \
+  -d '{"series": "3", "title": "CVE news, 5 Oct", "body": "# CVE news\n\n- [#12] ...",
+       "period_start": "2026-10-05T00:00:00Z", "period_end": "2026-10-05T23:59:59Z",
+       "items": ["12", "15"], "inputs": ["41"]}'
+```
+
+nyttig-api strips control and bidirectional override characters from every
+digest text (the body keeps its newlines and tabs) and clears an item link that
+is not an http(s) URL. A digest request may be up to 256 KiB (the daemon's
+limit is 64 KiB for the body); other write bodies stay at 16 KiB.
+
+**Digests are untrusted text, and injection compounds.** A poisoned feed that
+gets an instruction into Monday's digest is carried into every digest that uses
+it as input, and into the monthly. Treat earlier digests as untrusted input in
+the assessor's prompt, exactly like feed text. The links make the trail visible.
+The access model is the one described above: every credential is full admin.
+
 ## Clef assessor
 
 `nyttig-clef` is an [assessor](#writing-an-assessor) that scores news items with
@@ -1197,7 +1384,7 @@ CLOUDFLARE_API_TOKEN=... ./nyttig-clef --config clef.toml --once --dry-run
 
 In Docker it is an opt-in service: `COMPOSE_FILE=compose.yaml:compose.clef.yaml`
 adds the `nyttig-clef` image (read-only, no capabilities, on its own network
-with outbound access only) with the token as a compose secret and your
+apart from the other containers, with outbound access) with the token as a compose secret and your
 `clef.toml` mounted; see [The Clef assessor](deploy/docker/README.md#the-clef-assessor-opt-in)
 in the Docker guide. There is no systemd unit yet. Flags: `--config` (required), `--once` (drain the view
 once and exit), `--dry-run` (call Clef and log the assessments that would be
@@ -1270,6 +1457,9 @@ as `sqlite_version`, and the daemon refuses to start if that library lacks FTS5.
 | `saved_views` | Saved views: named filters, favorites and their order |
 | `assessors`   | Systems that score items (name, what the score means, color) |
 | `assessments` | One assessor's score (0 to 1) and/or note on an item, optionally for one tag |
+| `digest_series` | An assessor's named groups of digests, in display order |
+| `digests`     | Documents an assessor wrote about many items: title, Markdown body, period covered |
+| `digest_items`, `digest_inputs` | Which items a digest is based on, and which earlier digests it used as input |
 | `items_fts`   | FTS5 virtual table for full-text search           |
 
 Item dates (`items.published`) are stored in UTC with whole seconds

@@ -14,6 +14,7 @@ import {
 	type CommandContext,
 	type Page
 } from './command';
+import { digestsHref } from './digests';
 import { filterFromParams } from './filter';
 import { History } from './history';
 import { metadata } from './metadata.svelte';
@@ -57,6 +58,9 @@ export function execute(cmd: Command, host: CommandHost): void {
 	switch (cmd.type) {
 		case 'page':
 			void goPage(cmd.page);
+			return;
+		case 'digest':
+			void goto(digestsHref(cmd.series));
 			return;
 		case 'view': {
 			const v = metadata.views.find((x) => x.id === cmd.id);

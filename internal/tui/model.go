@@ -74,6 +74,10 @@ type Model struct {
 	rateText string
 	rateErr  string
 	note     string
+
+	// digests is the digests screen (the D key) while it is open; the feed
+	// underneath keeps its stream, filter and selection.
+	digests *digestsScreen
 }
 
 // rateDoneMsg is the result of rating an item.
@@ -207,7 +211,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.height = msg.Height
 		m.filter.SetWidth(msg.Width)
 		m.layout()
+		if m.digests != nil {
+			m.digests.Update(msg)
+		}
 		return m, nil
+
+	// ── Digests screen ──────────────────────────────────
+	case digestSeriesMsg, digestHistoryMsg, digestMsg:
+		// Answers that arrive after the screen was closed are dropped.
+		if m.digests == nil {
+			return m, nil
+		}
+		return m, m.digests.Update(msg)
 
 	// ── Keypress ────────────────────────────────────────
 	case tea.KeyMsg:
@@ -313,6 +328,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // handleKey processes keyboard input, delegating to filter or table actions.
 func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// The digests screen takes every key while it is open.
+	if m.digests != nil {
+		cmd := m.digests.handleKey(msg)
+		if m.digests.closed {
+			m.digests = nil
+		}
+		return m, cmd
+	}
 	// The rating prompt takes the keys while it is open.
 	if m.rating {
 		return m.handleRateKey(msg)
@@ -387,6 +410,14 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		m.layout()
 		return m, nil
+
+	case "D":
+		colors := make(map[int64]string, len(m.assessors))
+		for _, a := range m.assessors {
+			colors[a.ID] = a.Color
+		}
+		m.digests = newDigestsScreen(m.client, colors, m.width, m.height)
+		return m, m.digests.Init()
 
 	case "r":
 		return m, m.refreshAll()
@@ -620,6 +651,10 @@ func (m *Model) flushViewed() []tea.Cmd {
 func (m Model) View() string {
 	if m.quitting {
 		return ""
+	}
+
+	if m.digests != nil {
+		return m.digests.View()
 	}
 
 	filterView := m.filter.View()

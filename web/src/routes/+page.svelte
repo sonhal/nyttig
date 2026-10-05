@@ -515,7 +515,7 @@
 			case 'openCommand':
 				return cl.start();
 			case 'runCommand': {
-				const cmd = cl.run({ sources, tags, views: metadata.views, assessors });
+				const cmd = cl.run({ sources, tags, views: metadata.views, assessors, series: metadata.series });
 				if (!cmd) return;
 				list?.focus();
 				return execute(cmd, host);
@@ -525,7 +525,7 @@
 				list?.focus();
 				return;
 			case 'completeCommand':
-				return cl.complete({ sources, tags, views: metadata.views, assessors });
+				return cl.complete({ sources, tags, views: metadata.views, assessors, series: metadata.series });
 			case 'historyPrev':
 				return cl.historyPrev();
 			case 'historyNext':

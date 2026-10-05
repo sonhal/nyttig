@@ -9,6 +9,8 @@ import {
 	ruleBody,
 	ruleForm,
 	sameRule,
+	seriesForm,
+	seriesPatchBody,
 	sourceAddBody,
 	sourceForm,
 	sourcePatchBody,
@@ -18,6 +20,7 @@ import {
 	urlError,
 	validateAssessor,
 	validateRule,
+	validateSeries,
 	validateSource,
 	validateTag,
 	validateView,
@@ -435,5 +438,30 @@ describe('view forms with assessors', () => {
 		expect(viewPatchBody(orig, { ...f, query: 'score:claude>=0.8 sort:score' }, [], [], assessors)).toEqual({
 			filter: { assessor: '3', min_score: 0.8, sort: 'score' }
 		});
+	});
+});
+
+describe('series form', () => {
+	it('starts from the series, or empty', () => {
+		expect(seriesForm()).toEqual({ name: '', description: '' });
+		expect(seriesForm({ id: '1', name: 'daily', description: 'CVE news', assessor_id: '2' })).toEqual({ name: 'daily', description: 'CVE news' });
+	});
+
+	it('checks what the daemon checks', () => {
+		expect(validateSeries({ name: 'daily', description: '' })).toEqual({});
+		expect(validateSeries({ name: ' ', description: '' }).name).toMatch(/required/);
+		expect(validateSeries({ name: 'a'.repeat(65), description: '' }).name).toMatch(/at most 64/);
+		expect(validateSeries({ name: 'a'.repeat(64), description: '' })).toEqual({});
+		expect(validateSeries({ name: 'a\nb', description: '' }).name).toMatch(/control/);
+		expect(validateSeries({ name: 'a', description: 'd'.repeat(501) }).description).toMatch(/at most 500/);
+		expect(validateSeries({ name: 'a', description: 'a\tb' }).description).toMatch(/control/);
+	});
+
+	it('patches only what changed; clearing the description sends ""', () => {
+		const orig = { id: '1', name: 'daily', description: 'CVE news' };
+		expect(seriesPatchBody(orig, { name: 'daily', description: 'CVE news' })).toEqual({});
+		expect(seriesPatchBody(orig, { name: ' weekly ', description: 'CVE news' })).toEqual({ name: 'weekly' });
+		expect(seriesPatchBody(orig, { name: 'daily', description: '' })).toEqual({ description: '' });
+		expect(seriesPatchBody({ id: '1', name: 'daily' }, { name: 'daily', description: '' })).toEqual({});
 	});
 });

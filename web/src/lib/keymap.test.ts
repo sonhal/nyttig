@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { feedHelp, keyAction, manageHelp, manageKeyAction, type HelpSection } from './keymap';
+import { digestsHelp, digestsKeyAction, feedHelp, keyAction, manageHelp, manageKeyAction, type HelpSection } from './keymap';
 
 describe('keyAction in normal mode', () => {
 	it.each([
@@ -266,5 +266,86 @@ describe('help', () => {
 		expect(find(tags, /refresh/)).toBeUndefined();
 		expect(find(tags, /^add$/)?.keys).toEqual(['a']);
 		expect(tags.map((s) => s.title)).toContain('Delete confirmation');
+	});
+});
+
+describe('digestsKeyAction', () => {
+	it.each([
+		['j', { type: 'olderDigest' }],
+		['ArrowDown', { type: 'olderDigest' }],
+		['k', { type: 'newerDigest' }],
+		['ArrowUp', { type: 'newerDigest' }],
+		['g', { type: 'newestDigest' }],
+		['Home', { type: 'newestDigest' }],
+		['G', { type: 'oldestDigest' }],
+		['End', { type: 'oldestDigest' }],
+		[']', { type: 'nextSeries' }],
+		['ArrowRight', { type: 'nextSeries' }],
+		['[', { type: 'prevSeries' }],
+		['ArrowLeft', { type: 'prevSeries' }],
+		['d', { type: 'scroll', dir: 1 }],
+		['PageDown', { type: 'scroll', dir: 1 }],
+		['u', { type: 'scroll', dir: -1 }],
+		['PageUp', { type: 'scroll', dir: -1 }],
+		['1', { type: 'openInput', n: 1 }],
+		['9', { type: 'openInput', n: 9 }],
+		['r', { type: 'reload' }],
+		['e', { type: 'edit' }],
+		['Enter', { type: 'edit' }],
+		['x', { type: 'delete' }],
+		['K', { type: 'moveUp' }],
+		['J', { type: 'moveDown' }],
+		['q', { type: 'feed' }],
+		[':', { type: 'openCommand' }],
+		['?', { type: 'openHelp' }]
+	])('normal %j', (key, want) => {
+		expect(digestsKeyAction('normal', { key })).toEqual(want);
+	});
+
+	it('leaves 0, browser shortcuts and unknown keys alone', () => {
+		expect(digestsKeyAction('normal', { key: '0' })).toBeNull();
+		expect(digestsKeyAction('normal', { key: 'j', ctrlKey: true })).toBeNull();
+		expect(digestsKeyAction('normal', { key: 'j', metaKey: true })).toBeNull();
+		expect(digestsKeyAction('normal', { key: 'z' })).toBeNull();
+		expect(digestsKeyAction('normal', { key: 'j', isComposing: true })).toBeNull();
+	});
+
+	it('has the management views\' form, confirm, command and help modes', () => {
+		expect(digestsKeyAction('form', { key: 'Escape' })).toEqual({ type: 'cancel' });
+		expect(digestsKeyAction('form', { key: 'j' })).toBeNull();
+		expect(digestsKeyAction('confirm', { key: 'y' })).toEqual({ type: 'confirm' });
+		expect(digestsKeyAction('confirm', { key: 'Enter' })).toEqual({ type: 'confirm' });
+		expect(digestsKeyAction('confirm', { key: 'n' })).toEqual({ type: 'cancel' });
+		expect(digestsKeyAction('confirm', { key: 'q' })).toEqual({ type: 'cancel' });
+		expect(digestsKeyAction('command', { key: 'Enter' })).toEqual({ type: 'runCommand' });
+		expect(digestsKeyAction('command', { key: 'j' })).toBeNull();
+		expect(digestsKeyAction('help', { key: 'Escape' })).toEqual({ type: 'closeHelp' });
+	});
+
+	it('lists every key in the help, and hides the series tools it does not have', () => {
+		const all = digestsHelp(['edit', 'delete', 'moveUp', 'moveDown']);
+		const keys = new Set(all.flatMap((s) => s.rows.flatMap((r) => r.keys)));
+		for (const k of ['j', 'k', 'g', 'G', '[', ']', 'd', 'u', '1', '9', 'r', 'e', 'x', 'K', 'J', 'q', ':', '?']) {
+			expect(keys.has(k), k).toBe(true);
+		}
+		const some = digestsHelp(['edit']);
+		const someKeys = new Set(some.flatMap((s) => s.rows.flatMap((r) => r.keys)));
+		expect(someKeys.has('e')).toBe(true);
+		expect(someKeys.has('x')).toBe(false);
+		expect(someKeys.has('K')).toBe(false);
+	});
+
+	it('every key in the table reaches the help', () => {
+		// One key is never bound twice with different meanings.
+		const seen = new Map<string, string>();
+		for (const s of digestsHelp(['edit', 'delete', 'moveUp', 'moveDown'])) {
+			if (['Form', 'Delete confirmation', 'Command line', 'Help'].includes(s.title)) continue;
+			for (const r of s.rows) {
+				for (const k of r.keys) {
+					expect(seen.get(k), `${k} is bound twice: ${seen.get(k)} and ${r.desc}`).toBeUndefined();
+					seen.set(k, r.desc);
+				}
+			}
+		}
 	});
 });

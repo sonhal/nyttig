@@ -515,6 +515,22 @@ func SanitizeLine(s string) string {
 	return strings.Join(strings.Fields(s), " ")
 }
 
+// SanitizeText removes control characters from untrusted multi-line text
+// (a digest body) but keeps newlines and tabs, so it can be printed to a
+// terminal without letting the text inject escape sequences. Carriage returns
+// are dropped too, which keeps the text from overwriting its own line.
+func SanitizeText(s string) string {
+	return strings.Map(func(r rune) rune {
+		if r == '\n' || r == '\t' {
+			return r
+		}
+		if unicode.IsControl(r) {
+			return -1
+		}
+		return r
+	}, s)
+}
+
 // truncateEllipsis truncates s to at most maxWidth rune-cells, appending "..".
 func truncateEllipsis(s string, maxWidth int) string {
 	return truncateWithSuffix(s, maxWidth, "..")

@@ -127,7 +127,8 @@ via a **bidirectional gRPC stream**.
 
 ```
 cmd/nyttig/main.go          Client entrypoint: TUI launch + CLI subcommands (views.go: saved
-                            views, assess.go: assessors and assessments)
+                            views, assess.go: assessors and assessments, digests.go: digest
+                            series and digests)
 cmd/nyttigd/main.go         Daemon entrypoint: wires db → fetcher → tagger → scheduler → gRPC
 proto/nyttig/v1/nyttig.proto   Source-of-truth API definition
 buf.yaml, buf.gen.yaml      buf config for codegen; run `buf generate` from the repo root
@@ -137,12 +138,15 @@ internal/since/             Parser for rolling windows (7d, 1mo): Parse + Cutoff
 internal/client/            gRPC client wrapper + StreamSub helper used by the TUI
 internal/mtls/              Mutual-TLS credential loading shared by daemon and client
 internal/tui/               Bubble Tea Model, filter bar, table, status bar, view tracking;
+                            digests.go: the digests screen (D), digests_render.go: the Markdown
+                            subset as styled terminal lines;
                             assess.go: score chips, the score order for live inserts, the
                             detail line
 internal/api/               nyttig-api's HTTP API: routing (server.go), JSON handlers (api.go),
                             source/tag/rule management (manage.go), assessors and
-                            assessments (assessments.go), SSE bridge (stream.go),
-                            security middleware (security.go)
+                            assessments (assessments.go), digest series and digests
+                            (digests.go), SSE bridge (stream.go), security middleware
+                            (security.go)
 cmd/nyttig-api/main.go      nyttig-api entrypoint: flags, listen-address guard, HTTP server
 cmd/nyttig-clef/main.go     nyttig-clef entrypoint: flags, token, dial, wires internal/clef
 internal/clef/              nyttig-clef's engine: client.go (Workers AI HTTP client), config.go (its TOML
@@ -150,20 +154,23 @@ internal/clef/              nyttig-clef's engine: client.go (Workers AI HTTP cli
                             loop.go (the polling loop); uses internal/client, never the db
 web/                        The SvelteKit app (pnpm); "pnpm build" writes a Node server to web/build/
 web/src/lib/                Pure modules (reducer, keymap, filter, query, command, highlight,
-                            fuzzy, history, help, sanitize, viewed, forms, latest, meta, since,
-                            format, tagtree, views, scores) with Vitest tests next to them, plus the
+                            fuzzy, history, help, sanitize, markdown, viewed, forms, latest, meta, since,
+                            format, tagtree, views, scores, digests) with Vitest tests next to them, plus the
                             Svelte components (ViewTabs.svelte is the saved views' tab row above
-                            the filter bar); metadata.svelte.ts holds the sources, tags and
-                            saved views every page shares, prefs.svelte.ts the time format
+                            the filter bar; PageTabs.svelte the page tabs of every page but
+                            the feed); metadata.svelte.ts holds the sources, tags, saved views and
+                            digest series every page shares, prefs.svelte.ts the time format
                             (localStorage)
 web/src/routes/             / is the feed; sources/, tags/, rules/, views/ and assessors/ are the
-                            management pages (ManageView.svelte is their shared frame)
+                            management pages (ManageView.svelte is their shared frame);
+                            digests/ is the reading page (its own layout and key table)
 web/e2e/                    Playwright tests; stack.mjs starts a feed server, nyttigd, nyttig-api,
                             the app server and a Caddy-like proxy (proxy.mjs)
 internal/server/service/    gRPC service impl + Hub (broadcasts pushed items to subscribers);
                             validate.go holds all client-input validation
 internal/server/db/         SQLite layer: items, sources, tags, views, assessors and assessments
-                            (assessments.go); embedded migrations
+                            (assessments.go), digest series and digests (digests.go); embedded
+                            migrations
 internal/server/fetcher/    Feed fetch/parse + GUID-based dedup; client.go builds the HTTP
                             client, including the private-address (SSRF) block
 internal/server/tagger/     Regex-based auto-tagging engine
@@ -191,6 +198,7 @@ docs/date-filter-plan.md    Plan for the date window (since:7d) in filters and v
 docs/assessments-plan.md    Plan for assessments (scores and notes from external assessors): decisions and phases
 docs/docker-plan.md         Plan for the container images and compose setup: decisions and phases
 docs/clef-assessor-plan.md  Plan for nyttig-clef (an assessor using Cloudflare's Clef decision models): decisions and phases
+docs/digests-plan.md        Plan for digests (assessor-written summaries over many items, in series): decisions and phases
 CLAUDE.md                   `@AGENTS.md`: makes Claude Code load this file
 ```
 
@@ -378,6 +386,47 @@ which phases are done and whether they are merged; keep it current.
   rebuild carries `since`. On `ViewFilter` the assessment fields are 7-9, on
   `SearchRequest` 10-12 and on `StreamFilter` 8-10 (after main's `since` /
   `after`).
+- **Digests** (`digest_series`, `digests`, `digest_items`, `digest_inputs`;
+  `docs/digests-plan.md`). A digest is a document one assessor writes about
+  one to many items, kept in a **registered series** (unique per assessor,
+  case-insensitive; deleting the assessor or series deletes its digests).
+  It is separate from assessments: nothing in `assessments`, `ItemFilter`,
+  the Hub or the item stream knows about digests, and there is no live push.
+  `AddDigest` always creates, `UpdateDigest` overwrites (no revisions).
+  `digest_items` (the items a digest is based on) and `digest_inputs` (the
+  earlier digests it read) are provenance only: nothing walks them, a source
+  delete removes the item links but never the digest. Digest dates are
+  written in Go as UTC with whole seconds (`db.utcSecond`), the text shape of
+  `items.published`; don't rely on `CURRENT_TIMESTAMP` for them.
+  `db.ListDigests` pages by a `(period_end, id)` cursor (`beforeID`), so
+  equal period ends page without skipping. Bodies are untrusted text (an
+  LLM's output can repeat feed markup): never `{@html}`, strip control
+  characters in the TUI. In the web app (`routes/digests/`, pure logic in
+  `lib/digests.ts`) the body is rendered by `Markdown.svelte` from the
+  typed tree `lib/markdown.ts` parses (elements and text nodes only; links
+  through `safeLink`; `[#id]` links only for the digest's linked items; the
+  parser's work is bounded and cached to stay linear on hostile input, which
+  its tests check), and the URL `/digests?series=&digest=` is the state, an
+  input link carries only `digest=` and the page learns the series from the
+  fetched digest, and the keys live in `keymap.ts` (`digestsKeyAction`).
+  The service (`service/digests.go`) validates the
+  title, the body (≤ 64 KiB, UTF-8, no control characters but newline and
+  tab), periods (whole UTC seconds, `period_end >= period_start`, also when
+  an update sets only one) and the link lists (≤ 1000 items, ≤ 100 inputs,
+  duplicates dropped, `NotFound` names the first missing ID);
+  `client.EnsureDigestSeries` is the find / create / find-again pattern of
+  `EnsureMe`. `UpdateDigestRequest.item_ids` / `input_ids` are `IDList`
+  wrappers for field presence (unset = unchanged, empty = none).
+- **TUI digests.** `D` opens `digestsScreen` (`tui/digests.go`) over the
+  feed: while `Model.digests` is set it takes every key and draws the whole
+  window, but the model keeps handling stream messages, so the feed's
+  stream, filter and selection are untouched. It reads through the small
+  `digestAPI` interface (tests fake it), loads on open and on `r`, and drops
+  answers for a series or digest it no longer wants. `digests_render.go`
+  renders the same Markdown subset as `web/src/lib/markdown.ts` and runs
+  `cleanText` first (no control characters, no bidi overrides), so the only
+  escape sequences printed are lipgloss's own; keep that order, and the
+  cached closing-marker search that keeps hostile bodies linear.
 - **TUI assessments.** The filter bar cycles the assessor (`a`) and the
   minimum score (`m`); the score sort exists only while an assessor is
   selected, and dropping the assessor drops the minimum and the sort
@@ -427,6 +476,13 @@ which phases are done and whether they are merged; keep it current.
   `assessor`, `min_score`, `unassessed` and `sort=score`, and the SSE bridge
   sends `event: update` with `{matches, item}` for `item_update`. Notes and
   assessor names go through `safeText` (`sanitize.go`).
+  Digest endpoints (`digests.go`: `/api/digest-series`, `/api/digests`) read
+  their bodies the same way, with periods as RFC 3339 strings and `items` /
+  `inputs` as arrays of ID strings (an empty array in a PATCH clears the
+  links); their requests may be 256 KiB (`readBodyMax`), not the 16 KiB of
+  the other bodies. `sanitizeDigest` runs `safeText` over every text field,
+  and item links through `safeLink`, on the way out; the body stays Markdown
+  text for the browser's renderer.
   Management bodies (`manage.go`) are read member by member into a
   `jsonBody`, which keeps field presence for PATCH (absent = unchanged,
   mapped to the proto3 `optional` fields) and rejects unknown, duplicate

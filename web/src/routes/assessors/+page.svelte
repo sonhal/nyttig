@@ -10,6 +10,7 @@
 	import AssessorFormPanel from '$lib/AssessorForm.svelte';
 	import ConfirmPanel from '$lib/ConfirmPanel.svelte';
 	import { assessorAddBody, assessorForm, assessorPatchBody, type AssessorForm } from '$lib/forms';
+	import { assessorDigestUsage, assessorDigestWarning } from '$lib/digests';
 	import type { ManageAction, Tool } from '$lib/keymap';
 	import ManageView from '$lib/ManageView.svelte';
 	import { metadata } from '$lib/metadata.svelte';
@@ -103,6 +104,8 @@
 		const lines = ['This also deletes every assessment (score and note) it has written.'];
 		const w = usageWarning('assessor', viewsUsing({ assessor: a.id ?? '' }, metadata.views).length);
 		if (w) lines.push(w);
+		const d = assessorDigestWarning(assessorDigestUsage(metadata.series, a.id ?? ''));
+		if (d) lines.push(d);
 		lines.push('Use edit (e) instead to rename or recolor it.');
 		return lines;
 	}
@@ -146,7 +149,8 @@
 		sources: metadata.sources.length,
 		tags: metadata.tags.length,
 		views: metadata.views.length,
-		assessors: assessors.length
+		assessors: assessors.length,
+		digests: metadata.series.length
 	}}
 	{loaded}
 	{onaction}

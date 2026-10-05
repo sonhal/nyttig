@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { applyToFilter, commonPrefix, completeCommand, parseCommand, type Command } from './command';
 import { defaultFilter } from './filter';
-import type { Assessor, SavedView, Source, Tag } from './types';
+import type { Assessor, DigestSeries, SavedView, Source, Tag } from './types';
 
 const sources: Source[] = [
 	{ id: '1', name: 'Alpha News', abbreviation: 'ALP' },
@@ -319,5 +319,49 @@ describe('assessor commands', () => {
 		expect(completeCommand('score ', actx).candidates).toEqual(['claude', 'CVSS reader', 'gpt 4', 'all']);
 		expect(completeCommand('unassessed cv', actx).candidates).toEqual(['CVSS reader']);
 		expect(completeCommand('score c', ctx).candidates).toEqual([]);
+	});
+});
+
+describe('digest commands', () => {
+	const series: DigestSeries[] = [
+		{ id: '1', assessor_id: '10', assessor_name: 'claude', name: 'daily-cve' },
+		{ id: '2', assessor_id: '20', assessor_name: 'gpt', name: 'daily-cve' },
+		{ id: '3', assessor_id: '10', assessor_name: 'claude', name: 'monthly' }
+	];
+	const dctx = { sources, tags, views, series };
+	const dparse = (s: string) => parseCommand(s, dctx);
+
+	it(':digests is a page, with short forms', () => {
+		expect(dparse('digests')).toEqual({ ok: true, cmd: { type: 'page', page: 'digests' } });
+		expect(dparse('d')).toEqual({ ok: true, cmd: { type: 'page', page: 'digests' } });
+		expect(dparse('digests x')).toEqual({ ok: false, error: 'digests takes no argument' });
+	});
+
+	it(':digest opens a series by assessor/name', () => {
+		expect(dparse('digest claude/monthly')).toEqual({ ok: true, cmd: { type: 'digest', series: '3' } });
+		expect(dparse('digest GPT/Daily-CVE')).toEqual({ ok: true, cmd: { type: 'digest', series: '2' } });
+		expect(dparse('digest "claude/monthly"')).toEqual({ ok: true, cmd: { type: 'digest', series: '3' } });
+		expect(dparse('digest monthly')).toEqual({ ok: true, cmd: { type: 'digest', series: '3' } });
+	});
+
+	it(':digest says what is wrong', () => {
+		expect(dparse('digest')).toEqual({ ok: false, error: 'digest: <assessor>/<series>' });
+		expect(dparse('digest claude/nope')).toEqual({ ok: false, error: 'unknown series: claude/nope' });
+		const r = dparse('digest daily-cve');
+		expect(!r.ok && r.error).toMatch(/^ambiguous series/);
+		expect(parseCommand('digest claude/monthly', { sources, tags })).toMatchObject({ ok: false });
+	});
+
+	it('the two names are not mixed up by prefixes', () => {
+		expect(dparse('dig')).toMatchObject({ ok: false });
+		expect(dparse('digest claude/monthly').ok).toBe(true);
+	});
+
+	it('completes series names', () => {
+		expect(completeCommand('digest ', dctx).candidates).toEqual(['claude/daily-cve', 'gpt/daily-cve', 'claude/monthly']);
+		expect(completeCommand('digest cl', dctx)).toEqual({ from: 7, candidates: ['claude/daily-cve', 'claude/monthly'] });
+		expect(completeCommand('digest g', dctx).candidates).toEqual(['gpt/daily-cve']);
+		expect(completeCommand('digest ', { sources, tags }).candidates).toEqual([]);
+		expect(completeCommand('digests', dctx).candidates).toEqual(['digests']);
 	});
 });
