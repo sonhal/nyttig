@@ -1,6 +1,6 @@
 # Clef assessor plan
 
-Status: **phases 1-2 implemented, not yet merged.**
+Status: **phases 1-3 implemented, not yet merged.**
 
 `nyttig-clef` is a new client binary that scores news items with
 Cloudflare's **Clef** decision models on Workers AI and writes the results
@@ -317,3 +317,20 @@ the web app or the proto.
   `legend` is not documented, so they are kept raw; the note's level name
   uses `probabilities` when it is an array with one entry per level and
   otherwise the level nearest the score.
+- **Phase 3:** the loop's `Daemon` interface leaves out `ListSources`: items
+  from `Search` carry their source name. Each search overrides the view's
+  `unassessed` with the clef assessor's own ID, drops its minimum score and
+  uses `sort=newest`, so a view that lacks `unassessed:clef` doesn't make the
+  loop re-score every item every pass (a warning says so). An item that was
+  scored and still comes back from the view (the assessment is out of the
+  view's tag scope) joins the skip set with a warning, so it is not scored
+  again. In a `--dry-run` an item joins the skip set after it is scored, since
+  it stays in the view. A `PutAssessment` the daemon refuses
+  (`InvalidArgument`, `NotFound`) is not retried. Retryable Clef errors wait
+  `max(Retry-After, 1s doubling)`, at most 5 minutes, and end the pass with
+  `ErrClefUnavailable` after 8 attempts; a 401 or 403 ends it with
+  `ErrClefAuth` (the daemon loop logs it and polls again after `interval`,
+  `--once` exits non-zero). With the daily budget used up, a polling run
+  sleeps until UTC midnight, `--once` returns. The token comes from
+  `Config.ReadToken` (`token_file`, else `$CLOUDFLARE_API_TOKEN`); a missing
+  `token_file` does not fall back to the environment.

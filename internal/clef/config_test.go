@@ -135,3 +135,44 @@ func TestLoad_QuestionLimit(t *testing.T) {
 		t.Fatalf("err = %v", err)
 	}
 }
+
+func TestReadToken(t *testing.T) {
+	read := func(name string) ([]byte, error) {
+		switch name {
+		case "/tok":
+			return []byte("  abc123\n"), nil
+		case "/empty":
+			return []byte(" \n"), nil
+		}
+		return nil, os.ErrNotExist
+	}
+	env := func(v string) func(string) string {
+		return func(k string) string {
+			if k == "CLOUDFLARE_API_TOKEN" {
+				return v
+			}
+			return ""
+		}
+	}
+	tests := []struct {
+		name string
+		file string
+		env  string
+		want string
+		fail bool
+	}{
+		{"file wins and is trimmed", "/tok", "from-env", "abc123", false},
+		{"env", "", " from-env ", "from-env", false},
+		{"missing file does not fall back", "/nope", "from-env", "", true},
+		{"empty file", "/empty", "from-env", "", true},
+		{"nothing set", "", "", "", true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := (&Config{TokenFile: tc.file}).ReadToken(read, env(tc.env))
+			if (err != nil) != tc.fail || got != tc.want {
+				t.Errorf("got %q, %v", got, err)
+			}
+		})
+	}
+}

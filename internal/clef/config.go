@@ -266,3 +266,28 @@ func (q *QuestionSpec) finishScore() error {
 	q.Levels = levels
 	return nil
 }
+
+// ── Token ──
+
+// ReadToken returns the Cloudflare API token: the contents of token_file when
+// set (surrounding whitespace removed), else $CLOUDFLARE_API_TOKEN. The token
+// is never part of the config file itself.
+func (c *Config) ReadToken(readFile func(string) ([]byte, error), getenv func(string) string) (string, error) {
+	var tok string
+	if c.TokenFile != "" {
+		b, err := readFile(c.TokenFile)
+		if err != nil {
+			return "", fmt.Errorf("token_file: %w", err)
+		}
+		tok = strings.TrimSpace(string(b))
+		if tok == "" {
+			return "", fmt.Errorf("token_file %s is empty", c.TokenFile)
+		}
+		return tok, nil
+	}
+	tok = strings.TrimSpace(getenv("CLOUDFLARE_API_TOKEN"))
+	if tok == "" {
+		return "", errors.New("no API token: set token_file or $CLOUDFLARE_API_TOKEN")
+	}
+	return tok, nil
+}
