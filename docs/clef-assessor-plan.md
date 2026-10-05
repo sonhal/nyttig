@@ -1,6 +1,6 @@
 # Clef assessor plan
 
-Status: **planned, not started.**
+Status: **phase 1 implemented, not yet merged.**
 
 `nyttig-clef` is a new client binary that scores news items with
 Cloudflare's **Clef** decision models on Workers AI and writes the results
