@@ -57,7 +57,7 @@ commit subject and on the PR title:
   anything else happens to it. Renaming a PR before merge is free; a missed
   release is not.
 - Scope names in use: `web`, `api`, `db`, `service`, `fetcher`, `scheduler`,
-  `tagger`, `tui`, `cli`, `deploy`, `ci`. Pick the one that names the part
+  `tagger`, `tui`, `cli`, `deploy`, `ci`, `clef`. Pick the one that names the part
   that changed; leave it out when the change spans the repo.
 - Dependabot's `build(deps):` titles are correct as they are and never
   release.
@@ -182,6 +182,7 @@ docs/saved-views-plan.md    Plan for saved views (named filters, feed tabs): dec
 docs/date-filter-plan.md    Plan for the date window (since:7d) in filters and views: decisions and phases
 docs/assessments-plan.md    Plan for assessments (scores and notes from external assessors): decisions and phases
 docs/docker-plan.md         Plan for the container images and compose setup: decisions and phases
+docs/clef-assessor-plan.md  Plan for nyttig-clef (an assessor using Cloudflare's Clef decision models): decisions and phases
 CLAUDE.md                   `@AGENTS.md`: makes Claude Code load this file
 ```
 
