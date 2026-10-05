@@ -137,6 +137,8 @@ internal/since/             Parser for rolling windows (7d, 1mo): Parse + Cutoff
 internal/client/            gRPC client wrapper + StreamSub helper used by the TUI
 internal/mtls/              Mutual-TLS credential loading shared by daemon and client
 internal/tui/               Bubble Tea Model, filter bar, table, status bar, view tracking;
+                            digests.go: the digests screen (D), digests_render.go: the Markdown
+                            subset as styled terminal lines;
                             assess.go: score chips, the score order for live inserts, the
                             detail line
 internal/api/               nyttig-api's HTTP API: routing (server.go), JSON handlers (api.go),
@@ -397,6 +399,16 @@ which phases are done and whether they are merged; keep it current.
   `client.EnsureDigestSeries` is the find / create / find-again pattern of
   `EnsureMe`. `UpdateDigestRequest.item_ids` / `input_ids` are `IDList`
   wrappers for field presence (unset = unchanged, empty = none).
+- **TUI digests.** `D` opens `digestsScreen` (`tui/digests.go`) over the
+  feed: while `Model.digests` is set it takes every key and draws the whole
+  window, but the model keeps handling stream messages, so the feed's
+  stream, filter and selection are untouched. It reads through the small
+  `digestAPI` interface (tests fake it), loads on open and on `r`, and drops
+  answers for a series or digest it no longer wants. `digests_render.go`
+  renders the same Markdown subset as `web/src/lib/markdown.ts` and runs
+  `cleanText` first (no control characters, no bidi overrides), so the only
+  escape sequences printed are lipgloss's own; keep that order, and the
+  cached closing-marker search that keeps hostile bodies linear.
 - **TUI assessments.** The filter bar cycles the assessor (`a`) and the
   minimum score (`m`); the score sort exists only while an assessor is
   selected, and dropping the assessor drops the minimum and the sort

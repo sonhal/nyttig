@@ -1,6 +1,6 @@
 # Digests plan: summaries and notes from assessors, kept as a history
 
-Status: **phases 1–6 implemented, not yet merged.** Phases 1–7 below.
+Status: **phases 1–7 implemented, not yet merged.** Phases 1–7 below.
 
 Assessments judge one item. A **digest** is a document an assessor writes
 about **one to many items**: "today's CVE news", "September in review".
@@ -478,3 +478,15 @@ By hand, with nyttigd on `sample_config.toml`:
   characters; `_emphasis_` is not supported (snake_case would trip it).
   Nesting is capped at 3 for lists and quotes and 3 for inline spans; input
   past 256 KiB is not parsed (the daemon stops at 64 KiB).
+- **Phase 7:** the screen opens with `D` (free in the feed). Keys: `j`/`k`
+  older / newer digest, `g`/`G` newest / oldest loaded, `]`/`[` (and `l`/`h`,
+  arrows) next / previous series, `d`/`u` (also `Ctrl+d`/`Ctrl+u`, `PgDn`/`PgUp`,
+  `Space`) scroll, `1`-`9` open an input, `r` reload, `q`/`Esc` back. Layout:
+  series list over the history in a left column (24-40 cells wide), the digest
+  on the right with its items and inputs after the body, one scrollable
+  pane. The TUI renderer is a second implementation of the subset in Go (the
+  web's parser is TypeScript): it is line oriented (a soft line break stays a
+  line break, as on the web), does not nest emphasis inside emphasis or links,
+  and prints a link as `text (url)`. The series list reads every series
+  (`ListDigestSeries` with assessor 0); an input from another series switches
+  the screen to that series. Tests are in `internal/tui/digests_test.go`.

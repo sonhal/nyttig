@@ -330,6 +330,7 @@ These are global flags accepted by every subcommand and the TUI.
 | `G` / `End`  | Jump to bottom of list.                                  |
 | `Ctrl+d`     | Page down (half screen).                                 |
 | `Ctrl+u`     | Page up (half screen).                                   |
+| `D`          | Open the [digests](#digests) screen (below).             |
 | `q` / `Ctrl+c`| Quit the TUI.                                           |
 
 Rows show one score chip per assessor that scored the item, `[claude 0.9]` in
@@ -339,6 +340,34 @@ position, and one that stops matching stays until the next filter change.
 Notes and assessor names are untrusted: control characters are stripped and
 they are shown on one line. The TUI has no "not assessed by" filter; use
 `nyttig search -unassessed-by` or the web app for that.
+
+### Digests screen
+
+`D` opens the digests screen over the feed (the feed keeps its stream, filter
+and selection; `q` or `Esc` returns to it). The series of every assessor are
+listed on the left, grouped by assessor in the assessor's color with each
+series' digest count, the selected series' history (newest period first) under
+them, and the digest being read on the right: its title, assessor and series,
+period, the body, the items it is based on and its inputs. It loads when it
+opens and on `r`; there are no live updates.
+
+| Key | Action |
+|---|---|
+| `j` / `k` (`↓` / `↑`) | The next older / newer digest of the series (an older page loads at the end of the history) |
+| `g` / `G` | The newest / the oldest loaded digest |
+| `]` / `[` (`l` / `h`, `→` / `←`) | The next / previous series |
+| `d` / `u` (`Ctrl+d` / `Ctrl+u`, `PgDn` / `PgUp`, `Space`) | Scroll the digest half a page |
+| `1`-`9` | Open the n-th input digest (also from another series) |
+| `r` | Reload |
+| `q` / `Esc` | Back to the feed |
+
+The body is the same Markdown subset as in the web app, as styled terminal
+text: headings bold, list bullets, quotes behind `│`, code in a dimmed color, a
+link as `text (url)` (a link that is not an http(s) URL shows only its text),
+and `[#123]` as the item's title in brackets when item 123 is one the digest is
+based on. Digests are untrusted text: control characters (so escape
+sequences) and bidirectional overrides are removed before anything is
+printed, and the terminal only ever sees the styles nyttig adds itself.
 
 ### View tracking
 
