@@ -1,6 +1,6 @@
 # Clef assessor plan
 
-Status: **phase 1 implemented, not yet merged.**
+Status: **phases 1-2 implemented, not yet merged.**
 
 `nyttig-clef` is a new client binary that scores news items with
 Cloudflare's **Clef** decision models on Workers AI and writes the results
@@ -305,4 +305,15 @@ the web app or the proto.
 
 ## Deviations
 
-None yet.
+- **Phase 1:** `ClientConfig` (not `Config`) configures the client, since
+  `Config` is the TOML file's struct in phase 2. Transport failures (not only
+  429 and 5xx) are `RetryableError` with `Status` 0.
+- **Phase 2:** `BuildState(item, maxChars)` takes no `sources` argument: an
+  item from `Search` carries `source_name`. `ToAssessments(item, assessorID,
+  questions, resp)` takes the assessor ID, which the request needs. Questions
+  are `QuestionSpec` (the TOML entry) and `BoundQuestion` (resolved against
+  the daemon's tags by `ResolveQuestions`). The `[tls]` table has `cert`,
+  `key`, `ca` and `server_name`. The shape of Clef's `probabilities` and
+  `legend` is not documented, so they are kept raw; the note's level name
+  uses `probabilities` when it is an array with one entry per level and
+  otherwise the level nearest the score.

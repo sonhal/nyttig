@@ -1,0 +1,47 @@
+# nyttig-clef configuration: nyttig-clef --config /etc/nyttig/clef.toml
+#
+# nyttig-clef scores news items with Cloudflare's Clef decision models and
+# writes the scores as nyttig assessments. See "Clef assessor" in the README.
+# Unknown keys are an error. The Cloudflare API token does not go in this
+# file (a "token" key is rejected): put it in token_file or in
+# $CLOUDFLARE_API_TOKEN.
+
+socket      = "/run/nyttig/nyttig.sock"   # the daemon's Unix socket, or host:port with [tls]
+assessor    = "clef"                      # created if missing, never overwritten
+description = "Clef: relevance and severity, 0 to 1"   # used only when creating the assessor
+color       = "#F38020"
+view        = "clef-inbox"                # saved view that finds the items, by name or ID
+
+account_id = "0123456789abcdef"           # Cloudflare account ID (hexadecimal)
+model      = "clef-flash"                 # "clef-flash" (cheaper, faster) or "clef"
+token_file = "/run/credentials/nyttig-clef/cf-token"   # else $CLOUDFLARE_API_TOKEN
+
+interval       = "60s"     # sleep between polls once the view is drained
+max_per_minute = 60        # Clef requests per minute
+daily_tokens   = 2000000   # stop calling Clef for the rest of the UTC day past this many input tokens (0 = no limit)
+max_text_chars = 8000      # the item description is cut to this before it is sent
+
+# For a daemon on another host, connect with mutual TLS instead of the socket:
+# socket = "nyttig.example.com:9090"
+# [tls]
+# cert        = "/etc/nyttig/client.crt"
+# key         = "/etc/nyttig/client.key"
+# ca          = "/etc/nyttig/ca.crt"
+# server_name = ""
+
+# Each question scores one thing: the item as a whole (no tag), or one tag.
+# At most one question per tag and one without a tag, 1 to 64 in all.
+# Types: "noul" (yes/no, scored as the probability of yes) and "score"
+# (2 to 10 levels, lowest first, scored as the level divided by levels - 1).
+
+[[questions]]
+type         = "noul"
+instructions = "Would a Go and security developer want to read this today?"
+criteria     = { true = "Directly useful or important news", false = "Noise, marketing or off-topic" }   # optional
+
+# Asked when the item has the tag CVE or a tag below it; scored for CVE.
+[[questions]]
+tag          = "CVE"
+type         = "score"
+instructions = "How severe is this vulnerability for widely deployed software?"
+criteria     = ["Not a vulnerability", "Low", "Medium", "High", "Critical"]
