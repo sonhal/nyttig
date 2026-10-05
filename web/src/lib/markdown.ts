@@ -219,6 +219,13 @@ const STRONG_CLOSE = /\*\*/g;
 const EM_CLOSE = /(?<!\*)\*(?!\*)/g;
 /** The longest link target that is looked at. */
 const MAX_URL = 2048;
+/**
+ * The most parentheses nested in a link target (CommonMark also stops at 32).
+ * Every "](" holds a "(", so a target scan passes at most this many other
+ * links: without it, a body of "[a](" repeated scanned MAX_URL characters for
+ * each one.
+ */
+const MAX_URL_PARENS = 32;
 const BRACKET_PAREN = /\]\(/g;
 const ITEM_REF = /\[#(\d{1,18})\]/y;
 const URL_RE = /https?:\/\/[^\s<>"]+/y;
@@ -243,7 +250,8 @@ function inlines(text: string, depth: number, inLink: boolean): Inline[] {
 	// The target of the link whose "](" is at pos: one URL without whitespace,
 	// parentheses balanced, closed by ")". Remembered, so that the many "["
 	// before one "](" do not each scan it again; the scan stops after
-	// MAX_URL characters, so the cost of all of them stays linear-ish.
+	// MAX_URL characters or MAX_URL_PARENS open parentheses, so all of them
+	// together stay linear.
 	// href is "" for a target safeLink rejects (the link then shows its
 	// text), end is where the ")" is; null is no link.
 	const target = (pos: number): { href: string; end: number } | null => {
@@ -253,8 +261,9 @@ function inlines(text: string, depth: number, inLink: boolean): Inline[] {
 		let open = 0;
 		for (let k = pos + 2; k < text.length && k - pos <= MAX_URL; k++) {
 			const ch = text[k] as string;
-			if (ch === '(') open++;
-			else if (ch === ')') {
+			if (ch === '(') {
+				if (++open > MAX_URL_PARENS) break;
+			} else if (ch === ')') {
 				if (open === 0) {
 					end = k;
 					break;

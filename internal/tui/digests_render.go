@@ -31,7 +31,12 @@ const (
 	maxMarkdownInput = 256 * 1024
 	maxMarkdownDepth = 3
 	maxLinkTarget    = 2048
-	maxRefTitle      = 60
+	// maxLinkParens caps the parentheses nested in a link target (CommonMark
+	// also stops at 32). Every "](" holds a "(", so a target scan passes at
+	// most this many other links: without it, a body of "[a](" repeated
+	// scanned maxLinkTarget bytes for each one.
+	maxLinkParens = 32
+	maxRefTitle   = 60
 )
 
 var (
@@ -327,6 +332,9 @@ func linkTargetAt(s string, pos int, memo map[int]*linkTarget) *linkTarget {
 		ch := s[k]
 		if ch == '(' {
 			open++
+			if open > maxLinkParens {
+				break
+			}
 		} else if ch == ')' {
 			if open == 0 {
 				if raw := s[pos+2 : k]; raw != "" {
