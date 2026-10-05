@@ -855,9 +855,17 @@ one of the series is shown. `:digest <assessor>/<series>` opens a series
 (`Tab` completes). On a phone the series list, the history and the digest are
 separate screens, with a `back` button.
 
-The body is shown as plain text for now (`white-space: pre-wrap`). Everything
-a digest carries is untrusted, so it is only ever rendered as text nodes; item
-links go through the same link check as the feed's.
+The body is a **Markdown subset**: headings (`#` to `###`), paragraphs (a line
+break stays a line break), bullet and numbered lists (nested), block quotes,
+fenced code blocks, horizontal rules, `**strong**`, `*emphasis*`, `` `code` ``,
+`[text](url)`, plain `https://` addresses, and `[#123]`, which links to item
+123's article (its title is the tooltip) when that item is one the digest is
+based on and stays literal text otherwise. Everything a digest carries is
+untrusted, so it is rendered as elements and text nodes only, never as HTML: a
+`<script>` or `<img>` in the body shows as the text it is, there are no
+images, a link whose address is not an http(s) URL shows only its text, and
+nesting and work are bounded (a body of 64 KiB of `*` is parsed in linear
+time). Item links go through the same link check as the feed's.
 
 | Key | Does |
 |---|---|

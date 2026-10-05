@@ -147,7 +147,7 @@ internal/api/               nyttig-api's HTTP API: routing (server.go), JSON han
 cmd/nyttig-api/main.go      nyttig-api entrypoint: flags, listen-address guard, HTTP server
 web/                        The SvelteKit app (pnpm); "pnpm build" writes a Node server to web/build/
 web/src/lib/                Pure modules (reducer, keymap, filter, query, command, highlight,
-                            fuzzy, history, help, sanitize, viewed, forms, latest, meta, since,
+                            fuzzy, history, help, sanitize, markdown, viewed, forms, latest, meta, since,
                             format, tagtree, views, scores, digests) with Vitest tests next to them, plus the
                             Svelte components (ViewTabs.svelte is the saved views' tab row above
                             the filter bar; PageTabs.svelte the page tabs of every page but
@@ -382,7 +382,11 @@ which phases are done and whether they are merged; keep it current.
   equal period ends page without skipping. Bodies are untrusted text (an
   LLM's output can repeat feed markup): never `{@html}`, strip control
   characters in the TUI. In the web app (`routes/digests/`, pure logic in
-  `lib/digests.ts`) the URL `/digests?series=&digest=` is the state, an
+  `lib/digests.ts`) the body is rendered by `Markdown.svelte` from the
+  typed tree `lib/markdown.ts` parses (elements and text nodes only; links
+  through `safeLink`; `[#id]` links only for the digest's linked items; the
+  parser's work is bounded and cached to stay linear on hostile input, which
+  its tests check), and the URL `/digests?series=&digest=` is the state, an
   input link carries only `digest=` and the page learns the series from the
   fetched digest, and the keys live in `keymap.ts` (`digestsKeyAction`).
   The service (`service/digests.go`) validates the

@@ -8,7 +8,8 @@
 
 	Everything here is untrusted text (an LLM wrote it, and it can repeat the
 	markup of the feed it read): titles, names and the body are rendered as
-	text only, item links go through safeLink.
+	text only (the body by the Markdown renderer, which builds elements and
+	text nodes and nothing else), item links go through safeLink.
 -->
 <script lang="ts">
 	import { goto } from '$app/navigation';
@@ -36,6 +37,7 @@
 	import { seriesForm, seriesPatchBody, type SeriesForm } from '$lib/forms';
 	import { formatDate } from '$lib/format';
 	import Help from '$lib/Help.svelte';
+	import Markdown from '$lib/Markdown.svelte';
 	import { digestsSections } from '$lib/help';
 	import { digestsKeyAction, type DigestsAction, type ManageMode, type Tool } from '$lib/keymap';
 	import { metadata } from '$lib/metadata.svelte';
@@ -525,7 +527,7 @@
 						<span data-testid="digest-period">{formatPeriod(reading.period_start, reading.period_end)}</span>
 						<span class="dim">· updated {formatDate(reading.updated_at)}</span>
 					</div>
-					<div class="body" data-testid="digest-body">{reading.body ?? ''}</div>
+					<div class="body"><Markdown source={reading.body ?? ''} items={reading.items ?? []} /></div>
 					{#if reading.items?.length}
 						<h3 data-testid="digest-items-title">Based on {reading.items.length} {reading.items.length === 1 ? 'item' : 'items'}</h3>
 						<ul class="items">
@@ -760,8 +762,6 @@
 	}
 	.body {
 		margin-top: 12px;
-		white-space: pre-wrap;
-		overflow-wrap: anywhere;
 	}
 	.items,
 	.inputs {

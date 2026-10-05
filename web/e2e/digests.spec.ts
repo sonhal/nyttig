@@ -23,6 +23,7 @@ interface Fixture {
 	olderTitle: string;
 	newerTitle: string;
 	itemTitles: string[];
+	itemIds: string[];
 }
 
 let fx: Fixture | undefined;
@@ -66,7 +67,7 @@ async function setup(page: Page): Promise<Fixture> {
 	const newer = await post<{ id: string }>(page, '/api/digests', {
 		series: s.id,
 		title: newerTitle,
-		body: 'Day two builds on day one.\n\nSee the items below.',
+		body: `Day two builds on **day one**.\n\nSee [#${list.items[0]?.id}] and [#999999].`,
 		period_start: '2026-10-05T00:00:00Z',
 		period_end: '2026-10-05T23:59:59Z',
 		items: list.items.slice(0, 2).map((i) => i.id),
@@ -82,7 +83,8 @@ async function setup(page: Page): Promise<Fixture> {
 		newer: newer.id,
 		olderTitle,
 		newerTitle,
-		itemTitles: list.items.slice(0, 2).map((i) => i.title)
+		itemTitles: list.items.slice(0, 2).map((i) => i.title),
+		itemIds: list.items.slice(0, 2).map((i) => i.id)
 	};
 }
 
@@ -135,6 +137,14 @@ test('reads a digest with its items and inputs, and follows the input and the hi
 	await expect(page.getByTestId('digest-series')).toHaveText(f.series);
 	await expect(page.getByTestId('digest-period')).toHaveText('2026-10-05');
 	await expect(page.getByTestId('digest-body')).toContainText('Day two builds on day one.');
+	await expect(page.getByTestId('digest-body').locator('strong')).toHaveText('day one');
+	// [#id] links to a linked item (title as the tooltip); an unknown id stays text.
+	const ref = page.getByTestId('item-ref');
+	await expect(ref).toHaveCount(1);
+	await expect(ref).toHaveText(`[#${f.itemIds[0]}]`);
+	await expect(ref).toHaveAttribute('title', f.itemTitles[0] ?? '');
+	await expect(ref).toHaveAttribute('href', /^https?:\/\//);
+	await expect(page.getByTestId('digest-body')).toContainText('[#999999]');
 
 	// The items it is based on: links to the articles, titles as text.
 	await expect(page.getByTestId('digest-items-title')).toHaveText('Based on 2 items');
@@ -159,9 +169,13 @@ test('reads a digest with its items and inputs, and follows the input and the hi
 	// Hostile text in the body is text: nothing is built from it, nothing ran.
 	const body = page.getByTestId('digest-body');
 	await expect(body).toContainText('<img src=x onerror="window.__pwned=1">');
-	await expect(body).toContainText('[click](javascript:window.__pwned=2)');
+	// A link with an unsafe target shows its text and is no link.
+	await expect(body).toContainText('> and click <script>');
 	await expect(body).toContainText('<script>window.__pwned=3</script>');
 	await expect(body.locator('img, script, a')).toHaveCount(0);
+	// The rest of the Markdown is rendered.
+	await expect(body.locator('h3')).toHaveText('Day one');
+	await expect(body.locator('li')).toHaveText(['first point', 'second point']);
 	expect(await pwned()).toBeUndefined();
 	await expect(page.getByTestId('digest-inputs-title')).toHaveCount(0);
 

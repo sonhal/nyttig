@@ -1,6 +1,6 @@
 # Digests plan: summaries and notes from assessors, kept as a history
 
-Status: **phases 1–5 implemented, not yet merged.** Phases 1–7 below.
+Status: **phases 1–6 implemented, not yet merged.** Phases 1–7 below.
 
 Assessments judge one item. A **digest** is a document an assessor writes
 about **one to many items**: "today's CVE news", "September in review".
@@ -470,3 +470,11 @@ By hand, with nyttigd on `sample_config.toml`:
   because `DigestRef` has no series ID; the page rewrites the URL once the
   digest is fetched. The phone's `⚙` sheet lists the manage pages in three
   columns to make room for `digests`.
+- **Phase 6:** the parser is `parseMarkdown` (blocks) and `parseInlines` in
+  `lib/markdown.ts`; `Markdown.svelte` renders it, with headings as `h3`-`h5`
+  (the page title is the `h2`) and line breaks inside a paragraph kept as
+  `<br>` (digests are LLM text, where a single newline usually means one).
+  Link targets may contain balanced parentheses and are cut at 2048
+  characters; `_emphasis_` is not supported (snake_case would trip it).
+  Nesting is capped at 3 for lists and quotes and 3 for inline spans; input
+  past 256 KiB is not parsed (the daemon stops at 64 KiB).
