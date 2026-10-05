@@ -6,26 +6,25 @@ Today a tag rule only reaches items fetched after the rule exists: the
 tagger runs inside `doFetch` (`cmd/nyttigd/main.go`) on `result.NewItems`
 and nowhere else. A rule added after the first fetch leaves every stored
 item untagged (about 600 posts in the owner's database), and a removed or
-edited rule leaves its old tags behind. This plan makes `item_tags` follow
-the current rules:
+edited rule leaves its old tags behind.
 
-- **`nyttig apply-tag-rules`** re-runs the rules on stored items, adding the
-  tags they give and removing the ones they no longer give.
-- **Adding or removing a rule** does the same for that rule's tag at once,
-  from every client (CLI, web, API).
+This plan adds one **manual** action, `nyttig apply-tag-rules`, that re-runs
+the rules on stored items: it adds the tags they give and removes the ones
+they no longer give. Nothing else changes: adding, removing or editing a
+rule, or a tag, still never touches stored items by itself.
 
 ## Decisions
 
 | Topic | Decision |
 |---|---|
-| Trigger | **Both.** `AddTagRule` and `RemoveTagRule` sync the rule's tag over all stored items. A new `ApplyTagRules` RPC syncs on demand, which also covers rules seeded from `config.toml` (seeding writes to the db directly). |
+| Trigger | **Manual only.** A new `ApplyTagRules` RPC, run by `nyttig apply-tag-rules`. `AddTagRule`, `RemoveTagRule`, the tag RPCs and config seeding keep their current behaviour. |
 | Semantics | **Full sync.** After a run, for every tag in scope, `item_tags` holds exactly the items the tag's current rules match: missing rows are added, rows no rule gives are removed. |
-| Removing a rule | Syncs its tag against the remaining rules. The web editor saves an edit as add-new then remove-old, so an edited pattern ends up with exactly the new pattern's items. |
+| Rule edits | Unchanged. The web editor saves an edit as add-new then remove-old; new items get the new pattern's tags, and stored items keep the old ones until the next `apply-tag-rules`. |
 | Tags with no rules | In scope like any other tag, so a full run removes all their assignments. There is no manual tagging, so a row that no rule gives is stale by definition. |
 | Invalid patterns | A tag with **any** rule whose pattern doesn't compile is **skipped** (nothing added or removed) and reported. Otherwise a broken rule would strip its tag from every item. `AddTagRule` already rejects bad patterns, so this only protects rows seeded from config or written by older versions. |
 | Live updates | **`item_update` per changed item** through `Hub.PushUpdate`, the path assessments use. See [Live updates](#live-updates) for what that does on large runs. |
 | Preview | `apply-tag-rules -dry-run`: the same calculation, rolled back, nothing pushed. Prints the counts per tag. |
-| Surfaces | **CLI only** for the on-demand run. The web app gets the add/remove sync for free through the existing endpoints; it gets no new button. No TUI change. |
+| Surfaces | **CLI only.** No web button, `:` command, nyttig-api endpoint or TUI key. |
 | Scope of a run | Everything by default. `-tag <name\|id>` limits it to one tag, `-source <id>` to one source's items. No `-rule`: under full sync a tag's rows depend on all its rules together, so the tag is the smallest unit that can be synced. |
 | Tag tree | Unaffected. `item_tags` still means "a rule of this tag matched", and ancestors are still expanded when querying (`docs/tag-tree-plan.md`). Syncing a parent tag syncs only its own rules' rows. |
 
@@ -48,16 +47,16 @@ For a scope (set of tags `T`, optionally one source `S`):
 
 Steps 1 to 5 run in **one transaction**. The pool has a single connection
 (`db.go`: `SetMaxOpenConns(1)`), so the run is serialized against fetches
-and other RPCs, and a rule added or removed in the middle can't make it
-remove rows the new rule just wrote. With `dry_run` the transaction is
-rolled back after step 5, so the counts are exactly what a real run would do.
+and other RPCs, and a rule added or removed during the run can't interleave
+with it. With `dry_run` the transaction is rolled back after step 5, so the
+counts are exactly what a real run would do.
 
 The matching moves into the `tagger` package as pure functions, shared by
 the fetch path, the sync and `TestTagRule` (which today repeats the field
-switch in `service.go`). The sync itself lives in the service, which
-already owns rule changes; it imports `tagger` (which imports nothing
-internal) and the db layer gets plain read/write helpers. The fetch
-pipeline is unchanged: it still only adds tags to new items.
+switch in `service.go`). The sync itself lives in the service; it imports
+`tagger` (which imports nothing internal) and the db layer gets plain
+read/write helpers. The fetch pipeline is unchanged: it still only adds
+tags to new items.
 
 ### Cost
 
@@ -65,10 +64,9 @@ Every stored item is matched against every rule of the tags in scope. With
 600 items and a few dozen rules that is well under a second. RE2 on a title
 and a short description is in the order of a microsecond, so 50 000 items
 times 30 rules is a few seconds, during which the single connection is held
-and fetches and stream snapshots wait. `AddTagRule` and `RemoveTagRule`
-only sync one tag, so they scale with that tag's rules. If databases get
-much larger, batch by item ID range with one transaction per batch (the
-race above then needs a mutex around rule changes and runs); not needed now.
+and fetches and stream snapshots wait. Since the run is manual, that is
+acceptable; if databases get much larger, batch by item ID range with one
+transaction per batch. Not needed now.
 
 ## Live updates
 
@@ -118,22 +116,17 @@ message TagSyncCount {
 }
 
 message ApplyTagRulesResponse {
-    int32 items_scanned          = 1;
-    int32 items_changed          = 2;
-    repeated TagSyncCount tags   = 3;  // only tags with a change
-    repeated TagSyncCount skipped = 4; // tags left alone: a rule doesn't compile
+    int32 items_scanned           = 1;
+    int32 items_changed           = 2;
+    repeated TagSyncCount tags    = 3;  // only tags with a change
+    repeated TagSyncCount skipped = 4;  // tags left alone: a rule doesn't compile
 }
 ```
 
 - Unknown `tag_id` or `source_id`: `NotFound`.
-- `AddTagRule` and `RemoveTagRule` keep their request and response types.
-  Their sync runs after the rule is written, in the same transaction (a
-  failed sync fails the RPC and leaves the rule unchanged), and is logged
-  (`tag rule applied`, with `added` / `removed`). Their responses don't
-  carry the counts; `nyttig add-tag-rule` prints "Applied to existing
-  items" and points at `apply-tag-rules -dry-run` for numbers.
-- nyttig-api gets no new endpoint (CLI only, per the decisions). Its
-  `POST /api/rules` and `DELETE /api/rules/{id}` sync through the RPCs.
+- The run is logged (`tag rules applied`, with the scope, `dry_run`,
+  `items_changed`, and the added/removed totals).
+- nyttig-api gets no endpoint for it.
 
 ## CLI
 
@@ -158,8 +151,8 @@ skipped).
 
 ## Phases
 
-Each phase is one commit; phases 1 to 4 can be one PR, titled
-`feat(tagger): apply tag rules to stored items`.
+Each phase is one commit; all four fit one PR, titled
+`feat: apply tag rules to stored items with nyttig apply-tag-rules`.
 
 ### Phase 1: tagger matching as pure functions
 
@@ -188,28 +181,26 @@ In `internal/server/db/tags.go`, taking a `Querier`-like interface that
 - Tests: each helper on a small fixture, including the source filter and an
   item of another source left untouched.
 
-### Phase 3: the sync, the RPC, rule changes
+### Phase 3: the sync and the RPC
 
 - Proto: `ApplyTagRules` and its messages as above; `buf generate`.
 - `service/retag.go`: `syncTags(tx, scope) (result, changedItemIDs)`
   implementing [The sync](#the-sync), the `ApplyTagRules` handler (with
   `dry_run` rollback), and the push of `item_update` after commit.
-- `AddTagRule` / `RemoveTagRule`: write the rule and sync its tag in one
-  transaction, then push. `RemoveTagRule` reads the rule's tag before
-  deleting it.
 - `internal/client`: wrapper for the new RPC.
 - Comments on `Hub.PushUpdate` and `item_update` updated.
 - Tests (`service/retag_test.go`):
-  - 600-item style backfill: items stored before the rule, `AddTagRule`
-    tags the matching ones and only those.
+  - Backfill: items stored before the rule; `AddTagRule` alone leaves them
+    untagged, `ApplyTagRules` tags the matching ones and only those.
   - Per-source rule tags only that source's items.
-  - Removing one of two rules on a tag keeps the items the other matches
-    and removes the rest; removing the last rule removes all.
-  - Edit as the web does it (add new pattern, remove old): result equals
-    the new pattern's matches.
-  - `ApplyTagRules` with `tag_id`, with `source_id` (other sources' rows
-    untouched), and with `dry_run` (counts equal a real run's, db unchanged,
-    nothing pushed).
+  - Removing one of two rules on a tag, then applying: items the other rule
+    matches keep the tag, the rest lose it; with the last rule removed, all
+    lose it.
+  - Edit as the web does it (add new pattern, remove old), then apply:
+    result equals the new pattern's matches.
+  - `tag_id` scope (other tags' rows untouched), `source_id` scope (other
+    sources' rows untouched), and `dry_run` (counts equal a real run's, db
+    unchanged, nothing pushed).
   - A tag with an uncompilable rule (inserted with `db.InsertTagRule`) is
     reported in `skipped` and keeps its rows.
   - A tag with no rules loses its rows on a full run.
@@ -225,30 +216,29 @@ In `internal/server/db/tags.go`, taking a `Querier`-like interface that
 - `nyttig apply-tag-rules` (`cmd/nyttig/main.go`): flags as above, `-tag`
   resolved by name or ID as `add-tag-rule` does, output as above; listed in
   the usage text.
-- `add-tag-rule` help: replace "Rules apply to items fetched after the rule
-  is added" with the new behaviour; `remove-tag-rule` help says the tag is
-  removed from items no remaining rule matches.
+- `add-tag-rule` and `remove-tag-rule` help: keep "Rules apply to items
+  fetched after the rule is added" and add "run `nyttig apply-tag-rules` to
+  apply the current rules to stored items".
 - `web/src/lib/RuleForm.svelte`: the hint "a new rule tags items fetched
-  from now on; existing items are not retagged" becomes "saving applies the
-  rule to stored items too". This is the only web change; `pnpm check`,
-  `pnpm test` and the e2e suite must stay green (`e2e/manage.spec.ts`
-  creates and deletes rules, which now retag).
+  from now on; existing items are not retagged" gains "run `nyttig
+  apply-tag-rules` to retag them". Text only; `pnpm check`, `pnpm test`,
+  `pnpm build` and the e2e suite must stay green.
 - `README.md`: the paragraph on rules applying only to new items (around
   "Tag rules added with `add-tag-rule`"), the CLI reference block, and the
   rules section near "Editing a rule adds the new rule and then removing".
-- `AGENTS.md`: the **Tagging** architecture note (rules now sync on
-  add/remove and via `ApplyTagRules`; full-sync semantics; invalid-pattern
-  tags skipped; the push behaviour), and this plan in the repository
-  layout's `docs/` list.
+- `AGENTS.md`: the **Tagging** architecture note (`ApplyTagRules` is the
+  only path that changes stored items' tags; full-sync semantics;
+  invalid-pattern tags skipped; the push behaviour).
 - This plan's `Status:` line.
 
 ## Out of scope
 
-- A web button or `:` command for the on-demand run, and a TUI key.
+- Retagging automatically when a rule or tag changes (decided against:
+  retagging is a manual action).
+- A web button or `:` command, a nyttig-api endpoint and a TUI key.
 - Server-initiated stream resets for runs larger than the subscriber
   buffer.
-- An `UpdateTagRule` RPC (edits stay add-then-remove, which now syncs
-  correctly).
+- An `UpdateTagRule` RPC.
 - Manual tagging. Full sync assumes every `item_tags` row comes from a
   rule; adding manual tags later would need a column saying where a row
   came from, and the sync would leave manual rows alone.
