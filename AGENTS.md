@@ -182,6 +182,7 @@ docs/saved-views-plan.md    Plan for saved views (named filters, feed tabs): dec
 docs/date-filter-plan.md    Plan for the date window (since:7d) in filters and views: decisions and phases
 docs/assessments-plan.md    Plan for assessments (scores and notes from external assessors): decisions and phases
 docs/docker-plan.md         Plan for the container images and compose setup: decisions and phases
+docs/digests-plan.md        Plan for digests (assessor-written summaries over many items, in series): decisions and phases
 CLAUDE.md                   `@AGENTS.md`: makes Claude Code load this file
 ```
 
