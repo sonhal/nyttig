@@ -1,13 +1,14 @@
 # Running Nyttig in Docker
 
 Three containers, built from the repository's `Dockerfile` and run by
-`compose.yaml` here:
+`compose.yaml` here, plus an optional fourth, the Clef assessor:
 
 | Service      | Image                         | Listens on                     |
 |--------------|-------------------------------|--------------------------------|
 | `nyttigd`    | `ghcr.io/sonhal/nyttigd`      | a Unix socket in a shared volume; optionally mTLS on a host address you pick |
 | `nyttig-api` | `ghcr.io/sonhal/nyttig-api`   | `127.0.0.1:7070` on the host   |
 | `nyttig-web` | `ghcr.io/sonhal/nyttig-web`   | `127.0.0.1:7071` on the host   |
+| `nyttig-clef` (opt-in, `compose.clef.yaml`) | `ghcr.io/sonhal/nyttig-clef` | nothing; it only calls nyttigd's socket and Cloudflare |
 
 ```
 browser: https, auth ──▶ your proxy ─┬─ /api/* ─▶ 127.0.0.1:7070 nyttig-api ── unix socket (volume) ──▶ nyttigd ──▶ feeds
@@ -20,7 +21,8 @@ authentication. nyttig-api has **no authentication of its own**, so never
 publish 7070 or 7071 on a public address. `deploy/Caddyfile` already routes
 to these two ports and works unchanged with a Caddy on the host.
 
-For a VPS without Docker, see [`../README.md`](../README.md) (systemd units).
+For a VPS without Docker, see [`../README.md`](../README.md) (systemd units;
+the Clef assessor has no unit yet).
 
 ## Run it
 
@@ -85,8 +87,12 @@ authentication, so no network carries it:
   by uid 10001 with mode 0700. Only nyttigd and nyttig-api mount it, and
   both run as uid 10001. nyttig-api never mounts the database volume.
 - Networks: `feeds` is nyttigd's way out to the internet; `api` and `web`
-  each hold one service, for its published port. The web app can't reach
+  each hold one service, for its published port; `clef` (opt-in) is the Clef
+  assessor's way out to Cloudflare. The web app can't reach
   nyttigd at all: it only serves the app, and the browser talks to `/api`.
+- The optional Clef assessor also mounts the socket and runs as uid 10001,
+  so it can write assessments (and, like any client of the socket, everything
+  else); it is trusted code that holds only the Cloudflare token.
 - The only way in from outside is the optional mTLS port (below), which
   requires a client certificate signed by your CA at the TLS handshake.
 
@@ -162,6 +168,63 @@ A client certificate from another CA fails at the handshake (`unknown
 certificate authority`). There is no revocation: if a client key leaks,
 generate a new CA and re-issue every certificate.
 
+## The Clef assessor (opt-in)
+
+`compose.clef.yaml` adds `nyttig-clef`, which scores news items with
+Cloudflare's Clef models and writes the scores as assessments (the README's
+[Clef assessor](../../README.md#clef-assessor) section explains what it does
+and how to write the questions). It is off by default so the stack starts
+without a Cloudflare account. **The text of every item it scores (title,
+description, link) is sent to Cloudflare.**
+
+1. **Create an API token** in the Cloudflare dashboard with the single
+   permission *Workers AI: Read*, and note the account ID.
+2. **Put the token in `clef-token`** next to the compose file (gitignored),
+   readable by the container's uid 10001, and nobody else:
+
+   ```bash
+   install -m 0600 /dev/null clef-token && cat > clef-token      # paste, Ctrl-D
+   sudo chown 10001:10001 clef-token && sudo chmod 0400 clef-token
+   ```
+
+   Compose mounts it as the secret `/run/secrets/cf-token` with the file's own
+   owner and mode, which is why the file itself must be readable by 10001.
+3. **Edit `clef.toml`**: set `account_id`, `view` and your `[[questions]]`
+   (and `model`, limits). It is mounted read-only; unknown keys are an error,
+   and a `token` key is rejected.
+4. **Turn it on in `.env`:**
+
+   ```bash
+   COMPOSE_FILE=compose.yaml:compose.clef.yaml
+   ```
+
+5. **Create the assessor and the view it reads**, and the tags the questions
+   name must exist (seed them in `config.toml`, or add them in the web app).
+   With nyttigd running:
+
+   ```bash
+   docker compose up -d nyttigd
+   docker compose exec nyttigd nyttig add-assessor -n clef \
+     -description "Clef: relevance and severity, 0 to 1" --socket /run/nyttig/nyttig.sock
+   docker compose exec nyttigd nyttig add-view -n clef-inbox -tag security \
+     -unassessed-by clef -since 2d --socket /run/nyttig/nyttig.sock
+   ```
+
+6. **Try it without writing anything, then start it:**
+
+   ```bash
+   docker compose run --rm nyttig-clef --config /etc/nyttig/clef.toml --once --dry-run
+   docker compose up -d
+   docker compose logs -f nyttig-clef      # one "item assessed" line per item
+   ```
+
+The container has no published port and sits alone on the `clef` network, which
+gives it outbound HTTPS and nothing the other services use. Cost is bounded by
+`daily_tokens` in `clef.toml` (the README has the prices). If the token is
+rejected, the log says to check the token's Workers AI permission, and the
+container keeps polling. If nyttigd is not up yet when it starts, it exits and
+`restart: unless-stopped` starts it again.
+
 ## Backups
 
 SQLite's online backup is consistent while nyttigd writes; never copy a
@@ -196,6 +259,7 @@ rebuild them from current Debian images.
 docker build --target nyttigd    --build-arg VERSION=v0.5.0 -t nyttigd .
 docker build --target nyttig-api --build-arg VERSION=v0.5.0 -t nyttig-api .
 docker build --target nyttig-web -t nyttig-web .
+docker build --target nyttig-clef -t nyttig-clef .
 ```
 
 Run these from the repository root. The images are linux/amd64.

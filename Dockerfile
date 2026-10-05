@@ -1,14 +1,15 @@
 # syntax=docker/dockerfile:1
 #
-# Container images for nyttigd, nyttig-api and the web app (nyttig-web), one
-# target each:
+# Container images for nyttigd, nyttig-api, the web app (nyttig-web) and the
+# optional Clef assessor (nyttig-clef), one target each:
 #
 #   docker build --target nyttigd    -t nyttigd .
 #   docker build --target nyttig-api -t nyttig-api .
 #   docker build --target nyttig-web -t nyttig-web .
+#   docker build --target nyttig-clef -t nyttig-clef .
 #
-# deploy/docker/compose.yaml builds and runs all three; deploy/docker/README.md
-# is the guide. CI publishes them to ghcr.io/sonhal/<target> for v* tags.
+# deploy/docker/compose.yaml builds and runs the first three, and
+# compose.clef.yaml adds nyttig-clef; deploy/docker/README.md is the guide. CI publishes them to ghcr.io/sonhal/<target> for v* tags.
 #
 # --build-arg VERSION=v0.5.0 stamps the version (nyttigd -version, the startup
 # logs). The build context has no .git, so without it the binaries say "dev".
@@ -42,7 +43,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     set -e; \
     ldflags="-s -w -X github.com/sonhal/nyttig/internal/version.Version=${VERSION}"; \
     CGO_ENABLED=1 go build -trimpath -tags libsqlite3 -ldflags="$ldflags" -o /out/ ./cmd/nyttigd; \
-    CGO_ENABLED=0 go build -trimpath -ldflags="$ldflags" -o /out/ ./cmd/nyttig ./cmd/nyttig-api; \
+    CGO_ENABLED=0 go build -trimpath -ldflags="$ldflags" -o /out/ ./cmd/nyttig ./cmd/nyttig-api ./cmd/nyttig-clef; \
     ldd /out/nyttigd | grep -q libsqlite3; \
     /out/nyttigd -version
 
@@ -103,6 +104,18 @@ EXPOSE 7070
 # --origin (required) comes from the command.
 ENTRYPOINT ["/usr/local/bin/nyttig-api", "--listen", ":7070", "--allow-public-listen"]
 CMD ["--socket", "/run/nyttig/nyttig.sock"]
+
+# ── nyttig-clef ──────────────────────────────────────────────
+
+# distroless/static carries the CA certificates that HTTPS to
+# api.cloudflare.com needs, and no shell, so there is no healthcheck.
+FROM gcr.io/distroless/static-debian13:nonroot AS nyttig-clef
+COPY --from=go-build /out/nyttig-clef /usr/local/bin/nyttig-clef
+# nyttigd's uid, the only one that may connect to its socket. The token is
+# mounted as a file (a compose secret) and named by token_file in the config.
+USER 10001:10001
+ENTRYPOINT ["/usr/local/bin/nyttig-clef"]
+CMD ["--config", "/etc/nyttig/clef.toml"]
 
 # ── nyttig-web ───────────────────────────────────────────────
 

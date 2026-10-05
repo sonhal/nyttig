@@ -8,11 +8,22 @@ import (
 	"time"
 )
 
-// TestLoad_Sample keeps deploy/clef.sample.toml in sync with Config.
+// TestLoad_Sample keeps deploy/clef.sample.toml and the container's
+// deploy/docker/clef.toml in sync with Config.
 func TestLoad_Sample(t *testing.T) {
-	cfg, err := Load(filepath.Join("..", "..", "deploy", "clef.sample.toml"))
+	for _, path := range []string{
+		filepath.Join("..", "..", "deploy", "clef.sample.toml"),
+		filepath.Join("..", "..", "deploy", "docker", "clef.toml"),
+	} {
+		t.Run(filepath.Base(path), func(t *testing.T) { checkSample(t, path) })
+	}
+}
+
+func checkSample(t *testing.T, path string) {
+	t.Helper()
+	cfg, err := Load(path)
 	if err != nil {
-		t.Fatalf("Load(clef.sample.toml): %v", err)
+		t.Fatalf("Load(%s): %v", path, err)
 	}
 	if cfg.View != "clef-inbox" || cfg.Model != "clef-flash" || cfg.IntervalDuration != time.Minute {
 		t.Errorf("cfg = %+v", cfg)

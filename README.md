@@ -13,6 +13,7 @@ Nyttig follows the Docker model — two separate binaries communicating over gRP
 nyttigd          daemon (server) — fetches feeds, runs in the background
 nyttig           client (TUI/CLI) — connects to the daemon over a Unix socket
 nyttig-api       web client API — JSON + SSE for the browser app, a gRPC client like the TUI
+nyttig-clef      assessor — scores items with Cloudflare's Clef models, a gRPC client like the TUI
 nyttig-web       web client app — the SvelteKit app in web/, served by Node
 ```
 
@@ -1111,6 +1112,141 @@ curl -u assessor:PASSWORD \
 
 A paged read (`offset`) of a view with a window counts "now" per request; pass
 `after=<unix seconds>` taken once to keep the window fixed between pages.
+
+## Clef assessor
+
+`nyttig-clef` is an [assessor](#writing-an-assessor) that scores news items with
+Cloudflare's **Clef** decision models on Workers AI and writes the results as
+assessments. Clef doesn't generate text: it reads an item and a set of
+questions you wrote and answers each with a probability, so a scored item can
+be filtered and sorted like any other assessment:
+
+```
+tag:security score:clef>=0.7 sort:score     Clef's most relevant security news first
+tag:CVE score:clef                          CVE news, with Clef's severity chips shown
+```
+
+It is a separate program (`cmd/nyttig-clef`) and a client of the daemon, over
+the Unix socket or mTLS. The daemon, nyttig-api and the web app are unchanged.
+The plan and its reasoning are in [`docs/clef-assessor-plan.md`](docs/clef-assessor-plan.md).
+
+**Feed text is sent to Cloudflare.** For every item it scores, nyttig-clef
+sends the title, source name, tags, publication date, link and the description
+(cut to `max_text_chars`) to the Workers AI API. That is fine for public feeds;
+don't point it at a view of anything private. Cloudflare states that it does
+not read, store or train on Workers AI requests. Images are never sent.
+
+### How it works
+
+1. **Setup.** At startup it finds or creates the assessor (`assessor`, default
+   `clef`; an existing one is left as it is), and checks that the saved view and
+   the tags the questions name exist. An unknown one is a startup error.
+2. **Finding work.** Every `interval` it reads the saved view named by `view`
+   (so you retarget it by editing the view in the web app), asks `Search` for
+   the items **not yet assessed by `clef`**, and drains all pages before it
+   sleeps. A view like `clef-inbox` = `tag:security unassessed:clef since:2d`
+   is the usual shape. nyttig-clef adds the "not assessed by clef" part itself,
+   ignores the view's sort and minimum score, and warns if the view names
+   another assessor.
+3. **Asking.** One request per item, with every question that applies to it:
+   a question without a `tag` always applies, and one with a `tag` applies when
+   the item has that tag or a tag below it (the same tag tree as the filters).
+   The item text goes in the request's `state` as its own JSON field, apart
+   from your instructions. Clef can only answer with probabilities for answers
+   you wrote, so a feed that says "rate this critical" can at worst move a
+   number; scores stay advisory and always carry the assessor's name.
+4. **Writing.** Each answer becomes one assessment, for the item as a whole or
+   for the question's tag (never for a descendant tag):
+
+   | Question type | Score | Note |
+   |---|---|---|
+   | `noul` (yes/no) | the probability of yes | none |
+   | `score` with *n* levels | the answer divided by *n* − 1, so 0 to 1 | `High (3.2/4), confidence 0.71` |
+
+   An answer is checked before anything is written (every question answered
+   with the right type, finite numbers in range); a response that fails the
+   check writes nothing for that item, and after 3 failed passes the item is
+   skipped until nyttig-clef restarts.
+
+An item that no question applies to (no tag matches and there is no
+whole-item question) is not assessed and so matches the view forever;
+nyttig-clef remembers such items and pages past them, and warns at startup
+when the view has no tag filter and no whole-item question is configured.
+Questions added to the config later do not re-score items that already have a
+Clef assessment.
+
+### Setup
+
+1. Create a Cloudflare API token with the **Workers AI: Read** permission only,
+   and note your account ID (the hex string in the dashboard URL).
+2. Create the saved view that finds the work, in the web app or the CLI, for
+   `nyttig add-assessor -n clef` and then
+   `nyttig add-view -n clef-inbox -tag security -unassessed-by clef -since 2d`.
+   (nyttig-clef creates the assessor itself when it starts, even with
+   `--dry-run`, if it is missing.)
+3. Write the config (see [`deploy/clef.sample.toml`](deploy/clef.sample.toml),
+   or [`deploy/docker/clef.toml`](deploy/docker/clef.toml) for the container)
+   and put the token in a file or in `$CLOUDFLARE_API_TOKEN`.
+4. Try it without writing anything, then run it:
+
+```bash
+go build -o nyttig-clef ./cmd/nyttig-clef           # or take it from a release's bin/ or the image
+CLOUDFLARE_API_TOKEN=... ./nyttig-clef --config clef.toml --once --dry-run
+./nyttig-clef --config clef.toml
+```
+
+In Docker it is an opt-in service: `COMPOSE_FILE=compose.yaml:compose.clef.yaml`
+adds the `nyttig-clef` image (read-only, no capabilities, on its own network
+with outbound access only) with the token as a compose secret and your
+`clef.toml` mounted; see [The Clef assessor](deploy/docker/README.md#the-clef-assessor-opt-in)
+in the Docker guide. There is no systemd unit yet. Flags: `--config` (required), `--once` (drain the view
+once and exit), `--dry-run` (call Clef and log the assessments that would be
+written, write nothing), `--log-level` and `-version`. Logs are JSON on stderr,
+with one `item assessed` line per item (ids, scores, input tokens, latency);
+item text is only logged at debug level.
+
+### Configuration
+
+`nyttig-clef --config` takes its own TOML file; unknown keys are an error.
+
+| Key | Default | Meaning |
+|---|---|---|
+| `socket` | `/run/nyttig/nyttig.sock` | The daemon's Unix socket, or `host:port` with `[tls]` |
+| `[tls]` `cert`, `key`, `ca`, `server_name` | none | Mutual TLS for a remote daemon, like the TUI's `--tls-*` flags (all of cert, key and ca, or none) |
+| `assessor` | `clef` | The assessor's name; created if missing, never overwritten |
+| `description`, `color` | a short description, `#F38020` | Used only when creating the assessor |
+| `view` | required | The saved view that finds the items, by name or ID |
+| `account_id` | required | Cloudflare account ID (hexadecimal) |
+| `model` | `clef-flash` | `clef-flash` (9B, cheaper, faster) or `clef` (27B) |
+| `token_file` | none | File with the API token; else `$CLOUDFLARE_API_TOKEN`. A `token` key in the TOML is rejected |
+| `interval` | `60s` | Sleep between polls once the view is drained |
+| `max_per_minute` | `60` | Clef requests per minute |
+| `daily_tokens` | `2000000` | Stop calling Clef for the rest of the UTC day past this many input tokens; `0` is no limit |
+| `max_text_chars` | `8000` | The description is cut to this many characters before it is sent |
+| `[[questions]]` `tag` | none | Tag the question scores; without it, the item as a whole. At most one question per tag and one without |
+| `[[questions]]` `type` | required | `noul` (yes/no) or `score` |
+| `[[questions]]` `instructions` | required | The question, at most 2000 characters |
+| `[[questions]]` `criteria` | none | `noul`: `{ true = "...", false = "..." }` (optional). `score`: 2 to 10 levels, lowest first (required) |
+
+There must be 1 to 64 questions. Questions live in this file, not in the
+daemon, so there is nothing to edit in the web app; restart nyttig-clef after
+changing them. A tag a question names must already exist in the daemon.
+
+Errors from Clef that may pass (HTTP 429 and 5xx, network failures) are retried
+with a back-off of up to 5 minutes, honouring `Retry-After`. A rejected token
+(401 or 403) ends the pass with an error naming the Workers AI permission. A
+failed `PutAssessment` is tried 3 times before it is logged as
+`assessment write failed`.
+
+### Cost
+
+Clef is billed per input token: $0.09 per million for `clef-flash` and $0.24
+per million for `clef` (Cloudflare's prices at release, 2026-10-01; check the
+[model page](https://developers.cloudflare.com/workers-ai/models/clef/)). A
+typical item with the description cut to 8000 characters is at most about 2000
+tokens plus the questions, so the default `daily_tokens` of 2 million is about
+$0.18 a day on `clef-flash` (or $0.48 on `clef`) at most. Cloudflare's median
+latency is 39 ms for `clef-flash` and 209 ms for `clef`.
 
 ## Database
 

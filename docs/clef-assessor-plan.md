@@ -1,6 +1,6 @@
 # Clef assessor plan
 
-Status: **phases 1-3 implemented, not yet merged.**
+Status: **phases 1-4 implemented, not yet merged.**
 
 `nyttig-clef` is a new client binary that scores news items with
 Cloudflare's **Clef** decision models on Workers AI and writes the results
@@ -84,8 +84,8 @@ Deviations.
 | Requests | **One item per request**, with all of its applicable questions in it. Several items in one request would mean telling Clef which answer belongs to which item, which can go wrong silently; at 40–200 ms per call it isn't needed |
 | Finding work | **A saved view**, named in the config, e.g. `clef-inbox` = `tag:security unassessed:clef since:2d`. Retargeting is editing the view in the web app. Resolved with `client.FindView` / `ViewSearchRequest`, like `nyttig search -view` |
 | Polling or streaming | **Polling** `Search` every `interval` (default 60s), draining all pages before it sleeps. News doesn't need sub-minute latency, and polling also covers the backlog and restarts. A `StreamItems` mode is a follow-up |
-| Deployment | **Same VPS**, a systemd unit next to nyttigd, talking to it over the Unix socket `/run/nyttig/nyttig.sock` (group `nyttig`, like nyttig-api). No compose service in v1 |
-| Credentials | A Cloudflare API token with **Workers AI: Read** only, read from a file (systemd `LoadCredential=`) or `CLOUDFLARE_API_TOKEN`. A `token` key in the TOML is rejected, so the secret never ends up in a config file |
+| Deployment | **A Docker container**, like nyttigd, nyttig-api and nyttig-web: a `nyttig-clef` image (distroless static, uid 10001) and an **opt-in compose overlay**, `deploy/docker/compose.clef.yaml`, so the base stack still starts without a Cloudflare account. It mounts the `nyttig-socket` volume and talks to nyttigd over the Unix socket `/run/nyttig/nyttig.sock`. Its own network `clef` gives it outbound HTTPS and nothing else; it publishes no port. No systemd unit in v1 |
+| Credentials | A Cloudflare API token with **Workers AI: Read** only, read from a file or `CLOUDFLARE_API_TOKEN`. In compose it is a **compose secret** (`secrets: cf-token: file: ./clef-token`, mounted at `/run/secrets/cf-token`, so `token_file = "/run/secrets/cf-token"`); the file must be readable by uid 10001 and is gitignored. A `token` key in the TOML is rejected, so the secret never ends up in a config file |
 | Images | **None.** nyttig never loads feed images (see "Feed content in the browser is untrusted" in `AGENTS.md`), and fetching them would mean following untrusted URLs |
 | Feed text | Sent to Cloudflare. Fine for public feeds; README says so |
 
@@ -138,7 +138,7 @@ view       = "clef-inbox"                # saved view, by name or ID
 
 account_id = "0123456789abcdef"          # Cloudflare account
 model      = "clef-flash"                # "clef-flash" | "clef"
-token_file = "/run/credentials/nyttig-clef/cf-token"   # else $CLOUDFLARE_API_TOKEN
+token_file = "/run/secrets/cf-token"         # else $CLOUDFLARE_API_TOKEN
 
 interval        = "60s"   # sleep between polls once the view is drained
 max_per_minute  = 60      # Clef requests per minute
@@ -262,27 +262,41 @@ Add `clef` to the scope names in `AGENTS.md` in phase 1.
      nothing and is skipped after 3 passes; a view edited between passes is
      picked up; `--dry-run` writes nothing; the daily budget stops calls;
      429 backs off.
-4. **`feat(deploy): nyttig-clef unit, build and release`**.
-   - `deploy/systemd/nyttig-clef.service`: `DynamicUser=yes`,
-     `SupplementaryGroups=nyttig`,
-     `LoadCredential=cf-token:/etc/nyttig/clef-token`,
-     `ExecStart=/usr/local/bin/nyttig-clef --config /etc/nyttig/clef.toml`,
-     `Requires=`/`After=nyttigd.service`, and the same hardening as
-     nyttig-api.
-   - Network for the unit: it needs outbound HTTPS to `api.cloudflare.com`,
-     which systemd can't allow by hostname, so
-     `RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6` without
-     `IPAddressDeny`. Say so in the unit's comment.
-   - CI's Build job adds `./cmd/nyttig-clef` (`CGO_ENABLED=0` like the other
-     clients), and the release tarball carries it in `bin/`.
+4. **`feat(deploy): nyttig-clef container, build and release`**.
+   - `Dockerfile`: `./cmd/nyttig-clef` is built in the go-build stage with the
+     other clients (`CGO_ENABLED=0`), and a `nyttig-clef` target is modelled on
+     `nyttig-api`: `gcr.io/distroless/static-debian13:nonroot` (which carries
+     the CA certificates outbound HTTPS needs), `USER 10001:10001` (the uid
+     that may use nyttigd's socket), `ENTRYPOINT ["/usr/local/bin/nyttig-clef"]`
+     and default command `--config /etc/nyttig/clef.toml`.
+   - `deploy/docker/compose.clef.yaml` (opt-in, like `compose.mtls.yaml`, via
+     `COMPOSE_FILE`): service `nyttig-clef` with the same hardening as the base
+     services (read-only, no capabilities, `no-new-privileges`, log caps; YAML
+     anchors don't cross files, so the settings are repeated),
+     `image: ghcr.io/sonhal/nyttig-clef:${NYTTIG_VERSION:-latest}`,
+     `depends_on: [nyttigd]`, the `nyttig-socket` volume,
+     `./clef.toml:/etc/nyttig/clef.toml:ro`, the `cf-token` secret, and its own
+     `clef` network (never `feeds`, `api` or `web`), no published ports.
+   - `deploy/docker/clef.toml`: the example config for the container (socket
+     `/run/nyttig/nyttig.sock`, `token_file = "/run/secrets/cf-token"`), loaded
+     by the same test as `deploy/clef.sample.toml`. `deploy/docker/clef-token`
+     is gitignored.
+   - CI: the Build job adds `./cmd/nyttig-clef` (`CGO_ENABLED=0`) and the
+     release tarball carries it in `bin/`. The Images job and Publish images
+     matrices add `nyttig-clef` (built, then started read-only with no
+     capabilities and made to print `-version`, like nyttig-api; distroless has
+     no shell, so no healthcheck); it publishes `ghcr.io/sonhal/nyttig-clef`.
    - Docs:
      - README: a "Clef assessor" section with setup, the config reference
-       table, cost, and the note that feed text is sent to Cloudflare.
-     - `deploy/README.md`: install steps, creating the token, and the view to
-       create first.
-     - `AGENTS.md`: the binary table, the repository layout, and an
-       architecture note on the `unassessed` caveat.
-   - Check: the unit with `systemd-analyze verify`, if available.
+       table, cost, the compose overlay, and the note that feed text is sent
+       to Cloudflare.
+     - `deploy/docker/README.md`: the overlay, the token file and its owner,
+       creating the assessor and the view first. `deploy/README.md` (the
+       systemd guide) points there.
+     - `AGENTS.md`: the binary table, the repository layout, the "Containers"
+       note, and an architecture note on the `unassessed` caveat.
+   - Check: `docker compose -f compose.yaml -f compose.clef.yaml config`
+     renders, and the image builds and prints `-version`.
 
 Each phase runs the checks in `AGENTS.md` (gofmt, `go mod tidy -diff`, `go
 vet`, golangci-lint against `origin/main`, the race tests). No phase touches
@@ -297,7 +311,7 @@ the web app or the proto.
 - **`choice` questions**, e.g. writing the chosen option as a note-only
   assessment, or suggesting tags.
 - **Streaming mode** (`StreamItems` with the view's filter) for lower latency.
-- **A compose service** in `deploy/docker/`.
+- **A systemd unit** for nyttig-clef on a VPS without Docker (`DynamicUser=yes`, `SupplementaryGroups=nyttig`, `LoadCredential=` for the token, outbound HTTPS to `api.cloudflare.com` without `IPAddressDeny`).
 - **Images**, only through the fetcher's SSRF-protected client and with a size cap.
 - **Running the open weights locally** (Apache 2.0 on Hugging Face) instead of
   Workers AI: the request format is the same, so it would mostly be a
@@ -334,3 +348,4 @@ the web app or the proto.
   sleeps until UTC midnight, `--once` returns. The token comes from
   `Config.ReadToken` (`token_file`, else `$CLOUDFLARE_API_TOKEN`); a missing
   `token_file` does not fall back to the environment.
+- **Phase 4:** the systemd unit was replaced by a Docker container (image and opt-in compose overlay) on the owner's request.
