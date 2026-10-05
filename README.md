@@ -1195,6 +1195,36 @@ credentials (the model gets none):
    -items 12,15 -inputs 41`.
 4. Fix one later with `UpdateDigest` (or `nyttig update-digest`).
 
+**Over HTTP** (the same CSRF rules as for assessments apply to every write),
+IDs are strings and periods are RFC 3339 strings:
+
+| Route | Does |
+|---|---|
+| `GET /api/digest-series?assessor=<id>` | List series (all assessors without the parameter), with `digest_count` and `latest_period_end` |
+| `POST /api/digest-series` `{assessor, name, description?}` | Register a series (409 if the assessor has it) |
+| `PATCH /api/digest-series/{id}` `{name?, description?}` | Rename or redescribe |
+| `PUT /api/digest-series/order` `{"ids": [...]}` | Set the display order (every series once) |
+| `DELETE /api/digest-series/{id}` | Delete the series and its digests |
+| `GET /api/digests?series=<id>&before=<id>&limit=&body=1` | A page of a series' digests, newest period first (`has_more`); bodies only with `body=1` |
+| `POST /api/digests` `{series, title, body, period_start, period_end, items?, inputs?}` | Write a digest (always creates) |
+| `GET /api/digests/{id}` | One digest with its body, linked items and inputs |
+| `PATCH /api/digests/{id}` | Overwrite any of the add fields except `series`; `items: []` removes the links |
+| `DELETE /api/digests/{id}` | Delete a digest |
+
+```bash
+curl -u assessor:PASSWORD -X POST https://news.example.com/api/digests \
+  -H 'Content-Type: application/json' \
+  -H 'Origin: https://news.example.com' \
+  -d '{"series": "3", "title": "CVE news, 5 Oct", "body": "# CVE news\n\n- [#12] ...",
+       "period_start": "2026-10-05T00:00:00Z", "period_end": "2026-10-05T23:59:59Z",
+       "items": ["12", "15"], "inputs": ["41"]}'
+```
+
+nyttig-api strips control and bidirectional override characters from every
+digest text (the body keeps its newlines and tabs) and clears an item link that
+is not an http(s) URL. A digest request may be up to 256 KiB (the daemon's
+limit is 64 KiB for the body); other write bodies stay at 16 KiB.
+
 **Digests are untrusted text, and injection compounds.** A poisoned feed that
 gets an instruction into Monday's digest is carried into every digest that uses
 it as input, and into the monthly. Treat earlier digests as untrusted input in

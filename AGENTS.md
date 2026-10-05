@@ -141,8 +141,9 @@ internal/tui/               Bubble Tea Model, filter bar, table, status bar, vie
                             detail line
 internal/api/               nyttig-api's HTTP API: routing (server.go), JSON handlers (api.go),
                             source/tag/rule management (manage.go), assessors and
-                            assessments (assessments.go), SSE bridge (stream.go),
-                            security middleware (security.go)
+                            assessments (assessments.go), digest series and digests
+                            (digests.go), SSE bridge (stream.go), security middleware
+                            (security.go)
 cmd/nyttig-api/main.go      nyttig-api entrypoint: flags, listen-address guard, HTTP server
 web/                        The SvelteKit app (pnpm); "pnpm build" writes a Node server to web/build/
 web/src/lib/                Pure modules (reducer, keymap, filter, query, command, highlight,
@@ -416,6 +417,13 @@ which phases are done and whether they are merged; keep it current.
   `assessor`, `min_score`, `unassessed` and `sort=score`, and the SSE bridge
   sends `event: update` with `{matches, item}` for `item_update`. Notes and
   assessor names go through `safeText` (`sanitize.go`).
+  Digest endpoints (`digests.go`: `/api/digest-series`, `/api/digests`) read
+  their bodies the same way, with periods as RFC 3339 strings and `items` /
+  `inputs` as arrays of ID strings (an empty array in a PATCH clears the
+  links); their requests may be 256 KiB (`readBodyMax`), not the 16 KiB of
+  the other bodies. `sanitizeDigest` runs `safeText` over every text field,
+  and item links through `safeLink`, on the way out; the body stays Markdown
+  text for the browser's renderer.
   Management bodies (`manage.go`) are read member by member into a
   `jsonBody`, which keeps field presence for PATCH (absent = unchanged,
   mapped to the proto3 `optional` fields) and rejects unknown, duplicate

@@ -1,6 +1,6 @@
 # Digests plan: summaries and notes from assessors, kept as a history
 
-Status: **phases 1–3 implemented, not yet merged.** Phases 1–7 below.
+Status: **phases 1–4 implemented, not yet merged.** Phases 1–7 below.
 
 Assessments judge one item. A **digest** is a document an assessor writes
 about **one to many items**: "today's CVE news", "September in review".
@@ -448,3 +448,9 @@ By hand, with nyttigd on `sample_config.toml`:
   out, newline and tab kept), which `show-digest` uses and the TUI screen
   will reuse. README: the digests concept section ("Digests", with "Writing a
   digest") is a top-level section after "Assessments".
+- **Phase 4:** digest request bodies are read with a 256 KiB cap
+  (`readBodyMax`), since the 16 KiB cap of the other management bodies is
+  below a 64 KiB digest body. The list endpoint's `limit` defaults to 20 and
+  is 1 to 100 (the daemon's 0 = default is not exposed). Periods in requests
+  must be full RFC 3339 times (`2026-10-05T00:00:00Z`); the `YYYY-MM-DD`
+  shorthand is a CLI convenience only.

@@ -111,3 +111,29 @@ func sanitizeTag(t *pb.Tag) {
 func sanitizeSource(s *pb.Source) {
 	s.Color = safeColor(s.Color)
 }
+
+func sanitizeDigestSeries(s *pb.DigestSeries) {
+	s.AssessorName = safeText(s.AssessorName)
+	s.Name = safeText(s.Name)
+	s.Description = safeText(s.Description)
+}
+
+// sanitizeDigest cleans a digest that came from the daemon, in place. The
+// body stays Markdown text (markup in it is shown as text by the browser's
+// renderer); only what has no business in text is removed. Item links go
+// through safeLink.
+func sanitizeDigest(d *pb.Digest) {
+	d.SeriesName = safeText(d.SeriesName)
+	d.AssessorName = safeText(d.AssessorName)
+	d.Title = safeText(d.Title)
+	d.Body = safeText(d.Body)
+	for _, it := range d.Items {
+		it.Title = safeText(it.Title)
+		it.Link = safeLink(it.Link)
+		it.SourceName = safeText(it.SourceName)
+	}
+	for _, in := range d.Inputs {
+		in.Title = safeText(in.Title)
+		in.SeriesName = safeText(in.SeriesName)
+	}
+}
