@@ -175,6 +175,7 @@ nyttig list-sources
 nyttig remove-source -id 3
 nyttig add-tag -n "security" -c "#FF0000"
 nyttig add-tag-rule -tag security -p '(?i)\b(cve|exploit)\b'
+nyttig apply-tag-rules -tag security     # also tag the items already stored
 nyttig search -tag security openssl
 nyttig refresh
 ```
@@ -379,6 +380,7 @@ nyttig add-tag-rule    -tag <name|id> -p <regex> [-f title|description|both] [-s
 nyttig test-tag-rule   -p <regex> [-f title|description|both] [-s source_id] [-l limit]   # dry run
 nyttig list-tag-rules
 nyttig remove-tag-rule -id <rule_id>
+nyttig apply-tag-rules [-tag <name|id>] [-source <id>] [-dry-run]   # re-run the rules on stored items
 nyttig list-views                        # name, ★ for favorites, and the filter written like the web query bar
 nyttig add-view        -n <name> [-q <text>] [-source <name|id>] [-tag <name|id>] [-unviewed] [-since <window>] [-sort newest|oldest|score] [-favorite]
                        [-assessor <name|id>] [-min-score <0-1>] [-unassessed-by <name|id>]
@@ -439,8 +441,28 @@ a whole count. A view saves the same fields (`score:claude>=0.7`,
 keeps the view and drops those fields (a `score` sort becomes `newest`).
 
 Tag rules added with `add-tag-rule` apply to items fetched after the rule is
-created; existing items are not retagged. Use `test-tag-rule` first to see
-which of the 500 most recent items a pattern would match.
+created; adding, editing or removing a rule never changes stored items by
+itself. Use `test-tag-rule` first to see which of the 500 most recent items a
+pattern would match.
+
+`apply-tag-rules` re-runs the current rules over the items already stored
+and makes their tags match: it adds the tags the rules give and removes the
+ones they no longer give (from a removed or edited rule). A tag with no
+rules loses all its items. A tag with any rule whose pattern doesn't compile
+is left alone and listed as skipped. `-tag` limits the run to one tag,
+`-source` to one source's items, and `-dry-run` prints the counts without
+changing anything:
+
+```
+$ nyttig apply-tag-rules -dry-run
+Scanned 612 items; 2 tags would change on 241 items.
+  rust      +58   -2
+  security  +180  -0
+```
+
+Open TUIs and browser tabs get the changed items live. On a run that changes
+more than about 64 items an open TUI can miss some of them until it
+reconnects; the web app reloads its list by itself.
 
 ### Input validation
 
@@ -853,6 +875,7 @@ select it.
   most recent 500 items and lists the matches. A rule only tags items
   fetched after it is added. Editing a rule adds the new rule and then
   removes the old one; deleting a rule leaves existing tags on items.
+  Run `nyttig apply-tag-rules` to apply the current rules to stored items.
 
 Rows are marked viewed (read) as the cursor goes through them: the row you
 move to with `j`/`k`, click, tap, expand or open, and the row you step off.

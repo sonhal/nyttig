@@ -12,6 +12,7 @@
 //	nyttig list-tags                             # list all tags
 //	nyttig add-tag-rule -tag rust -p '(?i)\brust\b'  # auto-tag matching items
 //	nyttig list-tag-rules                        # list all tag rules
+//	nyttig apply-tag-rules -dry-run              # preview re-running the rules on stored items
 //	nyttig search -q "sqlite"                    # full-text search stored items
 //	nyttig add-view -n sec -tag "cyber security" -unviewed   # save a filter as a view
 //	nyttig search -view sec                      # run a saved view's filter
@@ -96,6 +97,8 @@ func main() {
 		listTagRulesCmd()
 	case "remove-tag-rule":
 		removeTagRuleCmd()
+	case "apply-tag-rules":
+		applyTagRulesCmd()
 	case "search":
 		searchCmd()
 	case "update-source":
@@ -147,6 +150,7 @@ func printHelp() {
 	fmt.Fprintf(os.Stderr, "  test-tag-rule  Show which recent items a pattern would tag (dry run)\n")
 	fmt.Fprintf(os.Stderr, "  list-tag-rules List all tag rules\n")
 	fmt.Fprintf(os.Stderr, "  remove-tag-rule Remove a tag rule by ID\n")
+	fmt.Fprintf(os.Stderr, "  apply-tag-rules Re-run the tag rules over stored items (adds and removes tags)\n")
 	fmt.Fprintf(os.Stderr, "  list-views     List saved views (named feed filters)\n")
 	fmt.Fprintf(os.Stderr, "  add-view       Save a filter (search, source, tag, sort, unviewed, since) as a view\n")
 	fmt.Fprintf(os.Stderr, "  update-view    Change a view (only the given flags change)\n")
@@ -688,7 +692,8 @@ func addTagRuleCmd() {
 	args := os.Args[2:]
 	if len(args) == 0 || args[0] == "--help" {
 		fmt.Fprintf(os.Stderr, "Usage: nyttig add-tag-rule -tag <name|id> -p <pattern> [flags]\n\n")
-		fmt.Fprintf(os.Stderr, "Rules apply to items fetched after the rule is added.\n\n")
+		fmt.Fprintf(os.Stderr, "Rules apply to items fetched after the rule is added. Run\n")
+		fmt.Fprintf(os.Stderr, "'nyttig apply-tag-rules' to apply the current rules to stored items.\n\n")
 		flags.PrintDefaults()
 		os.Exit(0)
 	}
@@ -835,6 +840,7 @@ func removeTagRuleCmd() {
 	args := os.Args[2:]
 	if len(args) == 0 || args[0] == "--help" {
 		fmt.Fprintf(os.Stderr, "Usage: nyttig remove-tag-rule -i <id>\n\n")
+		fmt.Fprintf(os.Stderr, "Stored items keep the rule's tag until 'nyttig apply-tag-rules' runs.\n\n")
 		flags.PrintDefaults()
 		os.Exit(0)
 	}

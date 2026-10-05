@@ -203,8 +203,9 @@ which phases are done and whether they are merged; keep it current.
   for slow subscribers (64-buffered channel). `StreamItems` re-filters pushed
   items per-subscriber against the current `StreamFilter`, including the
   search query (checked against `items_fts` with `db.ItemMatchesSearch`).
-  `Hub.PushUpdate` sends an item whose assessments changed (`PutAssessment`
-  and `RemoveAssessment` build the full item and call it) as `item_update`
+  `Hub.PushUpdate` sends an item whose tags or assessments changed
+  (`PutAssessment`, `RemoveAssessment` and `ApplyTagRules` build the full
+  item and call it) as `item_update`
   to every subscriber, flagged with `update_matches` (the subscriber's
   `itemMatchesFilter`, including `assessmentsMatch` for `min_score` and
   `unassessed_by`); clients update an item they show, insert a matching one
@@ -376,6 +377,19 @@ which phases are done and whether they are merged; keep it current.
   knows nothing special about it. Ratings are for the item as a whole.
 - **Tagging** is rule-based only (no manual tagging). Rules are regex over
   `title`/`description`/`both`, global or per-source, evaluated by `priority`.
+  The fetch pipeline only adds tags to new items; adding, editing or removing
+  a rule never touches stored items. `ApplyTagRules` (`service/retag.go`,
+  `nyttig apply-tag-rules`, CLI only; `docs/retag-plan.md`) is the one path
+  that retags them: a **full sync** that makes `item_tags` match the current
+  rules for one tag or all, over one source's items or all, in one
+  transaction (`dry_run` rolls it back). A tag with no rules loses its rows;
+  a tag with any uncompilable rule is skipped whole. Matching lives in
+  `tagger` (`Compile`, `CompiledRule.Matches`, `Desired`), shared by the
+  fetch path, the sync and `TestTagRule`. Changed items go out as
+  `item_update` after the commit, so a run larger than the 64-message
+  subscriber buffer drops updates for slow subscribers. Full sync assumes
+  every `item_tags` row comes from a rule; manual tags would need a column
+  saying where a row came from.
 - **View tracking** is K9s-style: the TUI marks items viewed as they scroll
   past, debounced into ~3s batches, sent via `MarkViewed`. A row exists in
   `view_state` ⟺ viewed.

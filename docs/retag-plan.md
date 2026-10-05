@@ -1,6 +1,6 @@
 # Retagging plan: apply tag rules to stored items
 
-Status: **planned** (no phase implemented yet).
+Status: **implemented, not yet merged** (phases 1 to 4, one commit each, on `claude/lucid-shannon-zu409c`). See Deviations.
 
 Today a tag rule only reaches items fetched after the rule exists: the
 tagger runs inside `doFetch` (`cmd/nyttigd/main.go`) on `result.NewItems`
@@ -245,4 +245,23 @@ In `internal/server/db/tags.go`, taking a `Querier`-like interface that
 
 ## Deviations
 
-None yet.
+- **Phase 1.** `Matches` is a method, `CompiledRule.Matches(item)`, and
+  there is also `CompiledRule.MatchesText(title, description)` (field only,
+  no source check) plus `NewCompiledRule(rule, re)`, so `TestTagRule` can
+  keep compiling and validating the pattern with `compilePattern` and still
+  match through the tagger. Unknown fields are still logged by the
+  `Tagger`'s rule loading; the pure functions don't log.
+- **Phase 2.** The helpers take one `tagID int64` (0 = every tag) instead
+  of a slice: a run covers one tag or all, and skipped tags are filtered in
+  Go. They live in `internal/server/db/retag.go` with an exported
+  `QueryExecer` (a `Querier` that can `Exec`), and phase 3 needed three
+  more: `TagExists`, `SourceExists` (for `NotFound` inside the transaction;
+  the pool has one connection, so the service can't use `s.db` there) and
+  `ListTagNames` (names for the report, including tags without rules).
+- **Phase 3.** The update push reuses `pushItemUpdate` from
+  `service/assessments.go`; its log message became `push item update`.
+- **Phase 4.** The command lives in `cmd/nyttig/retag.go` (like
+  `views.go` and `assess.go`) with its output in `printApplyResult`, which
+  `retag_test.go` covers. With no changes it prints `Scanned N items.
+  Nothing to change.` (`Nothing would change.` with `-dry-run`), and counts
+  use the singular for one. The web hint shows the command in `<code>`.

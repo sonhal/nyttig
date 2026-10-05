@@ -175,7 +175,7 @@
 				{:else}
 					{preview.items.length}{preview.items.length >= PREVIEW_LIMIT ? '+' : ''}
 					{preview.items.length === 1 ? 'match' : 'matches'} in the last {preview.scanned} items
-					<span class="dim">· a new rule tags items fetched from now on; existing items are not retagged</span>
+					<span class="dim">· a new rule tags items fetched from now on; run <code>nyttig apply-tag-rules</code> to retag stored items</span>
 				{/if}
 			</div>
 			{#each preview.items as it (it.id)}
