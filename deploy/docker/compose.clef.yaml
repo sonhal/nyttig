@@ -11,9 +11,12 @@
 #   - create the assessor and the saved view it reads.
 #
 # nyttig-clef reaches nyttigd only through the Unix socket in the
-# nyttig-socket volume. Its own network, "clef", gives it outbound HTTPS to
-# api.cloudflare.com and nothing else; no ports are published. The item text
-# it scores is sent to Cloudflare.
+# nyttig-socket volume. Its own network, "clef", keeps it apart from the
+# other containers and gives it outbound access for api.cloudflare.com; no
+# ports are published. Docker doesn't filter egress by host, so the container
+# can reach any address the host can: restrict it with the host firewall
+# (DOCKER-USER chain) if that matters. The item text it scores is sent to
+# Cloudflare.
 
 services:
   nyttig-clef:
