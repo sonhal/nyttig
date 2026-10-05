@@ -153,39 +153,54 @@ export function inputId(d: Digest | undefined, n: number): string | undefined {
 
 // ── Display ───────────────────────────────────────────────────
 
-function utcDate(t: Date): string {
-	return t.toISOString().slice(0, 10);
+const pad = (n: number) => (n < 10 ? '0' + n : String(n));
+
+/** "2026-10-05" in local time. */
+function localDate(t: Date): string {
+	return `${t.getFullYear()}-${pad(t.getMonth() + 1)}-${pad(t.getDate())}`;
 }
 
-function utcMinute(t: Date): string {
-	return t.toISOString().slice(0, 16).replace('T', ' ') + 'Z';
+/** "08:30" in local time. */
+function localTime(t: Date): string {
+	return `${pad(t.getHours())}:${pad(t.getMinutes())}`;
+}
+
+/** The end's date without what it shares with the start: "10-04" in the same year. */
+function endDate(a: Date, b: Date): string {
+	return a.getFullYear() === b.getFullYear() ? localDate(b).slice(5) : localDate(b);
 }
 
 /**
- * The period a digest covers, in UTC: "2026-10-05" for a whole day,
- * "2026-09-01 .. 2026-09-30" for whole days, else with the times. A period
- * is whole days when it starts at midnight and ends at the last second of a
- * day (or at midnight).
+ * The period a digest covers, in local time like the feed's dates:
+ * "2026-10-05" for a whole day, "2026-09-28 .. 10-04" for whole days, else
+ * with the times ("2026-10-05 08:00 .. 12:30"). A period is whole days when
+ * it starts at midnight and ends at the last second of a day (or at
+ * midnight). The end leaves out the year (and the day) it shares with the
+ * start.
  */
 export function formatPeriod(start: string | undefined, end: string | undefined): string {
 	const a = start ? new Date(start) : undefined;
 	const b = end ? new Date(end) : undefined;
 	if (!a || Number.isNaN(a.getTime()) || !b || Number.isNaN(b.getTime())) return '';
-	const midnight = (t: Date) => t.getUTCHours() === 0 && t.getUTCMinutes() === 0 && t.getUTCSeconds() === 0;
-	const dayEnd = (t: Date) => t.getUTCHours() === 23 && t.getUTCMinutes() === 59 && t.getUTCSeconds() === 59;
+	const midnight = (t: Date) => t.getHours() === 0 && t.getMinutes() === 0 && t.getSeconds() === 0;
+	const dayEnd = (t: Date) => t.getHours() === 23 && t.getMinutes() === 59 && t.getSeconds() === 59;
+	const sameDay = localDate(a) === localDate(b);
 	if (midnight(a) && (dayEnd(b) || midnight(b))) {
-		const from = utcDate(a);
-		const to = utcDate(b);
-		return from === to ? from : `${from} .. ${to}`;
+		return sameDay ? localDate(a) : `${localDate(a)} .. ${endDate(a, b)}`;
 	}
-	return `${utcMinute(a)} .. ${utcMinute(b)}`;
+	return `${localDate(a)} ${localTime(a)} .. ${sameDay ? '' : endDate(a, b) + ' '}${localTime(b)}`;
+}
+
+/** A time as its local date ("2026-10-05"), or "" when missing or unreadable. */
+export function formatDay(ts: string | undefined): string {
+	if (!ts) return '';
+	const t = new Date(ts);
+	return Number.isNaN(t.getTime()) ? '' : localDate(t);
 }
 
 /** The latest period end of a series as a date, or "" for an empty series. */
 export function formatLatest(s: DigestSeries): string {
-	if (!s.latest_period_end) return '';
-	const t = new Date(s.latest_period_end);
-	return Number.isNaN(t.getTime()) ? '' : utcDate(t);
+	return formatDay(s.latest_period_end);
 }
 
 // ── Deleting ──────────────────────────────────────────────────

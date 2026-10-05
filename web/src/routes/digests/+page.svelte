@@ -25,6 +25,7 @@
 		currentSeries,
 		deleteSeriesLines,
 		digestsHref,
+		formatDay,
 		formatLatest,
 		formatPeriod,
 		groupSeries,
@@ -499,8 +500,8 @@
 						data-id={d.id}
 						onclick={() => (screen = 'reading')}
 					>
-						<span class="period">{formatPeriod(d.period_start, d.period_end)}</span>
 						<span class="dtitle">{oneLine(d.title)}</span>
+						<span class="period">{formatPeriod(d.period_start, d.period_end)}</span>
 					</a>
 				{/each}
 				{#if historyError}
@@ -551,7 +552,7 @@
 									<a href={digestsHref('', inp.id ?? '')} data-testid="digest-input" onclick={() => (screen = 'reading')}
 										><span class="k">{i < 9 ? i + 1 : ''}</span> {oneLine(inp.title)}</a
 									>
-									<span class="dim">{oneLine(inp.series_name)} · {(inp.period_end ?? '').slice(0, 10)}</span>
+									<span class="dim">{oneLine(inp.series_name)} · {formatDay(inp.period_end)}</span>
 								</li>
 							{/each}
 						</ol>
@@ -691,6 +692,7 @@
 		padding-left: 1ch;
 	}
 	.hrow .period {
+		order: -1;
 		width: 11ch;
 		overflow: hidden;
 		text-overflow: ellipsis;
@@ -877,16 +879,26 @@
 		.hrow {
 			padding-left: 8px;
 		}
+		/* The title on top, the period under it: a period with times takes
+		   most of a phone's width and squeezed the title into a column. */
 		.hrow {
-			flex-wrap: wrap;
+			flex-direction: column;
+			align-items: stretch;
+			justify-content: center;
 			height: auto;
-			min-height: var(--row-h);
-			padding: 4px 8px;
+			min-height: 44px;
+			padding: 6px 8px;
+			gap: 0;
+		}
+		.hrow .dtitle {
+			flex: none;
 			white-space: normal;
-			gap: 0 1ch;
+			overflow-wrap: anywhere;
 		}
 		.hrow .period {
+			order: 0;
 			width: auto;
+			font-size: 0.9em;
 		}
 		.group {
 			padding: 0 8px;

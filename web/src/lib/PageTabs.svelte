@@ -1,7 +1,8 @@
 <!--
 	The row of page tabs on top of every page but the feed: feed, sources,
 	tags, rules, views, assessors, digests. The current page is bracketed on a
-	desktop and filled on a phone.
+	desktop and filled on a phone. On a phone the row scrolls, and "‹ feed"
+	stays pinned at its left edge so the way back is always in view.
 -->
 <script lang="ts">
 	import { onMount } from 'svelte';
@@ -31,9 +32,10 @@
 		<a
 			href={pageHref(v)}
 			class:current={v === page}
+			class:feed={v === 'feed'}
 			aria-current={v === page ? 'page' : undefined}
 			data-testid="nav-{v}"
-			>{v}{#if counts[v] !== undefined}<span class="n">{' ' + counts[v]}</span>{/if}</a
+			>{#if v === 'feed'}<span class="back" aria-hidden="true">{'‹ '}</span>{/if}{v}{#if counts[v] !== undefined}<span class="n">{' ' + counts[v]}</span>{/if}</a
 		>
 	{/each}
 	<span class="hint">: command · q feed</span>
@@ -72,6 +74,9 @@
 		margin-left: auto;
 		color: var(--dim);
 	}
+	.back {
+		display: none;
+	}
 
 	@media (max-width: 719.98px) {
 		.tabs {
@@ -101,6 +106,17 @@
 		.tabs a.current::before,
 		.tabs a.current::after {
 			content: none;
+		}
+		.tabs a.feed {
+			position: sticky;
+			left: 0;
+			z-index: 1;
+			background: var(--bar-filter);
+			border-right: 1px solid var(--sel);
+			color: var(--fg);
+		}
+		.back {
+			display: inline;
 		}
 		.hint {
 			display: none;

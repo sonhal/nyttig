@@ -91,8 +91,9 @@ describe('series', () => {
 		expect(currentSeries([], '1')).toBeUndefined();
 	});
 
-	it('formats the latest period end as a date', () => {
-		expect(formatLatest(series[0]!)).toBe('2026-10-05');
+	it('formats the latest period end as a local date', () => {
+		// Local time: the end of 5 October here.
+		expect(formatLatest({ latest_period_end: new Date(2026, 9, 5, 23, 59, 59).toISOString() })).toBe('2026-10-05');
 		expect(formatLatest(series[1]!)).toBe('');
 		expect(formatLatest({ latest_period_end: 'nonsense' })).toBe('');
 	});
@@ -174,17 +175,22 @@ describe('history', () => {
 });
 
 describe('formatPeriod', () => {
-	it('shows whole days as dates, in UTC', () => {
-		expect(formatPeriod('2026-10-05T00:00:00Z', '2026-10-05T23:59:59Z')).toBe('2026-10-05');
-		expect(formatPeriod('2026-10-05T00:00:00Z', '2026-10-05T00:00:00Z')).toBe('2026-10-05');
-		expect(formatPeriod('2026-09-01T00:00:00Z', '2026-09-30T23:59:59Z')).toBe('2026-09-01 .. 2026-09-30');
-		// 02:00 in +02:00 is midnight UTC: the page speaks UTC.
-		expect(formatPeriod('2026-10-05T02:00:00+02:00', '2026-10-06T01:59:59+02:00')).toBe('2026-10-05');
+	// Local times, so the cases hold in any time zone.
+	const at = (mo: number, d: number, h = 0, mi = 0, s = 0, y = 2026) => new Date(y, mo - 1, d, h, mi, s).toISOString();
+
+	it('shows whole days as local dates', () => {
+		expect(formatPeriod(at(10, 5), at(10, 5, 23, 59, 59))).toBe('2026-10-05');
+		expect(formatPeriod(at(10, 5), at(10, 5))).toBe('2026-10-05');
+		expect(formatPeriod(at(9, 1), at(9, 30, 23, 59, 59))).toBe('2026-09-01 .. 09-30');
+		// A local week, whatever the offset to UTC.
+		expect(formatPeriod(at(9, 28), at(10, 4, 23, 59, 59))).toBe('2026-09-28 .. 10-04');
+		expect(formatPeriod(at(12, 28, 0, 0, 0, 2026), at(1, 3, 23, 59, 59, 2027))).toBe('2026-12-28 .. 2027-01-03');
 	});
 
 	it('shows the times of anything else', () => {
-		expect(formatPeriod('2026-10-05T08:00:00Z', '2026-10-05T12:30:00Z')).toBe('2026-10-05 08:00Z .. 2026-10-05 12:30Z');
-		expect(formatPeriod('2026-10-05T00:00:00Z', '2026-10-05T12:00:00Z')).toBe('2026-10-05 00:00Z .. 2026-10-05 12:00Z');
+		expect(formatPeriod(at(10, 5, 8), at(10, 5, 12, 30))).toBe('2026-10-05 08:00 .. 12:30');
+		expect(formatPeriod(at(10, 5), at(10, 5, 12))).toBe('2026-10-05 00:00 .. 12:00');
+		expect(formatPeriod(at(10, 5, 8), at(10, 6, 7, 59, 59))).toBe('2026-10-05 08:00 .. 10-06 07:59');
 	});
 
 	it('is empty for a missing or unreadable time', () => {

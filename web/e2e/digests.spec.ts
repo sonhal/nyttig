@@ -61,15 +61,16 @@ async function setup(page: Page): Promise<Fixture> {
 		series: s.id,
 		title: olderTitle,
 		body: `# Day one\n\n${HOSTILE}\n\n- first point\n- second point`,
-		period_start: '2026-10-04T00:00:00Z',
-		period_end: '2026-10-04T23:59:59Z'
+		// Whole days in the browser's time zone (Europe/Oslo, see playwright.config.ts).
+		period_start: '2026-10-04T00:00:00+02:00',
+		period_end: '2026-10-04T23:59:59+02:00'
 	});
 	const newer = await post<{ id: string }>(page, '/api/digests', {
 		series: s.id,
 		title: newerTitle,
 		body: `Day two builds on **day one**.\n\nSee [#${list.items[0]?.id}] and [#999999].`,
-		period_start: '2026-10-05T00:00:00Z',
-		period_end: '2026-10-05T23:59:59Z',
+		period_start: '2026-10-05T00:00:00+02:00',
+		period_end: '2026-10-05T23:59:59+02:00',
 		items: list.items.slice(0, 2).map((i) => i.id),
 		inputs: [older.id]
 	});
@@ -213,6 +214,12 @@ test('opens a series from the command line or the sheet, and a missing digest sa
 	await page.goto('/');
 	await expect(page.getByTestId('status').locator('[data-status]')).toHaveAttribute('data-status', 'connected');
 	if (isMobile(page)) {
+		// The feed's digests button opens the page, and the pinned feed tab goes back.
+		await page.getByTestId('open-digests').tap();
+		await expect(page).toHaveURL(/\/digests$/);
+		await expect(page.getByTestId('nav-feed')).toBeInViewport();
+		await page.getByTestId('nav-feed').tap();
+		await expect(page).toHaveURL(/\/$/);
 		await page.getByTestId('open-filters').tap();
 		await page.getByTestId('manage-digests').tap();
 		await expect(page).toHaveURL(/\/digests$/);
