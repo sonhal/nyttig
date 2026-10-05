@@ -124,6 +124,26 @@ func main() {
 		unassessCmd()
 	case "rate":
 		rateCmd()
+	case "list-series":
+		listSeriesCmd()
+	case "add-series":
+		addSeriesCmd()
+	case "update-series":
+		updateSeriesCmd()
+	case "remove-series":
+		removeSeriesCmd()
+	case "reorder-series":
+		reorderSeriesCmd()
+	case "list-digests":
+		listDigestsCmd()
+	case "show-digest":
+		showDigestCmd()
+	case "add-digest":
+		addDigestCmd()
+	case "update-digest":
+		updateDigestCmd()
+	case "remove-digest":
+		removeDigestCmd()
 	case "refresh":
 		refreshCmd()
 	default:
@@ -159,6 +179,16 @@ func printHelp() {
 	fmt.Fprintf(os.Stderr, "  assess         Score and/or note an item as an assessor\n")
 	fmt.Fprintf(os.Stderr, "  unassess       Remove an assessor's assessment of an item\n")
 	fmt.Fprintf(os.Stderr, "  rate           Rate an item yourself (the assessor 'me', created on first use)\n")
+	fmt.Fprintf(os.Stderr, "  list-series    List digest series (named groups of an assessor's digests)\n")
+	fmt.Fprintf(os.Stderr, "  add-series     Register a digest series for an assessor\n")
+	fmt.Fprintf(os.Stderr, "  update-series  Rename or redescribe a series (only the given flags change)\n")
+	fmt.Fprintf(os.Stderr, "  remove-series  Remove a series and its digests\n")
+	fmt.Fprintf(os.Stderr, "  reorder-series Set the order of the series\n")
+	fmt.Fprintf(os.Stderr, "  list-digests   List a series' digests, newest period first\n")
+	fmt.Fprintf(os.Stderr, "  show-digest    Show a digest with its items and inputs\n")
+	fmt.Fprintf(os.Stderr, "  add-digest     Write a digest in a series\n")
+	fmt.Fprintf(os.Stderr, "  update-digest  Overwrite a digest's fields or links\n")
+	fmt.Fprintf(os.Stderr, "  remove-digest  Remove a digest\n")
 	fmt.Fprintf(os.Stderr, "  search         Full-text search stored items (-view NAME runs a saved view)\n")
 	fmt.Fprintf(os.Stderr, "  refresh        Force immediate fetch of all sources (or one with -i)\n")
 	fmt.Fprintf(os.Stderr, "\nGlobal flags:\n")

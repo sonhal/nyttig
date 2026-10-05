@@ -395,6 +395,18 @@ nyttig remove-assessor (-id <id> | -n <name>)   # also removes all of its assess
 nyttig assess          <item-id> -assessor <name|id> [-tag <name|id>] [-score <0-1>] [-note <text>]
 nyttig unassess        <item-id> -assessor <name|id> [-tag <name|id>]
 nyttig rate            <item-id> <score 0-1> [note...]   # you, as the assessor "me" (created on first use)
+nyttig list-series     [-assessor <name|id>]
+nyttig add-series      -assessor <name|id> -n <name> [-description <text>]
+nyttig update-series   <series> [-n <name>] [-description <text>]
+nyttig remove-series   <series>          # also removes all of its digests
+nyttig reorder-series  <series>...       # every series once, in the new order
+nyttig list-digests    <series> [-limit N] [-before <digest-id>]
+nyttig show-digest     <digest-id>       # the body, the items it is based on, its inputs
+nyttig add-digest      <series> -title <text> -start <time> -end <time> (-body <text> | -body-file <path|->)
+                       [-items 1,2] [-inputs 4,5]
+nyttig update-digest   <digest-id> [-title <text>] [-start <time>] [-end <time>] [-body <text> | -body-file <path|->]
+                       [-items 1,2] [-inputs 4,5]   # -items '' / -inputs '' removes those links
+nyttig remove-digest   <digest-id>
 nyttig search          [-view <name|id>] [-tag <name|id>] [-s source_id] [-l limit] [-offset N] [-sort newest|oldest|score] [-unviewed] [-since <window>] [-exact]
                        [-assessor <name|id>] [-min-score <0-1>] [-unassessed-by <name|id>] [query...]
 nyttig refresh         [-id <source_id>]   # omit -id to refresh all
@@ -437,6 +449,15 @@ assessor's scores for that tag (including its child tags) and for the item as
 a whole count. A view saves the same fields (`score:claude>=0.7`,
 `unassessed:claude` and `sort:score` in `list-views`); deleting the assessor
 keeps the view and drops those fields (a `score` sort becomes `newest`).
+
+Digests are documents an assessor writes about many items, kept in series (see
+[Digests](#digests)). `<series>` is `<assessor>/<name>` (the name in any case)
+or a numeric ID, and the `-start` / `-end` times are RFC 3339 or `YYYY-MM-DD`
+(UTC midnight; for `-end`, the last second of that day). `add-digest` always
+creates a new digest; `update-digest` overwrites the fields you pass, with no
+revisions. `-body-file -` reads the body from stdin (at most 64 KiB). These
+commands exist for scripts, for trying out an assessor and for parity with
+assessments; `show-digest` strips control characters from what it prints.
 
 Tag rules added with `add-tag-rule` apply to items fetched after the rule is
 created; existing items are not retagged. Use `test-tag-rule` first to see
@@ -1114,6 +1135,72 @@ curl -u assessor:PASSWORD \
 A paged read (`offset`) of a view with a window counts "now" per request; pass
 `after=<unix seconds>` taken once to keep the window fixed between pages.
 
+## Digests
+
+An assessment judges one item. A **digest** is a document an assessor writes
+about **one to many items**: "today's CVE news", "September in review". Digests
+are kept as a history, grouped in **series**, and an assessor can read its
+earlier digests as input to the next one (a monthly digest built from thirty
+dailies instead of three thousand items).
+
+```
+assessor claude
+  +- series daily-cve
+  |    +- digest #41  2026-10-04
+  |    `- digest #42  2026-10-05   (input: #41)
+  `- series monthly
+       `- digest #43  2026-09      (inputs: #12 ... #40)
+```
+
+Like assessments, digests are written by programs outside the daemon (see
+[Writing a digest](#writing-a-digest)); nyttig stores, links and shows them and
+never calls a model.
+
+- **Series** are registered (`add-series`) and belong to one assessor:
+  `claude/daily-cve` and `gpt/daily-cve` are different series. Names are unique
+  per assessor, in any case. Every digest belongs to exactly one series.
+- **Period.** Every digest records the `period_start` and `period_end` it
+  covers (UTC, whole seconds, `period_end >= period_start`). What "today" or
+  "this month" means is the assessor's business. A series' history is ordered
+  by `period_end`, newest first.
+- **Always append, overwrite on edit.** Adding a digest always creates a new one
+  (re-running for the same period is just another digest). Updating one
+  overwrites it, with no revisions; `updated_at` says when.
+- **Links are provenance.** A digest links to the items it is based on and to
+  the earlier digests it used as input, so a claim can be traced back. Nothing
+  follows the links recursively. The body must make sense without them: items
+  go when their source is deleted, which removes the links but never the digest.
+  Deleting a digest removes it from other digests' inputs; deleting a series
+  or an assessor deletes the digests below it.
+- **Limits:** the body is at most 64 KiB, the title 200 characters, a digest
+  links at most 1000 items and 100 input digests.
+- **No live updates.** Clients load digests when they open them.
+
+### Writing a digest
+
+A digest is written the same way as an assessment, by a program that holds the
+credentials (the model gets none):
+
+1. Register the assessor (as above) and its series once, with `nyttig
+   add-series` or on first use with `client.EnsureDigestSeries` (it finds the
+   series, creates it, and looks it up again if another client was faster:
+   accept `AlreadyExists` by looking the series up again).
+2. Collect the input: items through `Search` (or `GET /api/items`; a saved view
+   works well, e.g. `?view=cve&after=<start of day>`), and earlier digests
+   through `ListDigests` with `include_body`.
+3. Write the digest with `AddDigest`: the title, the Markdown body, the period
+   covered, the items it is based on (`item_ids`) and the digests it read
+   (`input_ids`). From a shell: `nyttig add-digest claude/daily-cve -title
+   "CVE news, 5 Oct" -start 2026-10-05 -end 2026-10-05 -body-file notes.md
+   -items 12,15 -inputs 41`.
+4. Fix one later with `UpdateDigest` (or `nyttig update-digest`).
+
+**Digests are untrusted text, and injection compounds.** A poisoned feed that
+gets an instruction into Monday's digest is carried into every digest that uses
+it as input, and into the monthly. Treat earlier digests as untrusted input in
+the assessor's prompt, exactly like feed text. The links make the trail visible.
+The access model is the one described above: every credential is full admin.
+
 ## Database
 
 Nyttig uses SQLite with FTS5 for full-text search. The default database path is `~/.local/share/nyttig/nyttig.db`. The database is created and migrated automatically on first daemon start.
@@ -1136,6 +1223,9 @@ as `sqlite_version`, and the daemon refuses to start if that library lacks FTS5.
 | `saved_views` | Saved views: named filters, favorites and their order |
 | `assessors`   | Systems that score items (name, what the score means, color) |
 | `assessments` | One assessor's score (0 to 1) and/or note on an item, optionally for one tag |
+| `digest_series` | An assessor's named groups of digests, in display order |
+| `digests`     | Documents an assessor wrote about many items: title, Markdown body, period covered |
+| `digest_items`, `digest_inputs` | Which items a digest is based on, and which earlier digests it used as input |
 | `items_fts`   | FTS5 virtual table for full-text search           |
 
 Item dates (`items.published`) are stored in UTC with whole seconds

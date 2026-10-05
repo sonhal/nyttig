@@ -1,6 +1,6 @@
 # Digests plan: summaries and notes from assessors, kept as a history
 
-Status: **phases 1–2 implemented, not yet merged.** Phases 1–7 below.
+Status: **phases 1–3 implemented, not yet merged.** Phases 1–7 below.
 
 Assessments judge one item. A **digest** is a document an assessor writes
 about **one to many items**: "today's CVE news", "September in review".
@@ -440,3 +440,11 @@ By hand, with nyttigd on `sample_config.toml`:
   `FirstMissingDigestID` (one batched query each), which the service uses for
   its `NotFound` checks; `ListDigests` returns `([]*Digest, hasMore, error)`
   and an unknown `beforeID` (or one from another series) gives an empty page.
+
+- **Phase 3:** the series and digest commands take `<series>` / `<digest-id>`
+  as the first argument, before the flags (as `assess` does), except
+  `reorder-series`, whose references come after the flags like
+  `reorder-views`. `internal/tui` gained `SanitizeText` (control characters
+  out, newline and tab kept), which `show-digest` uses and the TUI screen
+  will reuse. README: the digests concept section ("Digests", with "Writing a
+  digest") is a top-level section after "Assessments".

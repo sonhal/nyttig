@@ -126,7 +126,8 @@ via a **bidirectional gRPC stream**.
 
 ```
 cmd/nyttig/main.go          Client entrypoint: TUI launch + CLI subcommands (views.go: saved
-                            views, assess.go: assessors and assessments)
+                            views, assess.go: assessors and assessments, digests.go: digest
+                            series and digests)
 cmd/nyttigd/main.go         Daemon entrypoint: wires db → fetcher → tagger → scheduler → gRPC
 proto/nyttig/v1/nyttig.proto   Source-of-truth API definition
 buf.yaml, buf.gen.yaml      buf config for codegen; run `buf generate` from the repo root
