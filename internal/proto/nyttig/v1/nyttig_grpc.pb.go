@@ -20,33 +20,43 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	Nyttig_AddSource_FullMethodName         = "/nyttig.v1.Nyttig/AddSource"
-	Nyttig_RemoveSource_FullMethodName      = "/nyttig.v1.Nyttig/RemoveSource"
-	Nyttig_UpdateSource_FullMethodName      = "/nyttig.v1.Nyttig/UpdateSource"
-	Nyttig_ListSources_FullMethodName       = "/nyttig.v1.Nyttig/ListSources"
-	Nyttig_RefreshSource_FullMethodName     = "/nyttig.v1.Nyttig/RefreshSource"
-	Nyttig_AddTag_FullMethodName            = "/nyttig.v1.Nyttig/AddTag"
-	Nyttig_UpdateTag_FullMethodName         = "/nyttig.v1.Nyttig/UpdateTag"
-	Nyttig_RemoveTag_FullMethodName         = "/nyttig.v1.Nyttig/RemoveTag"
-	Nyttig_ListTags_FullMethodName          = "/nyttig.v1.Nyttig/ListTags"
-	Nyttig_AddTagRule_FullMethodName        = "/nyttig.v1.Nyttig/AddTagRule"
-	Nyttig_RemoveTagRule_FullMethodName     = "/nyttig.v1.Nyttig/RemoveTagRule"
-	Nyttig_ListTagRules_FullMethodName      = "/nyttig.v1.Nyttig/ListTagRules"
-	Nyttig_TestTagRule_FullMethodName       = "/nyttig.v1.Nyttig/TestTagRule"
-	Nyttig_AddSavedView_FullMethodName      = "/nyttig.v1.Nyttig/AddSavedView"
-	Nyttig_UpdateSavedView_FullMethodName   = "/nyttig.v1.Nyttig/UpdateSavedView"
-	Nyttig_RemoveSavedView_FullMethodName   = "/nyttig.v1.Nyttig/RemoveSavedView"
-	Nyttig_ListSavedViews_FullMethodName    = "/nyttig.v1.Nyttig/ListSavedViews"
-	Nyttig_ReorderSavedViews_FullMethodName = "/nyttig.v1.Nyttig/ReorderSavedViews"
-	Nyttig_AddAssessor_FullMethodName       = "/nyttig.v1.Nyttig/AddAssessor"
-	Nyttig_UpdateAssessor_FullMethodName    = "/nyttig.v1.Nyttig/UpdateAssessor"
-	Nyttig_RemoveAssessor_FullMethodName    = "/nyttig.v1.Nyttig/RemoveAssessor"
-	Nyttig_ListAssessors_FullMethodName     = "/nyttig.v1.Nyttig/ListAssessors"
-	Nyttig_PutAssessment_FullMethodName     = "/nyttig.v1.Nyttig/PutAssessment"
-	Nyttig_RemoveAssessment_FullMethodName  = "/nyttig.v1.Nyttig/RemoveAssessment"
-	Nyttig_StreamItems_FullMethodName       = "/nyttig.v1.Nyttig/StreamItems"
-	Nyttig_Search_FullMethodName            = "/nyttig.v1.Nyttig/Search"
-	Nyttig_MarkViewed_FullMethodName        = "/nyttig.v1.Nyttig/MarkViewed"
+	Nyttig_AddSource_FullMethodName           = "/nyttig.v1.Nyttig/AddSource"
+	Nyttig_RemoveSource_FullMethodName        = "/nyttig.v1.Nyttig/RemoveSource"
+	Nyttig_UpdateSource_FullMethodName        = "/nyttig.v1.Nyttig/UpdateSource"
+	Nyttig_ListSources_FullMethodName         = "/nyttig.v1.Nyttig/ListSources"
+	Nyttig_RefreshSource_FullMethodName       = "/nyttig.v1.Nyttig/RefreshSource"
+	Nyttig_AddTag_FullMethodName              = "/nyttig.v1.Nyttig/AddTag"
+	Nyttig_UpdateTag_FullMethodName           = "/nyttig.v1.Nyttig/UpdateTag"
+	Nyttig_RemoveTag_FullMethodName           = "/nyttig.v1.Nyttig/RemoveTag"
+	Nyttig_ListTags_FullMethodName            = "/nyttig.v1.Nyttig/ListTags"
+	Nyttig_AddTagRule_FullMethodName          = "/nyttig.v1.Nyttig/AddTagRule"
+	Nyttig_RemoveTagRule_FullMethodName       = "/nyttig.v1.Nyttig/RemoveTagRule"
+	Nyttig_ListTagRules_FullMethodName        = "/nyttig.v1.Nyttig/ListTagRules"
+	Nyttig_TestTagRule_FullMethodName         = "/nyttig.v1.Nyttig/TestTagRule"
+	Nyttig_AddSavedView_FullMethodName        = "/nyttig.v1.Nyttig/AddSavedView"
+	Nyttig_UpdateSavedView_FullMethodName     = "/nyttig.v1.Nyttig/UpdateSavedView"
+	Nyttig_RemoveSavedView_FullMethodName     = "/nyttig.v1.Nyttig/RemoveSavedView"
+	Nyttig_ListSavedViews_FullMethodName      = "/nyttig.v1.Nyttig/ListSavedViews"
+	Nyttig_ReorderSavedViews_FullMethodName   = "/nyttig.v1.Nyttig/ReorderSavedViews"
+	Nyttig_AddAssessor_FullMethodName         = "/nyttig.v1.Nyttig/AddAssessor"
+	Nyttig_UpdateAssessor_FullMethodName      = "/nyttig.v1.Nyttig/UpdateAssessor"
+	Nyttig_RemoveAssessor_FullMethodName      = "/nyttig.v1.Nyttig/RemoveAssessor"
+	Nyttig_ListAssessors_FullMethodName       = "/nyttig.v1.Nyttig/ListAssessors"
+	Nyttig_PutAssessment_FullMethodName       = "/nyttig.v1.Nyttig/PutAssessment"
+	Nyttig_RemoveAssessment_FullMethodName    = "/nyttig.v1.Nyttig/RemoveAssessment"
+	Nyttig_AddDigestSeries_FullMethodName     = "/nyttig.v1.Nyttig/AddDigestSeries"
+	Nyttig_UpdateDigestSeries_FullMethodName  = "/nyttig.v1.Nyttig/UpdateDigestSeries"
+	Nyttig_RemoveDigestSeries_FullMethodName  = "/nyttig.v1.Nyttig/RemoveDigestSeries"
+	Nyttig_ListDigestSeries_FullMethodName    = "/nyttig.v1.Nyttig/ListDigestSeries"
+	Nyttig_ReorderDigestSeries_FullMethodName = "/nyttig.v1.Nyttig/ReorderDigestSeries"
+	Nyttig_AddDigest_FullMethodName           = "/nyttig.v1.Nyttig/AddDigest"
+	Nyttig_UpdateDigest_FullMethodName        = "/nyttig.v1.Nyttig/UpdateDigest"
+	Nyttig_RemoveDigest_FullMethodName        = "/nyttig.v1.Nyttig/RemoveDigest"
+	Nyttig_GetDigest_FullMethodName           = "/nyttig.v1.Nyttig/GetDigest"
+	Nyttig_ListDigests_FullMethodName         = "/nyttig.v1.Nyttig/ListDigests"
+	Nyttig_StreamItems_FullMethodName         = "/nyttig.v1.Nyttig/StreamItems"
+	Nyttig_Search_FullMethodName              = "/nyttig.v1.Nyttig/Search"
+	Nyttig_MarkViewed_FullMethodName          = "/nyttig.v1.Nyttig/MarkViewed"
 )
 
 // NyttigClient is the client API for Nyttig service.
@@ -82,6 +92,17 @@ type NyttigClient interface {
 	ListAssessors(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*ListAssessorsResponse, error)
 	PutAssessment(ctx context.Context, in *PutAssessmentRequest, opts ...grpc.CallOption) (*Assessment, error)
 	RemoveAssessment(ctx context.Context, in *RemoveAssessmentRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	// Digests: documents about many items, kept in series
+	AddDigestSeries(ctx context.Context, in *AddDigestSeriesRequest, opts ...grpc.CallOption) (*DigestSeries, error)
+	UpdateDigestSeries(ctx context.Context, in *UpdateDigestSeriesRequest, opts ...grpc.CallOption) (*DigestSeries, error)
+	RemoveDigestSeries(ctx context.Context, in *RemoveDigestSeriesRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	ListDigestSeries(ctx context.Context, in *ListDigestSeriesRequest, opts ...grpc.CallOption) (*ListDigestSeriesResponse, error)
+	ReorderDigestSeries(ctx context.Context, in *ReorderDigestSeriesRequest, opts ...grpc.CallOption) (*ListDigestSeriesResponse, error)
+	AddDigest(ctx context.Context, in *AddDigestRequest, opts ...grpc.CallOption) (*Digest, error)
+	UpdateDigest(ctx context.Context, in *UpdateDigestRequest, opts ...grpc.CallOption) (*Digest, error)
+	RemoveDigest(ctx context.Context, in *RemoveDigestRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	GetDigest(ctx context.Context, in *GetDigestRequest, opts ...grpc.CallOption) (*Digest, error)
+	ListDigests(ctx context.Context, in *ListDigestsRequest, opts ...grpc.CallOption) (*ListDigestsResponse, error)
 	// Core feed stream (bidirectional)
 	StreamItems(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[ClientMessage, ServerMessage], error)
 	// Full-text search
@@ -338,6 +359,106 @@ func (c *nyttigClient) RemoveAssessment(ctx context.Context, in *RemoveAssessmen
 	return out, nil
 }
 
+func (c *nyttigClient) AddDigestSeries(ctx context.Context, in *AddDigestSeriesRequest, opts ...grpc.CallOption) (*DigestSeries, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DigestSeries)
+	err := c.cc.Invoke(ctx, Nyttig_AddDigestSeries_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nyttigClient) UpdateDigestSeries(ctx context.Context, in *UpdateDigestSeriesRequest, opts ...grpc.CallOption) (*DigestSeries, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DigestSeries)
+	err := c.cc.Invoke(ctx, Nyttig_UpdateDigestSeries_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nyttigClient) RemoveDigestSeries(ctx context.Context, in *RemoveDigestSeriesRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(emptypb.Empty)
+	err := c.cc.Invoke(ctx, Nyttig_RemoveDigestSeries_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nyttigClient) ListDigestSeries(ctx context.Context, in *ListDigestSeriesRequest, opts ...grpc.CallOption) (*ListDigestSeriesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListDigestSeriesResponse)
+	err := c.cc.Invoke(ctx, Nyttig_ListDigestSeries_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nyttigClient) ReorderDigestSeries(ctx context.Context, in *ReorderDigestSeriesRequest, opts ...grpc.CallOption) (*ListDigestSeriesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListDigestSeriesResponse)
+	err := c.cc.Invoke(ctx, Nyttig_ReorderDigestSeries_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nyttigClient) AddDigest(ctx context.Context, in *AddDigestRequest, opts ...grpc.CallOption) (*Digest, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(Digest)
+	err := c.cc.Invoke(ctx, Nyttig_AddDigest_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nyttigClient) UpdateDigest(ctx context.Context, in *UpdateDigestRequest, opts ...grpc.CallOption) (*Digest, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(Digest)
+	err := c.cc.Invoke(ctx, Nyttig_UpdateDigest_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nyttigClient) RemoveDigest(ctx context.Context, in *RemoveDigestRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(emptypb.Empty)
+	err := c.cc.Invoke(ctx, Nyttig_RemoveDigest_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nyttigClient) GetDigest(ctx context.Context, in *GetDigestRequest, opts ...grpc.CallOption) (*Digest, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(Digest)
+	err := c.cc.Invoke(ctx, Nyttig_GetDigest_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nyttigClient) ListDigests(ctx context.Context, in *ListDigestsRequest, opts ...grpc.CallOption) (*ListDigestsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListDigestsResponse)
+	err := c.cc.Invoke(ctx, Nyttig_ListDigests_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *nyttigClient) StreamItems(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[ClientMessage, ServerMessage], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	stream, err := c.cc.NewStream(ctx, &Nyttig_ServiceDesc.Streams[0], Nyttig_StreamItems_FullMethodName, cOpts...)
@@ -404,6 +525,17 @@ type NyttigServer interface {
 	ListAssessors(context.Context, *emptypb.Empty) (*ListAssessorsResponse, error)
 	PutAssessment(context.Context, *PutAssessmentRequest) (*Assessment, error)
 	RemoveAssessment(context.Context, *RemoveAssessmentRequest) (*emptypb.Empty, error)
+	// Digests: documents about many items, kept in series
+	AddDigestSeries(context.Context, *AddDigestSeriesRequest) (*DigestSeries, error)
+	UpdateDigestSeries(context.Context, *UpdateDigestSeriesRequest) (*DigestSeries, error)
+	RemoveDigestSeries(context.Context, *RemoveDigestSeriesRequest) (*emptypb.Empty, error)
+	ListDigestSeries(context.Context, *ListDigestSeriesRequest) (*ListDigestSeriesResponse, error)
+	ReorderDigestSeries(context.Context, *ReorderDigestSeriesRequest) (*ListDigestSeriesResponse, error)
+	AddDigest(context.Context, *AddDigestRequest) (*Digest, error)
+	UpdateDigest(context.Context, *UpdateDigestRequest) (*Digest, error)
+	RemoveDigest(context.Context, *RemoveDigestRequest) (*emptypb.Empty, error)
+	GetDigest(context.Context, *GetDigestRequest) (*Digest, error)
+	ListDigests(context.Context, *ListDigestsRequest) (*ListDigestsResponse, error)
 	// Core feed stream (bidirectional)
 	StreamItems(grpc.BidiStreamingServer[ClientMessage, ServerMessage]) error
 	// Full-text search
@@ -491,6 +623,36 @@ func (UnimplementedNyttigServer) PutAssessment(context.Context, *PutAssessmentRe
 }
 func (UnimplementedNyttigServer) RemoveAssessment(context.Context, *RemoveAssessmentRequest) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RemoveAssessment not implemented")
+}
+func (UnimplementedNyttigServer) AddDigestSeries(context.Context, *AddDigestSeriesRequest) (*DigestSeries, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method AddDigestSeries not implemented")
+}
+func (UnimplementedNyttigServer) UpdateDigestSeries(context.Context, *UpdateDigestSeriesRequest) (*DigestSeries, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UpdateDigestSeries not implemented")
+}
+func (UnimplementedNyttigServer) RemoveDigestSeries(context.Context, *RemoveDigestSeriesRequest) (*emptypb.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RemoveDigestSeries not implemented")
+}
+func (UnimplementedNyttigServer) ListDigestSeries(context.Context, *ListDigestSeriesRequest) (*ListDigestSeriesResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListDigestSeries not implemented")
+}
+func (UnimplementedNyttigServer) ReorderDigestSeries(context.Context, *ReorderDigestSeriesRequest) (*ListDigestSeriesResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ReorderDigestSeries not implemented")
+}
+func (UnimplementedNyttigServer) AddDigest(context.Context, *AddDigestRequest) (*Digest, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method AddDigest not implemented")
+}
+func (UnimplementedNyttigServer) UpdateDigest(context.Context, *UpdateDigestRequest) (*Digest, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UpdateDigest not implemented")
+}
+func (UnimplementedNyttigServer) RemoveDigest(context.Context, *RemoveDigestRequest) (*emptypb.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RemoveDigest not implemented")
+}
+func (UnimplementedNyttigServer) GetDigest(context.Context, *GetDigestRequest) (*Digest, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetDigest not implemented")
+}
+func (UnimplementedNyttigServer) ListDigests(context.Context, *ListDigestsRequest) (*ListDigestsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListDigests not implemented")
 }
 func (UnimplementedNyttigServer) StreamItems(grpc.BidiStreamingServer[ClientMessage, ServerMessage]) error {
 	return status.Errorf(codes.Unimplemented, "method StreamItems not implemented")
@@ -954,6 +1116,186 @@ func _Nyttig_RemoveAssessment_Handler(srv interface{}, ctx context.Context, dec 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Nyttig_AddDigestSeries_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AddDigestSeriesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NyttigServer).AddDigestSeries(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Nyttig_AddDigestSeries_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NyttigServer).AddDigestSeries(ctx, req.(*AddDigestSeriesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Nyttig_UpdateDigestSeries_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateDigestSeriesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NyttigServer).UpdateDigestSeries(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Nyttig_UpdateDigestSeries_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NyttigServer).UpdateDigestSeries(ctx, req.(*UpdateDigestSeriesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Nyttig_RemoveDigestSeries_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RemoveDigestSeriesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NyttigServer).RemoveDigestSeries(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Nyttig_RemoveDigestSeries_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NyttigServer).RemoveDigestSeries(ctx, req.(*RemoveDigestSeriesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Nyttig_ListDigestSeries_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListDigestSeriesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NyttigServer).ListDigestSeries(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Nyttig_ListDigestSeries_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NyttigServer).ListDigestSeries(ctx, req.(*ListDigestSeriesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Nyttig_ReorderDigestSeries_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ReorderDigestSeriesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NyttigServer).ReorderDigestSeries(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Nyttig_ReorderDigestSeries_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NyttigServer).ReorderDigestSeries(ctx, req.(*ReorderDigestSeriesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Nyttig_AddDigest_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AddDigestRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NyttigServer).AddDigest(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Nyttig_AddDigest_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NyttigServer).AddDigest(ctx, req.(*AddDigestRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Nyttig_UpdateDigest_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateDigestRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NyttigServer).UpdateDigest(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Nyttig_UpdateDigest_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NyttigServer).UpdateDigest(ctx, req.(*UpdateDigestRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Nyttig_RemoveDigest_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RemoveDigestRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NyttigServer).RemoveDigest(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Nyttig_RemoveDigest_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NyttigServer).RemoveDigest(ctx, req.(*RemoveDigestRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Nyttig_GetDigest_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetDigestRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NyttigServer).GetDigest(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Nyttig_GetDigest_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NyttigServer).GetDigest(ctx, req.(*GetDigestRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Nyttig_ListDigests_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListDigestsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NyttigServer).ListDigests(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Nyttig_ListDigests_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NyttigServer).ListDigests(ctx, req.(*ListDigestsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _Nyttig_StreamItems_Handler(srv interface{}, stream grpc.ServerStream) error {
 	return srv.(NyttigServer).StreamItems(&grpc.GenericServerStream[ClientMessage, ServerMessage]{ServerStream: stream})
 }
@@ -1099,6 +1441,46 @@ var Nyttig_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "RemoveAssessment",
 			Handler:    _Nyttig_RemoveAssessment_Handler,
+		},
+		{
+			MethodName: "AddDigestSeries",
+			Handler:    _Nyttig_AddDigestSeries_Handler,
+		},
+		{
+			MethodName: "UpdateDigestSeries",
+			Handler:    _Nyttig_UpdateDigestSeries_Handler,
+		},
+		{
+			MethodName: "RemoveDigestSeries",
+			Handler:    _Nyttig_RemoveDigestSeries_Handler,
+		},
+		{
+			MethodName: "ListDigestSeries",
+			Handler:    _Nyttig_ListDigestSeries_Handler,
+		},
+		{
+			MethodName: "ReorderDigestSeries",
+			Handler:    _Nyttig_ReorderDigestSeries_Handler,
+		},
+		{
+			MethodName: "AddDigest",
+			Handler:    _Nyttig_AddDigest_Handler,
+		},
+		{
+			MethodName: "UpdateDigest",
+			Handler:    _Nyttig_UpdateDigest_Handler,
+		},
+		{
+			MethodName: "RemoveDigest",
+			Handler:    _Nyttig_RemoveDigest_Handler,
+		},
+		{
+			MethodName: "GetDigest",
+			Handler:    _Nyttig_GetDigest_Handler,
+		},
+		{
+			MethodName: "ListDigests",
+			Handler:    _Nyttig_ListDigests_Handler,
 		},
 		{
 			MethodName: "Search",

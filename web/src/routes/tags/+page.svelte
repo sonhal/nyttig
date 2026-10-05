@@ -174,7 +174,7 @@
 	panel={panel === null ? null : panel.kind === 'delete' ? 'confirm' : 'form'}
 	{tools}
 	note={note || (metadata.error ? 'error: ' + metadata.error : '')}
-	counts={{ sources: metadata.sources.length, tags: tags.length, rules: rules.length, views: metadata.views.length, assessors: metadata.assessors.length }}
+	counts={{ sources: metadata.sources.length, tags: tags.length, rules: rules.length, views: metadata.views.length, assessors: metadata.assessors.length, digests: metadata.series.length }}
 	{loaded}
 	{onaction}
 >

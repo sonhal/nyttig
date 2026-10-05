@@ -33,6 +33,12 @@ const (
 	maxAssessorDescLen = 500
 	maxNoteBytes       = 4096
 
+	maxSeriesNameLen   = 64
+	maxDigestTitleLen  = 200
+	maxDigestBodyBytes = 64 * 1024
+	maxDigestItems     = 1000
+	maxDigestInputs    = 100
+
 	// minRefreshSec keeps a source from being polled more than once a minute.
 	minRefreshSec = 60
 	// maxRefreshSec is one week.
@@ -291,4 +297,43 @@ func validateAssessmentFilter(assessorID int64, minScore *float64, unassessedBy 
 		return fmt.Errorf("min_score and sort score need an assessor_id")
 	}
 	return nil
+}
+
+// validateDigestBody accepts non-empty valid UTF-8 of at most
+// maxDigestBodyBytes bytes without control characters other than newline and
+// tab. The body is untrusted text; clients render it as text only.
+func validateDigestBody(body string) error {
+	if strings.TrimSpace(body) == "" {
+		return fmt.Errorf("body is required")
+	}
+	if !utf8.ValidString(body) {
+		return fmt.Errorf("body must be valid UTF-8")
+	}
+	if len(body) > maxDigestBodyBytes {
+		return fmt.Errorf("body must be at most %d bytes", maxDigestBodyBytes)
+	}
+	if strings.IndexFunc(body, func(r rune) bool { return unicode.IsControl(r) && r != '\n' && r != '\t' }) >= 0 {
+		return fmt.Errorf("body must not contain control characters other than newline and tab")
+	}
+	return nil
+}
+
+// validateDigestIDs checks one list of linked IDs: positive, at most max
+// after dropping duplicates. It returns the list without duplicates.
+func validateDigestIDs(field string, ids []int64, max int) ([]int64, error) {
+	seen := make(map[int64]bool, len(ids))
+	out := make([]int64, 0, len(ids))
+	for _, id := range ids {
+		if id <= 0 {
+			return nil, fmt.Errorf("%s must be positive, got %d", field, id)
+		}
+		if !seen[id] {
+			seen[id] = true
+			out = append(out, id)
+		}
+	}
+	if len(out) > max {
+		return nil, fmt.Errorf("%s: at most %d are allowed, got %d", field, max, len(out))
+	}
+	return out, nil
 }

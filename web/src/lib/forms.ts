@@ -6,10 +6,10 @@
 // patterns are the exception: only their length is checked here, since Go
 // RE2 syntax can't be checked with JavaScript's regex engine.
 
-import type { AssessorBody, RuleBody, SourceBody, TagBody, ViewBody } from './api';
+import type { AssessorBody, DigestSeriesBody, RuleBody, SourceBody, TagBody, ViewBody } from './api';
 import { sameFilter } from './filter';
 import { format, parse } from './query';
-import type { Assessor, RuleField, SavedView, Source, Tag, TagRule } from './types';
+import type { Assessor, DigestSeries, RuleField, SavedView, Source, Tag, TagRule } from './types';
 import { filterToViewBody, viewToFilter } from './views';
 
 // The daemon's limits.
@@ -19,6 +19,8 @@ export const MAX_TAG_NAME = 64;
 export const MAX_VIEW_NAME = 64;
 export const MAX_ASSESSOR_NAME = 64;
 export const MAX_ASSESSOR_DESCRIPTION = 500;
+export const MAX_SERIES_NAME = 64;
+export const MAX_SERIES_DESCRIPTION = 500;
 export const MAX_TAG_PARENTS = 16;
 export const MAX_URL_BYTES = 2048;
 export const MAX_PATTERN_BYTES = 1024;
@@ -361,6 +363,37 @@ export function assessorPatchBody(orig: Assessor, f: AssessorForm): AssessorBody
 	if (f.name.trim() !== (orig.name ?? '')) p.name = f.name.trim();
 	if (f.description.trim() !== (orig.description ?? '')) p.description = f.description.trim();
 	if (f.color.trim() !== (orig.color ?? '')) p.color = f.color.trim();
+	return p;
+}
+
+// ── Digest series ─────────────────────────────────────────────
+
+/** The fields of a series that can be edited: a series is not moved to another assessor. */
+export interface SeriesForm {
+	name: string;
+	/** What the series covers. */
+	description: string;
+}
+
+export function seriesForm(s?: DigestSeries): SeriesForm {
+	return { name: s?.name ?? '', description: s?.description ?? '' };
+}
+
+export function validateSeries(f: SeriesForm): Errors<SeriesForm> {
+	const e: Errors<SeriesForm> = {};
+	const name = nameError('name', f.name, MAX_SERIES_NAME);
+	if (name) e.name = name;
+	const d = f.description.trim();
+	if (runeLen(d) > MAX_SERIES_DESCRIPTION) e.description = `description must be at most ${MAX_SERIES_DESCRIPTION} characters`;
+	else if (CONTROL_RE.test(d)) e.description = 'description must not contain control characters';
+	return e;
+}
+
+/** The PATCH body: only what changed; clearing the description sends "". */
+export function seriesPatchBody(orig: DigestSeries, f: SeriesForm): DigestSeriesBody {
+	const p: DigestSeriesBody = {};
+	if (f.name.trim() !== (orig.name ?? '')) p.name = f.name.trim();
+	if (f.description.trim() !== (orig.description ?? '')) p.description = f.description.trim();
 	return p;
 }
 

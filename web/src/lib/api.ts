@@ -3,7 +3,20 @@
 // nyttig-api's CSRF check requires.
 
 import { apiParams } from './filter';
-import type { Assessment, Assessor, Filter, Item, RuleTest, SavedView, Source, Tag, TagRule, ViewFilter } from './types';
+import type {
+	Assessment,
+	Assessor,
+	Digest,
+	DigestSeries,
+	Filter,
+	Item,
+	RuleTest,
+	SavedView,
+	Source,
+	Tag,
+	TagRule,
+	ViewFilter
+} from './types';
 
 export class ApiError extends Error {
 	constructor(
@@ -173,6 +186,91 @@ export function removeView(id: string): Promise<void> {
 /** Sets the display order; ids must list every view once. Answers with the views in the new order. */
 export async function reorderViews(ids: string[]): Promise<SavedView[]> {
 	return (await request<{ views?: SavedView[] }>('PUT', '/api/views/order', { ids })).views ?? [];
+}
+
+// ── Digests ───────────────────────────────────────────────────
+
+export interface DigestSeriesBody {
+	/** Assessor ID; on POST only. */
+	assessor?: string;
+	name?: string;
+	description?: string;
+}
+
+export interface DigestBody {
+	/** Series ID; on POST only. */
+	series?: string;
+	title?: string;
+	body?: string;
+	/** RFC 3339 times. */
+	period_start?: string;
+	period_end?: string;
+	/** Item IDs; on PATCH [] removes the links. */
+	items?: string[];
+	/** Digest IDs; on PATCH [] removes the links. */
+	inputs?: string[];
+}
+
+/** One assessor's series, or every series without an assessor ID, in display order. */
+export async function listDigestSeries(assessor = ''): Promise<DigestSeries[]> {
+	const q = assessor ? '?assessor=' + encodeURIComponent(assessor) : '';
+	return (await request<{ series?: DigestSeries[] }>('GET', '/api/digest-series' + q)).series ?? [];
+}
+
+export function addDigestSeries(body: DigestSeriesBody): Promise<DigestSeries> {
+	return request<DigestSeries>('POST', '/api/digest-series', body);
+}
+
+export function updateDigestSeries(id: string, patch: DigestSeriesBody): Promise<DigestSeries> {
+	return request<DigestSeries>('PATCH', idPath('/api/digest-series', id), patch);
+}
+
+export function removeDigestSeries(id: string): Promise<void> {
+	return request<void>('DELETE', idPath('/api/digest-series', id));
+}
+
+/** Sets the display order; ids must list every series once. Answers with the series in the new order. */
+export async function reorderDigestSeries(ids: string[]): Promise<DigestSeries[]> {
+	return (await request<{ series?: DigestSeries[] }>('PUT', '/api/digest-series/order', { ids })).series ?? [];
+}
+
+export interface DigestPage {
+	digests: Digest[];
+	hasMore: boolean;
+}
+
+/**
+ * A page of a series' digests, newest period first. before is the ID of the
+ * last digest of the previous page (the cursor); bodies are only sent with
+ * withBody.
+ */
+export async function listDigests(
+	series: string,
+	opts: { before?: string; limit?: number; withBody?: boolean } = {},
+	signal?: AbortSignal
+): Promise<DigestPage> {
+	const p = new URLSearchParams({ series });
+	if (opts.before) p.set('before', opts.before);
+	if (opts.limit) p.set('limit', String(opts.limit));
+	if (opts.withBody) p.set('body', '1');
+	const r = await request<{ digests?: Digest[]; has_more?: boolean }>('GET', '/api/digests?' + p.toString(), undefined, signal);
+	return { digests: r.digests ?? [], hasMore: !!r.has_more };
+}
+
+export function getDigest(id: string, signal?: AbortSignal): Promise<Digest> {
+	return request<Digest>('GET', idPath('/api/digests', id), undefined, signal);
+}
+
+export function addDigest(body: DigestBody): Promise<Digest> {
+	return request<Digest>('POST', '/api/digests', body);
+}
+
+export function updateDigest(id: string, patch: DigestBody): Promise<Digest> {
+	return request<Digest>('PATCH', idPath('/api/digests', id), patch);
+}
+
+export function removeDigest(id: string): Promise<void> {
+	return request<void>('DELETE', idPath('/api/digests', id));
 }
 
 export async function listRules(): Promise<TagRule[]> {

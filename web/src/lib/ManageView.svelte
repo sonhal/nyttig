@@ -11,11 +11,12 @@
 <script lang="ts" generics="T">
 	import type { Snippet } from 'svelte';
 	import { onMount, tick } from 'svelte';
-	import { PAGES, type Page } from './command';
+	import type { Page } from './command';
 	import CommandLine from './CommandLine.svelte';
 	import * as api from './api';
-	import { CommandLine as CommandLineState, execute, goPage, offFeedHost, pageHref } from './commandline.svelte';
+	import { CommandLine as CommandLineState, execute, goPage, offFeedHost } from './commandline.svelte';
 	import Help from './Help.svelte';
+	import PageTabs from './PageTabs.svelte';
 	import { manageSections } from './help';
 	import { manageKeyAction, type ManageAction, type ManageMode, type Tool } from './keymap';
 	import { metadata } from './metadata.svelte';
@@ -144,7 +145,7 @@
 			case 'openCommand':
 				return cl.start();
 			case 'runCommand': {
-				const cmd = cl.run({ sources: metadata.sources, tags: metadata.tags, views: metadata.views, assessors: metadata.assessors });
+				const cmd = cl.run({ sources: metadata.sources, tags: metadata.tags, views: metadata.views, assessors: metadata.assessors, series: metadata.series });
 				if (!cmd) return;
 				list?.focus({ preventScroll: true });
 				return execute(cmd, host);
@@ -154,7 +155,7 @@
 				list?.focus({ preventScroll: true });
 				return;
 			case 'completeCommand':
-				return cl.complete({ sources: metadata.sources, tags: metadata.tags, views: metadata.views, assessors: metadata.assessors });
+				return cl.complete({ sources: metadata.sources, tags: metadata.tags, views: metadata.views, assessors: metadata.assessors, series: metadata.series });
 			case 'historyPrev':
 				return cl.historyPrev();
 			case 'historyNext':
@@ -211,18 +212,7 @@
 <svelte:window {onkeydown} />
 
 <div class="manage">
-	<nav class="tabs" aria-label="pages">
-		{#each PAGES as v (v)}
-			<a
-				href={pageHref(v)}
-				class:current={v === page}
-				aria-current={v === page ? 'page' : undefined}
-				data-testid="nav-{v}"
-				>{v}{#if counts[v] !== undefined}<span class="n">{' ' + counts[v]}</span>{/if}</a
-			>
-		{/each}
-		<span class="hint">: command · q feed</span>
-	</nav>
+	<PageTabs {page} {counts} />
 
 	<div
 		bind:this={list}
@@ -304,39 +294,6 @@
 		height: 100dvh;
 		padding-left: env(safe-area-inset-left);
 		padding-right: env(safe-area-inset-right);
-	}
-
-	.tabs {
-		display: flex;
-		align-items: center;
-		gap: 2ch;
-		height: var(--bar-h);
-		padding: 0 1ch;
-		background: var(--bar-filter);
-		white-space: nowrap;
-		overflow: hidden;
-	}
-	.tabs a {
-		color: var(--dim);
-		text-decoration: none;
-	}
-	.tabs a.current {
-		color: var(--fg-strong);
-	}
-	.tabs a.current::before {
-		content: '[';
-		color: var(--dim);
-	}
-	.tabs a.current::after {
-		content: ']';
-		color: var(--dim);
-	}
-	.n {
-		color: var(--dim);
-	}
-	.hint {
-		margin-left: auto;
-		color: var(--dim);
 	}
 
 	.list {
@@ -434,29 +391,6 @@
 	}
 
 	@media (max-width: 719.98px) {
-		.tabs {
-			gap: 0;
-			padding: env(safe-area-inset-top) 0 0;
-			height: calc(var(--bar-h) + env(safe-area-inset-top));
-		}
-		.tabs a {
-			flex: 1;
-			display: flex;
-			align-items: center;
-			justify-content: center;
-			height: 100%;
-			white-space: pre;
-		}
-		.tabs a.current {
-			background: var(--sel);
-		}
-		.tabs a.current::before,
-		.tabs a.current::after {
-			content: none;
-		}
-		.hint {
-			display: none;
-		}
 		.mcells {
 			flex-wrap: wrap;
 			align-content: center;

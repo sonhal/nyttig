@@ -42,6 +42,11 @@ type fakeClient struct {
 	views []*pb.SavedView
 
 	assessors []*pb.Assessor
+
+	series []*pb.DigestSeries
+	// digest is what the digest RPCs return (AddDigest, GetDigest and one
+	// entry of ListDigests); AddDigest echoes the request when it is nil.
+	digest *pb.Digest
 	// putResult is what PutAssessment returns; it defaults to an echo.
 	putResult *pb.Assessment
 
