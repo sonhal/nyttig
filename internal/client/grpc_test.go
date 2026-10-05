@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -35,6 +36,11 @@ type testServer struct {
 	// answers, as if another client had created it first.
 	assessorRace *pb.Assessor
 
+	series []*pb.DigestSeries
+	// seriesRace, when set, is added just before the next AddDigestSeries
+	// answers, as if another client had created it first.
+	seriesRace *pb.DigestSeries
+
 	// StreamItems control
 	streamMu sync.Mutex
 	streams  []pb.Nyttig_StreamItemsServer
@@ -64,6 +70,38 @@ func (s *testServer) AddAssessor(ctx context.Context, req *pb.AddAssessorRequest
 	a := &pb.Assessor{Id: int64(len(s.assessors) + 1), Name: req.Name, Description: req.Description, Color: req.Color}
 	s.assessors = append(s.assessors, a)
 	return a, nil
+}
+
+func (s *testServer) AddDigestSeries(ctx context.Context, req *pb.AddDigestSeriesRequest) (*pb.DigestSeries, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if len(req.Name) > 64 {
+		return nil, status.Error(codes.InvalidArgument, "name too long")
+	}
+	if s.seriesRace != nil {
+		s.series = append(s.series, s.seriesRace)
+		s.seriesRace = nil
+	}
+	for _, sr := range s.series {
+		if sr.AssessorId == req.AssessorId && strings.EqualFold(sr.Name, req.Name) {
+			return nil, status.Error(codes.AlreadyExists, "series already exists")
+		}
+	}
+	sr := &pb.DigestSeries{Id: int64(len(s.series) + 1), AssessorId: req.AssessorId, Name: req.Name, Description: req.Description}
+	s.series = append(s.series, sr)
+	return sr, nil
+}
+
+func (s *testServer) ListDigestSeries(ctx context.Context, req *pb.ListDigestSeriesRequest) (*pb.ListDigestSeriesResponse, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	resp := &pb.ListDigestSeriesResponse{}
+	for _, sr := range s.series {
+		if req.AssessorId == 0 || sr.AssessorId == req.AssessorId {
+			resp.Series = append(resp.Series, sr)
+		}
+	}
+	return resp, nil
 }
 
 func (s *testServer) ListAssessors(ctx context.Context, _ *emptypb.Empty) (*pb.ListAssessorsResponse, error) {

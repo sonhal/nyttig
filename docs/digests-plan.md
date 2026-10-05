@@ -1,6 +1,6 @@
 # Digests plan: summaries and notes from assessors, kept as a history
 
-Status: **phase 1 implemented, not yet merged.** Phases 1–7 below.
+Status: **phases 1–2 implemented, not yet merged.** Phases 1–7 below.
 
 Assessments judge one item. A **digest** is a document an assessor writes
 about **one to many items**: "today's CVE news", "September in review".

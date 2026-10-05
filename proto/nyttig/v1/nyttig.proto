@@ -344,6 +344,95 @@ message Complete {}
 
 // ── Service definition ──────────────────────────────────────
 
+// ── Digests (docs/digests-plan.md) ──────────────────────────────────────────
+
+// A named, registered group of digests by one assessor.
+message DigestSeries {
+    int64  id            = 1;
+    int64  assessor_id   = 2;
+    string assessor_name = 3;
+    string name          = 4;
+    string description   = 5;
+    int32  position      = 6;
+    google.protobuf.Timestamp created_at = 7;
+    int32  digest_count  = 8;
+    google.protobuf.Timestamp latest_period_end = 9;  // unset when empty
+}
+
+// An item a digest links to.
+message DigestItem {
+    int64  item_id     = 1;
+    string title       = 2;
+    string link        = 3;
+    string source_name = 4;
+    google.protobuf.Timestamp published = 5;
+}
+
+// An earlier digest used as input.
+message DigestRef {
+    int64  id          = 1;
+    string title       = 2;
+    string series_name = 3;
+    google.protobuf.Timestamp period_end = 4;
+}
+
+// A document an assessor wrote about one to many items. The body is untrusted
+// text (a Markdown subset).
+message Digest {
+    int64  id            = 1;
+    int64  series_id     = 2;
+    string series_name   = 3;
+    int64  assessor_id   = 4;
+    string assessor_name = 5;
+    string title         = 6;
+    string body          = 7;   // empty in lists without include_body
+    google.protobuf.Timestamp period_start = 8;
+    google.protobuf.Timestamp period_end   = 9;
+    google.protobuf.Timestamp created_at   = 10;
+    google.protobuf.Timestamp updated_at   = 11;
+    repeated DigestItem items  = 12;
+    repeated DigestRef  inputs = 13;
+}
+
+message AddDigestSeriesRequest    { int64 assessor_id = 1; string name = 2; string description = 3; }
+message UpdateDigestSeriesRequest { int64 id = 1; optional string name = 2; optional string description = 3; }
+message RemoveDigestSeriesRequest { int64 id = 1; }
+message ListDigestSeriesRequest   { int64 assessor_id = 1; }  // 0 = all
+message ListDigestSeriesResponse  { repeated DigestSeries series = 1; }
+message ReorderDigestSeriesRequest { repeated int64 ids = 1; }
+
+// Wrapper for field presence in updates.
+message IDList { repeated int64 ids = 1; }
+
+message AddDigestRequest {
+    int64  series_id = 1;
+    string title     = 2;
+    string body      = 3;
+    google.protobuf.Timestamp period_start = 4;
+    google.protobuf.Timestamp period_end   = 5;
+    repeated int64 item_ids  = 6;
+    repeated int64 input_ids = 7;
+}
+message UpdateDigestRequest {
+    int64 id = 1;
+    optional string title = 2;
+    optional string body  = 3;
+    google.protobuf.Timestamp period_start = 4;  // unset = unchanged
+    google.protobuf.Timestamp period_end   = 5;  // unset = unchanged
+    IDList item_ids  = 6;                         // unset = unchanged, empty = none
+    IDList input_ids = 7;
+}
+message RemoveDigestRequest { int64 id = 1; }
+message GetDigestRequest    { int64 id = 1; }
+message ListDigestsRequest  {
+    int64 series_id    = 1;
+    int64 before_id    = 2;  // cursor; 0 = from the newest
+    int32 limit        = 3;  // 0 = 20, at most 100
+    bool  include_body = 4;
+}
+message ListDigestsResponse { repeated Digest digests = 1; bool has_more = 2; }
+
+
 service Nyttig {
     // Source management
     rpc AddSource(AddSourceRequest) returns (Source);
@@ -378,6 +467,18 @@ service Nyttig {
     rpc ListAssessors(google.protobuf.Empty) returns (ListAssessorsResponse);
     rpc PutAssessment(PutAssessmentRequest) returns (Assessment);
     rpc RemoveAssessment(RemoveAssessmentRequest) returns (google.protobuf.Empty);
+
+    // Digests: documents about many items, kept in series
+    rpc AddDigestSeries(AddDigestSeriesRequest) returns (DigestSeries);
+    rpc UpdateDigestSeries(UpdateDigestSeriesRequest) returns (DigestSeries);
+    rpc RemoveDigestSeries(RemoveDigestSeriesRequest) returns (google.protobuf.Empty);
+    rpc ListDigestSeries(ListDigestSeriesRequest) returns (ListDigestSeriesResponse);
+    rpc ReorderDigestSeries(ReorderDigestSeriesRequest) returns (ListDigestSeriesResponse);
+    rpc AddDigest(AddDigestRequest) returns (Digest);
+    rpc UpdateDigest(UpdateDigestRequest) returns (Digest);
+    rpc RemoveDigest(RemoveDigestRequest) returns (google.protobuf.Empty);
+    rpc GetDigest(GetDigestRequest) returns (Digest);
+    rpc ListDigests(ListDigestsRequest) returns (ListDigestsResponse);
 
     // Core feed stream (bidirectional)
     rpc StreamItems(stream ClientMessage) returns (stream ServerMessage);

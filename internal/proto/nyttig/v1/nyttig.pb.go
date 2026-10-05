@@ -2920,6 +2920,1136 @@ func (*Complete) Descriptor() ([]byte, []int) {
 	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{41}
 }
 
+// A named, registered group of digests by one assessor.
+type DigestSeries struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	Id              int64                  `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+	AssessorId      int64                  `protobuf:"varint,2,opt,name=assessor_id,json=assessorId,proto3" json:"assessor_id,omitempty"`
+	AssessorName    string                 `protobuf:"bytes,3,opt,name=assessor_name,json=assessorName,proto3" json:"assessor_name,omitempty"`
+	Name            string                 `protobuf:"bytes,4,opt,name=name,proto3" json:"name,omitempty"`
+	Description     string                 `protobuf:"bytes,5,opt,name=description,proto3" json:"description,omitempty"`
+	Position        int32                  `protobuf:"varint,6,opt,name=position,proto3" json:"position,omitempty"`
+	CreatedAt       *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	DigestCount     int32                  `protobuf:"varint,8,opt,name=digest_count,json=digestCount,proto3" json:"digest_count,omitempty"`
+	LatestPeriodEnd *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=latest_period_end,json=latestPeriodEnd,proto3" json:"latest_period_end,omitempty"` // unset when empty
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *DigestSeries) Reset() {
+	*x = DigestSeries{}
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[42]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DigestSeries) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DigestSeries) ProtoMessage() {}
+
+func (x *DigestSeries) ProtoReflect() protoreflect.Message {
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[42]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DigestSeries.ProtoReflect.Descriptor instead.
+func (*DigestSeries) Descriptor() ([]byte, []int) {
+	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{42}
+}
+
+func (x *DigestSeries) GetId() int64 {
+	if x != nil {
+		return x.Id
+	}
+	return 0
+}
+
+func (x *DigestSeries) GetAssessorId() int64 {
+	if x != nil {
+		return x.AssessorId
+	}
+	return 0
+}
+
+func (x *DigestSeries) GetAssessorName() string {
+	if x != nil {
+		return x.AssessorName
+	}
+	return ""
+}
+
+func (x *DigestSeries) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *DigestSeries) GetDescription() string {
+	if x != nil {
+		return x.Description
+	}
+	return ""
+}
+
+func (x *DigestSeries) GetPosition() int32 {
+	if x != nil {
+		return x.Position
+	}
+	return 0
+}
+
+func (x *DigestSeries) GetCreatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return nil
+}
+
+func (x *DigestSeries) GetDigestCount() int32 {
+	if x != nil {
+		return x.DigestCount
+	}
+	return 0
+}
+
+func (x *DigestSeries) GetLatestPeriodEnd() *timestamppb.Timestamp {
+	if x != nil {
+		return x.LatestPeriodEnd
+	}
+	return nil
+}
+
+// An item a digest links to.
+type DigestItem struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ItemId        int64                  `protobuf:"varint,1,opt,name=item_id,json=itemId,proto3" json:"item_id,omitempty"`
+	Title         string                 `protobuf:"bytes,2,opt,name=title,proto3" json:"title,omitempty"`
+	Link          string                 `protobuf:"bytes,3,opt,name=link,proto3" json:"link,omitempty"`
+	SourceName    string                 `protobuf:"bytes,4,opt,name=source_name,json=sourceName,proto3" json:"source_name,omitempty"`
+	Published     *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=published,proto3" json:"published,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DigestItem) Reset() {
+	*x = DigestItem{}
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[43]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DigestItem) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DigestItem) ProtoMessage() {}
+
+func (x *DigestItem) ProtoReflect() protoreflect.Message {
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[43]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DigestItem.ProtoReflect.Descriptor instead.
+func (*DigestItem) Descriptor() ([]byte, []int) {
+	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{43}
+}
+
+func (x *DigestItem) GetItemId() int64 {
+	if x != nil {
+		return x.ItemId
+	}
+	return 0
+}
+
+func (x *DigestItem) GetTitle() string {
+	if x != nil {
+		return x.Title
+	}
+	return ""
+}
+
+func (x *DigestItem) GetLink() string {
+	if x != nil {
+		return x.Link
+	}
+	return ""
+}
+
+func (x *DigestItem) GetSourceName() string {
+	if x != nil {
+		return x.SourceName
+	}
+	return ""
+}
+
+func (x *DigestItem) GetPublished() *timestamppb.Timestamp {
+	if x != nil {
+		return x.Published
+	}
+	return nil
+}
+
+// An earlier digest used as input.
+type DigestRef struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            int64                  `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+	Title         string                 `protobuf:"bytes,2,opt,name=title,proto3" json:"title,omitempty"`
+	SeriesName    string                 `protobuf:"bytes,3,opt,name=series_name,json=seriesName,proto3" json:"series_name,omitempty"`
+	PeriodEnd     *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=period_end,json=periodEnd,proto3" json:"period_end,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DigestRef) Reset() {
+	*x = DigestRef{}
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[44]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DigestRef) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DigestRef) ProtoMessage() {}
+
+func (x *DigestRef) ProtoReflect() protoreflect.Message {
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[44]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DigestRef.ProtoReflect.Descriptor instead.
+func (*DigestRef) Descriptor() ([]byte, []int) {
+	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{44}
+}
+
+func (x *DigestRef) GetId() int64 {
+	if x != nil {
+		return x.Id
+	}
+	return 0
+}
+
+func (x *DigestRef) GetTitle() string {
+	if x != nil {
+		return x.Title
+	}
+	return ""
+}
+
+func (x *DigestRef) GetSeriesName() string {
+	if x != nil {
+		return x.SeriesName
+	}
+	return ""
+}
+
+func (x *DigestRef) GetPeriodEnd() *timestamppb.Timestamp {
+	if x != nil {
+		return x.PeriodEnd
+	}
+	return nil
+}
+
+// A document an assessor wrote about one to many items. The body is untrusted
+// text (a Markdown subset).
+type Digest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            int64                  `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+	SeriesId      int64                  `protobuf:"varint,2,opt,name=series_id,json=seriesId,proto3" json:"series_id,omitempty"`
+	SeriesName    string                 `protobuf:"bytes,3,opt,name=series_name,json=seriesName,proto3" json:"series_name,omitempty"`
+	AssessorId    int64                  `protobuf:"varint,4,opt,name=assessor_id,json=assessorId,proto3" json:"assessor_id,omitempty"`
+	AssessorName  string                 `protobuf:"bytes,5,opt,name=assessor_name,json=assessorName,proto3" json:"assessor_name,omitempty"`
+	Title         string                 `protobuf:"bytes,6,opt,name=title,proto3" json:"title,omitempty"`
+	Body          string                 `protobuf:"bytes,7,opt,name=body,proto3" json:"body,omitempty"` // empty in lists without include_body
+	PeriodStart   *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=period_start,json=periodStart,proto3" json:"period_start,omitempty"`
+	PeriodEnd     *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=period_end,json=periodEnd,proto3" json:"period_end,omitempty"`
+	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,10,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	UpdatedAt     *timestamppb.Timestamp `protobuf:"bytes,11,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	Items         []*DigestItem          `protobuf:"bytes,12,rep,name=items,proto3" json:"items,omitempty"`
+	Inputs        []*DigestRef           `protobuf:"bytes,13,rep,name=inputs,proto3" json:"inputs,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Digest) Reset() {
+	*x = Digest{}
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[45]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Digest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Digest) ProtoMessage() {}
+
+func (x *Digest) ProtoReflect() protoreflect.Message {
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[45]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Digest.ProtoReflect.Descriptor instead.
+func (*Digest) Descriptor() ([]byte, []int) {
+	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{45}
+}
+
+func (x *Digest) GetId() int64 {
+	if x != nil {
+		return x.Id
+	}
+	return 0
+}
+
+func (x *Digest) GetSeriesId() int64 {
+	if x != nil {
+		return x.SeriesId
+	}
+	return 0
+}
+
+func (x *Digest) GetSeriesName() string {
+	if x != nil {
+		return x.SeriesName
+	}
+	return ""
+}
+
+func (x *Digest) GetAssessorId() int64 {
+	if x != nil {
+		return x.AssessorId
+	}
+	return 0
+}
+
+func (x *Digest) GetAssessorName() string {
+	if x != nil {
+		return x.AssessorName
+	}
+	return ""
+}
+
+func (x *Digest) GetTitle() string {
+	if x != nil {
+		return x.Title
+	}
+	return ""
+}
+
+func (x *Digest) GetBody() string {
+	if x != nil {
+		return x.Body
+	}
+	return ""
+}
+
+func (x *Digest) GetPeriodStart() *timestamppb.Timestamp {
+	if x != nil {
+		return x.PeriodStart
+	}
+	return nil
+}
+
+func (x *Digest) GetPeriodEnd() *timestamppb.Timestamp {
+	if x != nil {
+		return x.PeriodEnd
+	}
+	return nil
+}
+
+func (x *Digest) GetCreatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return nil
+}
+
+func (x *Digest) GetUpdatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.UpdatedAt
+	}
+	return nil
+}
+
+func (x *Digest) GetItems() []*DigestItem {
+	if x != nil {
+		return x.Items
+	}
+	return nil
+}
+
+func (x *Digest) GetInputs() []*DigestRef {
+	if x != nil {
+		return x.Inputs
+	}
+	return nil
+}
+
+type AddDigestSeriesRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	AssessorId    int64                  `protobuf:"varint,1,opt,name=assessor_id,json=assessorId,proto3" json:"assessor_id,omitempty"`
+	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	Description   string                 `protobuf:"bytes,3,opt,name=description,proto3" json:"description,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AddDigestSeriesRequest) Reset() {
+	*x = AddDigestSeriesRequest{}
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[46]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AddDigestSeriesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AddDigestSeriesRequest) ProtoMessage() {}
+
+func (x *AddDigestSeriesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[46]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AddDigestSeriesRequest.ProtoReflect.Descriptor instead.
+func (*AddDigestSeriesRequest) Descriptor() ([]byte, []int) {
+	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{46}
+}
+
+func (x *AddDigestSeriesRequest) GetAssessorId() int64 {
+	if x != nil {
+		return x.AssessorId
+	}
+	return 0
+}
+
+func (x *AddDigestSeriesRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *AddDigestSeriesRequest) GetDescription() string {
+	if x != nil {
+		return x.Description
+	}
+	return ""
+}
+
+type UpdateDigestSeriesRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            int64                  `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+	Name          *string                `protobuf:"bytes,2,opt,name=name,proto3,oneof" json:"name,omitempty"`
+	Description   *string                `protobuf:"bytes,3,opt,name=description,proto3,oneof" json:"description,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpdateDigestSeriesRequest) Reset() {
+	*x = UpdateDigestSeriesRequest{}
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[47]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdateDigestSeriesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateDigestSeriesRequest) ProtoMessage() {}
+
+func (x *UpdateDigestSeriesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[47]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateDigestSeriesRequest.ProtoReflect.Descriptor instead.
+func (*UpdateDigestSeriesRequest) Descriptor() ([]byte, []int) {
+	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{47}
+}
+
+func (x *UpdateDigestSeriesRequest) GetId() int64 {
+	if x != nil {
+		return x.Id
+	}
+	return 0
+}
+
+func (x *UpdateDigestSeriesRequest) GetName() string {
+	if x != nil && x.Name != nil {
+		return *x.Name
+	}
+	return ""
+}
+
+func (x *UpdateDigestSeriesRequest) GetDescription() string {
+	if x != nil && x.Description != nil {
+		return *x.Description
+	}
+	return ""
+}
+
+type RemoveDigestSeriesRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            int64                  `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RemoveDigestSeriesRequest) Reset() {
+	*x = RemoveDigestSeriesRequest{}
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[48]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RemoveDigestSeriesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RemoveDigestSeriesRequest) ProtoMessage() {}
+
+func (x *RemoveDigestSeriesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[48]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RemoveDigestSeriesRequest.ProtoReflect.Descriptor instead.
+func (*RemoveDigestSeriesRequest) Descriptor() ([]byte, []int) {
+	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{48}
+}
+
+func (x *RemoveDigestSeriesRequest) GetId() int64 {
+	if x != nil {
+		return x.Id
+	}
+	return 0
+}
+
+type ListDigestSeriesRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	AssessorId    int64                  `protobuf:"varint,1,opt,name=assessor_id,json=assessorId,proto3" json:"assessor_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListDigestSeriesRequest) Reset() {
+	*x = ListDigestSeriesRequest{}
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[49]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListDigestSeriesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListDigestSeriesRequest) ProtoMessage() {}
+
+func (x *ListDigestSeriesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[49]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListDigestSeriesRequest.ProtoReflect.Descriptor instead.
+func (*ListDigestSeriesRequest) Descriptor() ([]byte, []int) {
+	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{49}
+}
+
+func (x *ListDigestSeriesRequest) GetAssessorId() int64 {
+	if x != nil {
+		return x.AssessorId
+	}
+	return 0
+}
+
+type ListDigestSeriesResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Series        []*DigestSeries        `protobuf:"bytes,1,rep,name=series,proto3" json:"series,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListDigestSeriesResponse) Reset() {
+	*x = ListDigestSeriesResponse{}
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[50]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListDigestSeriesResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListDigestSeriesResponse) ProtoMessage() {}
+
+func (x *ListDigestSeriesResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[50]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListDigestSeriesResponse.ProtoReflect.Descriptor instead.
+func (*ListDigestSeriesResponse) Descriptor() ([]byte, []int) {
+	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{50}
+}
+
+func (x *ListDigestSeriesResponse) GetSeries() []*DigestSeries {
+	if x != nil {
+		return x.Series
+	}
+	return nil
+}
+
+type ReorderDigestSeriesRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Ids           []int64                `protobuf:"varint,1,rep,packed,name=ids,proto3" json:"ids,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ReorderDigestSeriesRequest) Reset() {
+	*x = ReorderDigestSeriesRequest{}
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[51]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ReorderDigestSeriesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ReorderDigestSeriesRequest) ProtoMessage() {}
+
+func (x *ReorderDigestSeriesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[51]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ReorderDigestSeriesRequest.ProtoReflect.Descriptor instead.
+func (*ReorderDigestSeriesRequest) Descriptor() ([]byte, []int) {
+	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{51}
+}
+
+func (x *ReorderDigestSeriesRequest) GetIds() []int64 {
+	if x != nil {
+		return x.Ids
+	}
+	return nil
+}
+
+// Wrapper for field presence in updates.
+type IDList struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Ids           []int64                `protobuf:"varint,1,rep,packed,name=ids,proto3" json:"ids,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *IDList) Reset() {
+	*x = IDList{}
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[52]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *IDList) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*IDList) ProtoMessage() {}
+
+func (x *IDList) ProtoReflect() protoreflect.Message {
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[52]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use IDList.ProtoReflect.Descriptor instead.
+func (*IDList) Descriptor() ([]byte, []int) {
+	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{52}
+}
+
+func (x *IDList) GetIds() []int64 {
+	if x != nil {
+		return x.Ids
+	}
+	return nil
+}
+
+type AddDigestRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	SeriesId      int64                  `protobuf:"varint,1,opt,name=series_id,json=seriesId,proto3" json:"series_id,omitempty"`
+	Title         string                 `protobuf:"bytes,2,opt,name=title,proto3" json:"title,omitempty"`
+	Body          string                 `protobuf:"bytes,3,opt,name=body,proto3" json:"body,omitempty"`
+	PeriodStart   *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=period_start,json=periodStart,proto3" json:"period_start,omitempty"`
+	PeriodEnd     *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=period_end,json=periodEnd,proto3" json:"period_end,omitempty"`
+	ItemIds       []int64                `protobuf:"varint,6,rep,packed,name=item_ids,json=itemIds,proto3" json:"item_ids,omitempty"`
+	InputIds      []int64                `protobuf:"varint,7,rep,packed,name=input_ids,json=inputIds,proto3" json:"input_ids,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AddDigestRequest) Reset() {
+	*x = AddDigestRequest{}
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[53]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AddDigestRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AddDigestRequest) ProtoMessage() {}
+
+func (x *AddDigestRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[53]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AddDigestRequest.ProtoReflect.Descriptor instead.
+func (*AddDigestRequest) Descriptor() ([]byte, []int) {
+	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{53}
+}
+
+func (x *AddDigestRequest) GetSeriesId() int64 {
+	if x != nil {
+		return x.SeriesId
+	}
+	return 0
+}
+
+func (x *AddDigestRequest) GetTitle() string {
+	if x != nil {
+		return x.Title
+	}
+	return ""
+}
+
+func (x *AddDigestRequest) GetBody() string {
+	if x != nil {
+		return x.Body
+	}
+	return ""
+}
+
+func (x *AddDigestRequest) GetPeriodStart() *timestamppb.Timestamp {
+	if x != nil {
+		return x.PeriodStart
+	}
+	return nil
+}
+
+func (x *AddDigestRequest) GetPeriodEnd() *timestamppb.Timestamp {
+	if x != nil {
+		return x.PeriodEnd
+	}
+	return nil
+}
+
+func (x *AddDigestRequest) GetItemIds() []int64 {
+	if x != nil {
+		return x.ItemIds
+	}
+	return nil
+}
+
+func (x *AddDigestRequest) GetInputIds() []int64 {
+	if x != nil {
+		return x.InputIds
+	}
+	return nil
+}
+
+type UpdateDigestRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            int64                  `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+	Title         *string                `protobuf:"bytes,2,opt,name=title,proto3,oneof" json:"title,omitempty"`
+	Body          *string                `protobuf:"bytes,3,opt,name=body,proto3,oneof" json:"body,omitempty"`
+	PeriodStart   *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=period_start,json=periodStart,proto3" json:"period_start,omitempty"` // unset = unchanged
+	PeriodEnd     *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=period_end,json=periodEnd,proto3" json:"period_end,omitempty"`       // unset = unchanged
+	ItemIds       *IDList                `protobuf:"bytes,6,opt,name=item_ids,json=itemIds,proto3" json:"item_ids,omitempty"`             // unset = unchanged, empty = none
+	InputIds      *IDList                `protobuf:"bytes,7,opt,name=input_ids,json=inputIds,proto3" json:"input_ids,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpdateDigestRequest) Reset() {
+	*x = UpdateDigestRequest{}
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[54]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdateDigestRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateDigestRequest) ProtoMessage() {}
+
+func (x *UpdateDigestRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[54]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateDigestRequest.ProtoReflect.Descriptor instead.
+func (*UpdateDigestRequest) Descriptor() ([]byte, []int) {
+	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{54}
+}
+
+func (x *UpdateDigestRequest) GetId() int64 {
+	if x != nil {
+		return x.Id
+	}
+	return 0
+}
+
+func (x *UpdateDigestRequest) GetTitle() string {
+	if x != nil && x.Title != nil {
+		return *x.Title
+	}
+	return ""
+}
+
+func (x *UpdateDigestRequest) GetBody() string {
+	if x != nil && x.Body != nil {
+		return *x.Body
+	}
+	return ""
+}
+
+func (x *UpdateDigestRequest) GetPeriodStart() *timestamppb.Timestamp {
+	if x != nil {
+		return x.PeriodStart
+	}
+	return nil
+}
+
+func (x *UpdateDigestRequest) GetPeriodEnd() *timestamppb.Timestamp {
+	if x != nil {
+		return x.PeriodEnd
+	}
+	return nil
+}
+
+func (x *UpdateDigestRequest) GetItemIds() *IDList {
+	if x != nil {
+		return x.ItemIds
+	}
+	return nil
+}
+
+func (x *UpdateDigestRequest) GetInputIds() *IDList {
+	if x != nil {
+		return x.InputIds
+	}
+	return nil
+}
+
+type RemoveDigestRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            int64                  `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RemoveDigestRequest) Reset() {
+	*x = RemoveDigestRequest{}
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[55]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RemoveDigestRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RemoveDigestRequest) ProtoMessage() {}
+
+func (x *RemoveDigestRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[55]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RemoveDigestRequest.ProtoReflect.Descriptor instead.
+func (*RemoveDigestRequest) Descriptor() ([]byte, []int) {
+	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{55}
+}
+
+func (x *RemoveDigestRequest) GetId() int64 {
+	if x != nil {
+		return x.Id
+	}
+	return 0
+}
+
+type GetDigestRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            int64                  `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetDigestRequest) Reset() {
+	*x = GetDigestRequest{}
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[56]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetDigestRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetDigestRequest) ProtoMessage() {}
+
+func (x *GetDigestRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[56]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetDigestRequest.ProtoReflect.Descriptor instead.
+func (*GetDigestRequest) Descriptor() ([]byte, []int) {
+	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{56}
+}
+
+func (x *GetDigestRequest) GetId() int64 {
+	if x != nil {
+		return x.Id
+	}
+	return 0
+}
+
+type ListDigestsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	SeriesId      int64                  `protobuf:"varint,1,opt,name=series_id,json=seriesId,proto3" json:"series_id,omitempty"`
+	BeforeId      int64                  `protobuf:"varint,2,opt,name=before_id,json=beforeId,proto3" json:"before_id,omitempty"` // cursor; 0 = from the newest
+	Limit         int32                  `protobuf:"varint,3,opt,name=limit,proto3" json:"limit,omitempty"`                       // 0 = 20, at most 100
+	IncludeBody   bool                   `protobuf:"varint,4,opt,name=include_body,json=includeBody,proto3" json:"include_body,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListDigestsRequest) Reset() {
+	*x = ListDigestsRequest{}
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[57]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListDigestsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListDigestsRequest) ProtoMessage() {}
+
+func (x *ListDigestsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[57]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListDigestsRequest.ProtoReflect.Descriptor instead.
+func (*ListDigestsRequest) Descriptor() ([]byte, []int) {
+	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{57}
+}
+
+func (x *ListDigestsRequest) GetSeriesId() int64 {
+	if x != nil {
+		return x.SeriesId
+	}
+	return 0
+}
+
+func (x *ListDigestsRequest) GetBeforeId() int64 {
+	if x != nil {
+		return x.BeforeId
+	}
+	return 0
+}
+
+func (x *ListDigestsRequest) GetLimit() int32 {
+	if x != nil {
+		return x.Limit
+	}
+	return 0
+}
+
+func (x *ListDigestsRequest) GetIncludeBody() bool {
+	if x != nil {
+		return x.IncludeBody
+	}
+	return false
+}
+
+type ListDigestsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Digests       []*Digest              `protobuf:"bytes,1,rep,name=digests,proto3" json:"digests,omitempty"`
+	HasMore       bool                   `protobuf:"varint,2,opt,name=has_more,json=hasMore,proto3" json:"has_more,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListDigestsResponse) Reset() {
+	*x = ListDigestsResponse{}
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[58]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListDigestsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListDigestsResponse) ProtoMessage() {}
+
+func (x *ListDigestsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[58]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListDigestsResponse.ProtoReflect.Descriptor instead.
+func (*ListDigestsResponse) Descriptor() ([]byte, []int) {
+	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{58}
+}
+
+func (x *ListDigestsResponse) GetDigests() []*Digest {
+	if x != nil {
+		return x.Digests
+	}
+	return nil
+}
+
+func (x *ListDigestsResponse) GetHasMore() bool {
+	if x != nil {
+		return x.HasMore
+	}
+	return false
+}
+
 var File_nyttig_v1_nyttig_proto protoreflect.FileDescriptor
 
 const file_nyttig_v1_nyttig_proto_rawDesc = "" +
@@ -3181,7 +4311,108 @@ const file_nyttig_v1_nyttig_proto_rawDesc = "" +
 	"\x03msg\"\a\n" +
 	"\x05Reset\"\n" +
 	"\n" +
-	"\bComplete2\x83\x0f\n" +
+	"\bComplete\"\xdc\x02\n" +
+	"\fDigestSeries\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\x03R\x02id\x12\x1f\n" +
+	"\vassessor_id\x18\x02 \x01(\x03R\n" +
+	"assessorId\x12#\n" +
+	"\rassessor_name\x18\x03 \x01(\tR\fassessorName\x12\x12\n" +
+	"\x04name\x18\x04 \x01(\tR\x04name\x12 \n" +
+	"\vdescription\x18\x05 \x01(\tR\vdescription\x12\x1a\n" +
+	"\bposition\x18\x06 \x01(\x05R\bposition\x129\n" +
+	"\n" +
+	"created_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x12!\n" +
+	"\fdigest_count\x18\b \x01(\x05R\vdigestCount\x12F\n" +
+	"\x11latest_period_end\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\x0flatestPeriodEnd\"\xaa\x01\n" +
+	"\n" +
+	"DigestItem\x12\x17\n" +
+	"\aitem_id\x18\x01 \x01(\x03R\x06itemId\x12\x14\n" +
+	"\x05title\x18\x02 \x01(\tR\x05title\x12\x12\n" +
+	"\x04link\x18\x03 \x01(\tR\x04link\x12\x1f\n" +
+	"\vsource_name\x18\x04 \x01(\tR\n" +
+	"sourceName\x128\n" +
+	"\tpublished\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\tpublished\"\x8d\x01\n" +
+	"\tDigestRef\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\x03R\x02id\x12\x14\n" +
+	"\x05title\x18\x02 \x01(\tR\x05title\x12\x1f\n" +
+	"\vseries_name\x18\x03 \x01(\tR\n" +
+	"seriesName\x129\n" +
+	"\n" +
+	"period_end\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\tperiodEnd\"\x91\x04\n" +
+	"\x06Digest\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\x03R\x02id\x12\x1b\n" +
+	"\tseries_id\x18\x02 \x01(\x03R\bseriesId\x12\x1f\n" +
+	"\vseries_name\x18\x03 \x01(\tR\n" +
+	"seriesName\x12\x1f\n" +
+	"\vassessor_id\x18\x04 \x01(\x03R\n" +
+	"assessorId\x12#\n" +
+	"\rassessor_name\x18\x05 \x01(\tR\fassessorName\x12\x14\n" +
+	"\x05title\x18\x06 \x01(\tR\x05title\x12\x12\n" +
+	"\x04body\x18\a \x01(\tR\x04body\x12=\n" +
+	"\fperiod_start\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\vperiodStart\x129\n" +
+	"\n" +
+	"period_end\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\tperiodEnd\x129\n" +
+	"\n" +
+	"created_at\x18\n" +
+	" \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
+	"\n" +
+	"updated_at\x18\v \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12+\n" +
+	"\x05items\x18\f \x03(\v2\x15.nyttig.v1.DigestItemR\x05items\x12,\n" +
+	"\x06inputs\x18\r \x03(\v2\x14.nyttig.v1.DigestRefR\x06inputs\"o\n" +
+	"\x16AddDigestSeriesRequest\x12\x1f\n" +
+	"\vassessor_id\x18\x01 \x01(\x03R\n" +
+	"assessorId\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x12 \n" +
+	"\vdescription\x18\x03 \x01(\tR\vdescription\"\x84\x01\n" +
+	"\x19UpdateDigestSeriesRequest\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\x03R\x02id\x12\x17\n" +
+	"\x04name\x18\x02 \x01(\tH\x00R\x04name\x88\x01\x01\x12%\n" +
+	"\vdescription\x18\x03 \x01(\tH\x01R\vdescription\x88\x01\x01B\a\n" +
+	"\x05_nameB\x0e\n" +
+	"\f_description\"+\n" +
+	"\x19RemoveDigestSeriesRequest\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\x03R\x02id\":\n" +
+	"\x17ListDigestSeriesRequest\x12\x1f\n" +
+	"\vassessor_id\x18\x01 \x01(\x03R\n" +
+	"assessorId\"K\n" +
+	"\x18ListDigestSeriesResponse\x12/\n" +
+	"\x06series\x18\x01 \x03(\v2\x17.nyttig.v1.DigestSeriesR\x06series\".\n" +
+	"\x1aReorderDigestSeriesRequest\x12\x10\n" +
+	"\x03ids\x18\x01 \x03(\x03R\x03ids\"\x1a\n" +
+	"\x06IDList\x12\x10\n" +
+	"\x03ids\x18\x01 \x03(\x03R\x03ids\"\x8b\x02\n" +
+	"\x10AddDigestRequest\x12\x1b\n" +
+	"\tseries_id\x18\x01 \x01(\x03R\bseriesId\x12\x14\n" +
+	"\x05title\x18\x02 \x01(\tR\x05title\x12\x12\n" +
+	"\x04body\x18\x03 \x01(\tR\x04body\x12=\n" +
+	"\fperiod_start\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\vperiodStart\x129\n" +
+	"\n" +
+	"period_end\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\tperiodEnd\x12\x19\n" +
+	"\bitem_ids\x18\x06 \x03(\x03R\aitemIds\x12\x1b\n" +
+	"\tinput_ids\x18\a \x03(\x03R\binputIds\"\xc4\x02\n" +
+	"\x13UpdateDigestRequest\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\x03R\x02id\x12\x19\n" +
+	"\x05title\x18\x02 \x01(\tH\x00R\x05title\x88\x01\x01\x12\x17\n" +
+	"\x04body\x18\x03 \x01(\tH\x01R\x04body\x88\x01\x01\x12=\n" +
+	"\fperiod_start\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\vperiodStart\x129\n" +
+	"\n" +
+	"period_end\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\tperiodEnd\x12,\n" +
+	"\bitem_ids\x18\x06 \x01(\v2\x11.nyttig.v1.IDListR\aitemIds\x12.\n" +
+	"\tinput_ids\x18\a \x01(\v2\x11.nyttig.v1.IDListR\binputIdsB\b\n" +
+	"\x06_titleB\a\n" +
+	"\x05_body\"%\n" +
+	"\x13RemoveDigestRequest\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\x03R\x02id\"\"\n" +
+	"\x10GetDigestRequest\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\x03R\x02id\"\x87\x01\n" +
+	"\x12ListDigestsRequest\x12\x1b\n" +
+	"\tseries_id\x18\x01 \x01(\x03R\bseriesId\x12\x1b\n" +
+	"\tbefore_id\x18\x02 \x01(\x03R\bbeforeId\x12\x14\n" +
+	"\x05limit\x18\x03 \x01(\x05R\x05limit\x12!\n" +
+	"\finclude_body\x18\x04 \x01(\bR\vincludeBody\"]\n" +
+	"\x13ListDigestsResponse\x12+\n" +
+	"\adigests\x18\x01 \x03(\v2\x11.nyttig.v1.DigestR\adigests\x12\x19\n" +
+	"\bhas_more\x18\x02 \x01(\bR\ahasMore2\x8e\x15\n" +
 	"\x06Nyttig\x12;\n" +
 	"\tAddSource\x12\x1b.nyttig.v1.AddSourceRequest\x1a\x11.nyttig.v1.Source\x12F\n" +
 	"\fRemoveSource\x12\x1e.nyttig.v1.RemoveSourceRequest\x1a\x16.google.protobuf.Empty\x12A\n" +
@@ -3207,7 +4438,17 @@ const file_nyttig_v1_nyttig_proto_rawDesc = "" +
 	"\x0eRemoveAssessor\x12 .nyttig.v1.RemoveAssessorRequest\x1a\x16.google.protobuf.Empty\x12I\n" +
 	"\rListAssessors\x12\x16.google.protobuf.Empty\x1a .nyttig.v1.ListAssessorsResponse\x12G\n" +
 	"\rPutAssessment\x12\x1f.nyttig.v1.PutAssessmentRequest\x1a\x15.nyttig.v1.Assessment\x12N\n" +
-	"\x10RemoveAssessment\x12\".nyttig.v1.RemoveAssessmentRequest\x1a\x16.google.protobuf.Empty\x12E\n" +
+	"\x10RemoveAssessment\x12\".nyttig.v1.RemoveAssessmentRequest\x1a\x16.google.protobuf.Empty\x12M\n" +
+	"\x0fAddDigestSeries\x12!.nyttig.v1.AddDigestSeriesRequest\x1a\x17.nyttig.v1.DigestSeries\x12S\n" +
+	"\x12UpdateDigestSeries\x12$.nyttig.v1.UpdateDigestSeriesRequest\x1a\x17.nyttig.v1.DigestSeries\x12R\n" +
+	"\x12RemoveDigestSeries\x12$.nyttig.v1.RemoveDigestSeriesRequest\x1a\x16.google.protobuf.Empty\x12[\n" +
+	"\x10ListDigestSeries\x12\".nyttig.v1.ListDigestSeriesRequest\x1a#.nyttig.v1.ListDigestSeriesResponse\x12a\n" +
+	"\x13ReorderDigestSeries\x12%.nyttig.v1.ReorderDigestSeriesRequest\x1a#.nyttig.v1.ListDigestSeriesResponse\x12;\n" +
+	"\tAddDigest\x12\x1b.nyttig.v1.AddDigestRequest\x1a\x11.nyttig.v1.Digest\x12A\n" +
+	"\fUpdateDigest\x12\x1e.nyttig.v1.UpdateDigestRequest\x1a\x11.nyttig.v1.Digest\x12F\n" +
+	"\fRemoveDigest\x12\x1e.nyttig.v1.RemoveDigestRequest\x1a\x16.google.protobuf.Empty\x12;\n" +
+	"\tGetDigest\x12\x1b.nyttig.v1.GetDigestRequest\x1a\x11.nyttig.v1.Digest\x12L\n" +
+	"\vListDigests\x12\x1d.nyttig.v1.ListDigestsRequest\x1a\x1e.nyttig.v1.ListDigestsResponse\x12E\n" +
 	"\vStreamItems\x12\x18.nyttig.v1.ClientMessage\x1a\x18.nyttig.v1.ServerMessage(\x010\x01\x12=\n" +
 	"\x06Search\x12\x18.nyttig.v1.SearchRequest\x1a\x19.nyttig.v1.SearchResponse\x12B\n" +
 	"\n" +
@@ -3225,62 +4466,79 @@ func file_nyttig_v1_nyttig_proto_rawDescGZIP() []byte {
 	return file_nyttig_v1_nyttig_proto_rawDescData
 }
 
-var file_nyttig_v1_nyttig_proto_msgTypes = make([]protoimpl.MessageInfo, 42)
+var file_nyttig_v1_nyttig_proto_msgTypes = make([]protoimpl.MessageInfo, 59)
 var file_nyttig_v1_nyttig_proto_goTypes = []any{
-	(*Source)(nil),                   // 0: nyttig.v1.Source
-	(*Item)(nil),                     // 1: nyttig.v1.Item
-	(*Tag)(nil),                      // 2: nyttig.v1.Tag
-	(*Assessor)(nil),                 // 3: nyttig.v1.Assessor
-	(*Assessment)(nil),               // 4: nyttig.v1.Assessment
-	(*TagRule)(nil),                  // 5: nyttig.v1.TagRule
-	(*AddSourceRequest)(nil),         // 6: nyttig.v1.AddSourceRequest
-	(*RemoveSourceRequest)(nil),      // 7: nyttig.v1.RemoveSourceRequest
-	(*UpdateSourceRequest)(nil),      // 8: nyttig.v1.UpdateSourceRequest
-	(*ListSourcesResponse)(nil),      // 9: nyttig.v1.ListSourcesResponse
-	(*RefreshSourceRequest)(nil),     // 10: nyttig.v1.RefreshSourceRequest
-	(*AddTagRequest)(nil),            // 11: nyttig.v1.AddTagRequest
-	(*TagParents)(nil),               // 12: nyttig.v1.TagParents
-	(*UpdateTagRequest)(nil),         // 13: nyttig.v1.UpdateTagRequest
-	(*RemoveTagRequest)(nil),         // 14: nyttig.v1.RemoveTagRequest
-	(*ListTagsResponse)(nil),         // 15: nyttig.v1.ListTagsResponse
-	(*ViewFilter)(nil),               // 16: nyttig.v1.ViewFilter
-	(*SavedView)(nil),                // 17: nyttig.v1.SavedView
-	(*AddSavedViewRequest)(nil),      // 18: nyttig.v1.AddSavedViewRequest
-	(*UpdateSavedViewRequest)(nil),   // 19: nyttig.v1.UpdateSavedViewRequest
-	(*RemoveSavedViewRequest)(nil),   // 20: nyttig.v1.RemoveSavedViewRequest
-	(*ReorderSavedViewsRequest)(nil), // 21: nyttig.v1.ReorderSavedViewsRequest
-	(*ListSavedViewsResponse)(nil),   // 22: nyttig.v1.ListSavedViewsResponse
-	(*AddAssessorRequest)(nil),       // 23: nyttig.v1.AddAssessorRequest
-	(*UpdateAssessorRequest)(nil),    // 24: nyttig.v1.UpdateAssessorRequest
-	(*RemoveAssessorRequest)(nil),    // 25: nyttig.v1.RemoveAssessorRequest
-	(*ListAssessorsResponse)(nil),    // 26: nyttig.v1.ListAssessorsResponse
-	(*PutAssessmentRequest)(nil),     // 27: nyttig.v1.PutAssessmentRequest
-	(*RemoveAssessmentRequest)(nil),  // 28: nyttig.v1.RemoveAssessmentRequest
-	(*AddTagRuleRequest)(nil),        // 29: nyttig.v1.AddTagRuleRequest
-	(*RemoveTagRuleRequest)(nil),     // 30: nyttig.v1.RemoveTagRuleRequest
-	(*ListTagRulesResponse)(nil),     // 31: nyttig.v1.ListTagRulesResponse
-	(*TestTagRuleRequest)(nil),       // 32: nyttig.v1.TestTagRuleRequest
-	(*TestTagRuleResponse)(nil),      // 33: nyttig.v1.TestTagRuleResponse
-	(*SearchRequest)(nil),            // 34: nyttig.v1.SearchRequest
-	(*SearchResponse)(nil),           // 35: nyttig.v1.SearchResponse
-	(*MarkViewedRequest)(nil),        // 36: nyttig.v1.MarkViewedRequest
-	(*ClientMessage)(nil),            // 37: nyttig.v1.ClientMessage
-	(*StreamFilter)(nil),             // 38: nyttig.v1.StreamFilter
-	(*ServerMessage)(nil),            // 39: nyttig.v1.ServerMessage
-	(*Reset)(nil),                    // 40: nyttig.v1.Reset
-	(*Complete)(nil),                 // 41: nyttig.v1.Complete
-	(*timestamppb.Timestamp)(nil),    // 42: google.protobuf.Timestamp
-	(*emptypb.Empty)(nil),            // 43: google.protobuf.Empty
+	(*Source)(nil),                     // 0: nyttig.v1.Source
+	(*Item)(nil),                       // 1: nyttig.v1.Item
+	(*Tag)(nil),                        // 2: nyttig.v1.Tag
+	(*Assessor)(nil),                   // 3: nyttig.v1.Assessor
+	(*Assessment)(nil),                 // 4: nyttig.v1.Assessment
+	(*TagRule)(nil),                    // 5: nyttig.v1.TagRule
+	(*AddSourceRequest)(nil),           // 6: nyttig.v1.AddSourceRequest
+	(*RemoveSourceRequest)(nil),        // 7: nyttig.v1.RemoveSourceRequest
+	(*UpdateSourceRequest)(nil),        // 8: nyttig.v1.UpdateSourceRequest
+	(*ListSourcesResponse)(nil),        // 9: nyttig.v1.ListSourcesResponse
+	(*RefreshSourceRequest)(nil),       // 10: nyttig.v1.RefreshSourceRequest
+	(*AddTagRequest)(nil),              // 11: nyttig.v1.AddTagRequest
+	(*TagParents)(nil),                 // 12: nyttig.v1.TagParents
+	(*UpdateTagRequest)(nil),           // 13: nyttig.v1.UpdateTagRequest
+	(*RemoveTagRequest)(nil),           // 14: nyttig.v1.RemoveTagRequest
+	(*ListTagsResponse)(nil),           // 15: nyttig.v1.ListTagsResponse
+	(*ViewFilter)(nil),                 // 16: nyttig.v1.ViewFilter
+	(*SavedView)(nil),                  // 17: nyttig.v1.SavedView
+	(*AddSavedViewRequest)(nil),        // 18: nyttig.v1.AddSavedViewRequest
+	(*UpdateSavedViewRequest)(nil),     // 19: nyttig.v1.UpdateSavedViewRequest
+	(*RemoveSavedViewRequest)(nil),     // 20: nyttig.v1.RemoveSavedViewRequest
+	(*ReorderSavedViewsRequest)(nil),   // 21: nyttig.v1.ReorderSavedViewsRequest
+	(*ListSavedViewsResponse)(nil),     // 22: nyttig.v1.ListSavedViewsResponse
+	(*AddAssessorRequest)(nil),         // 23: nyttig.v1.AddAssessorRequest
+	(*UpdateAssessorRequest)(nil),      // 24: nyttig.v1.UpdateAssessorRequest
+	(*RemoveAssessorRequest)(nil),      // 25: nyttig.v1.RemoveAssessorRequest
+	(*ListAssessorsResponse)(nil),      // 26: nyttig.v1.ListAssessorsResponse
+	(*PutAssessmentRequest)(nil),       // 27: nyttig.v1.PutAssessmentRequest
+	(*RemoveAssessmentRequest)(nil),    // 28: nyttig.v1.RemoveAssessmentRequest
+	(*AddTagRuleRequest)(nil),          // 29: nyttig.v1.AddTagRuleRequest
+	(*RemoveTagRuleRequest)(nil),       // 30: nyttig.v1.RemoveTagRuleRequest
+	(*ListTagRulesResponse)(nil),       // 31: nyttig.v1.ListTagRulesResponse
+	(*TestTagRuleRequest)(nil),         // 32: nyttig.v1.TestTagRuleRequest
+	(*TestTagRuleResponse)(nil),        // 33: nyttig.v1.TestTagRuleResponse
+	(*SearchRequest)(nil),              // 34: nyttig.v1.SearchRequest
+	(*SearchResponse)(nil),             // 35: nyttig.v1.SearchResponse
+	(*MarkViewedRequest)(nil),          // 36: nyttig.v1.MarkViewedRequest
+	(*ClientMessage)(nil),              // 37: nyttig.v1.ClientMessage
+	(*StreamFilter)(nil),               // 38: nyttig.v1.StreamFilter
+	(*ServerMessage)(nil),              // 39: nyttig.v1.ServerMessage
+	(*Reset)(nil),                      // 40: nyttig.v1.Reset
+	(*Complete)(nil),                   // 41: nyttig.v1.Complete
+	(*DigestSeries)(nil),               // 42: nyttig.v1.DigestSeries
+	(*DigestItem)(nil),                 // 43: nyttig.v1.DigestItem
+	(*DigestRef)(nil),                  // 44: nyttig.v1.DigestRef
+	(*Digest)(nil),                     // 45: nyttig.v1.Digest
+	(*AddDigestSeriesRequest)(nil),     // 46: nyttig.v1.AddDigestSeriesRequest
+	(*UpdateDigestSeriesRequest)(nil),  // 47: nyttig.v1.UpdateDigestSeriesRequest
+	(*RemoveDigestSeriesRequest)(nil),  // 48: nyttig.v1.RemoveDigestSeriesRequest
+	(*ListDigestSeriesRequest)(nil),    // 49: nyttig.v1.ListDigestSeriesRequest
+	(*ListDigestSeriesResponse)(nil),   // 50: nyttig.v1.ListDigestSeriesResponse
+	(*ReorderDigestSeriesRequest)(nil), // 51: nyttig.v1.ReorderDigestSeriesRequest
+	(*IDList)(nil),                     // 52: nyttig.v1.IDList
+	(*AddDigestRequest)(nil),           // 53: nyttig.v1.AddDigestRequest
+	(*UpdateDigestRequest)(nil),        // 54: nyttig.v1.UpdateDigestRequest
+	(*RemoveDigestRequest)(nil),        // 55: nyttig.v1.RemoveDigestRequest
+	(*GetDigestRequest)(nil),           // 56: nyttig.v1.GetDigestRequest
+	(*ListDigestsRequest)(nil),         // 57: nyttig.v1.ListDigestsRequest
+	(*ListDigestsResponse)(nil),        // 58: nyttig.v1.ListDigestsResponse
+	(*timestamppb.Timestamp)(nil),      // 59: google.protobuf.Timestamp
+	(*emptypb.Empty)(nil),              // 60: google.protobuf.Empty
 }
 var file_nyttig_v1_nyttig_proto_depIdxs = []int32{
-	42, // 0: nyttig.v1.Source.created_at:type_name -> google.protobuf.Timestamp
-	42, // 1: nyttig.v1.Source.last_fetch:type_name -> google.protobuf.Timestamp
-	42, // 2: nyttig.v1.Item.published:type_name -> google.protobuf.Timestamp
-	42, // 3: nyttig.v1.Item.fetched_at:type_name -> google.protobuf.Timestamp
+	59, // 0: nyttig.v1.Source.created_at:type_name -> google.protobuf.Timestamp
+	59, // 1: nyttig.v1.Source.last_fetch:type_name -> google.protobuf.Timestamp
+	59, // 2: nyttig.v1.Item.published:type_name -> google.protobuf.Timestamp
+	59, // 3: nyttig.v1.Item.fetched_at:type_name -> google.protobuf.Timestamp
 	2,  // 4: nyttig.v1.Item.tags:type_name -> nyttig.v1.Tag
 	4,  // 5: nyttig.v1.Item.assessments:type_name -> nyttig.v1.Assessment
-	42, // 6: nyttig.v1.Assessor.created_at:type_name -> google.protobuf.Timestamp
-	42, // 7: nyttig.v1.Assessment.updated_at:type_name -> google.protobuf.Timestamp
+	59, // 6: nyttig.v1.Assessor.created_at:type_name -> google.protobuf.Timestamp
+	59, // 7: nyttig.v1.Assessment.updated_at:type_name -> google.protobuf.Timestamp
 	0,  // 8: nyttig.v1.ListSourcesResponse.sources:type_name -> nyttig.v1.Source
 	12, // 9: nyttig.v1.UpdateTagRequest.parents:type_name -> nyttig.v1.TagParents
 	2,  // 10: nyttig.v1.ListTagsResponse.tags:type_name -> nyttig.v1.Tag
@@ -3291,73 +4549,111 @@ var file_nyttig_v1_nyttig_proto_depIdxs = []int32{
 	3,  // 15: nyttig.v1.ListAssessorsResponse.assessors:type_name -> nyttig.v1.Assessor
 	5,  // 16: nyttig.v1.ListTagRulesResponse.rules:type_name -> nyttig.v1.TagRule
 	1,  // 17: nyttig.v1.TestTagRuleResponse.items:type_name -> nyttig.v1.Item
-	42, // 18: nyttig.v1.SearchRequest.after:type_name -> google.protobuf.Timestamp
+	59, // 18: nyttig.v1.SearchRequest.after:type_name -> google.protobuf.Timestamp
 	1,  // 19: nyttig.v1.SearchResponse.items:type_name -> nyttig.v1.Item
 	38, // 20: nyttig.v1.ClientMessage.filter:type_name -> nyttig.v1.StreamFilter
-	42, // 21: nyttig.v1.StreamFilter.after:type_name -> google.protobuf.Timestamp
+	59, // 21: nyttig.v1.StreamFilter.after:type_name -> google.protobuf.Timestamp
 	1,  // 22: nyttig.v1.ServerMessage.item:type_name -> nyttig.v1.Item
 	40, // 23: nyttig.v1.ServerMessage.reset:type_name -> nyttig.v1.Reset
 	41, // 24: nyttig.v1.ServerMessage.complete:type_name -> nyttig.v1.Complete
 	1,  // 25: nyttig.v1.ServerMessage.item_update:type_name -> nyttig.v1.Item
-	6,  // 26: nyttig.v1.Nyttig.AddSource:input_type -> nyttig.v1.AddSourceRequest
-	7,  // 27: nyttig.v1.Nyttig.RemoveSource:input_type -> nyttig.v1.RemoveSourceRequest
-	8,  // 28: nyttig.v1.Nyttig.UpdateSource:input_type -> nyttig.v1.UpdateSourceRequest
-	43, // 29: nyttig.v1.Nyttig.ListSources:input_type -> google.protobuf.Empty
-	10, // 30: nyttig.v1.Nyttig.RefreshSource:input_type -> nyttig.v1.RefreshSourceRequest
-	11, // 31: nyttig.v1.Nyttig.AddTag:input_type -> nyttig.v1.AddTagRequest
-	13, // 32: nyttig.v1.Nyttig.UpdateTag:input_type -> nyttig.v1.UpdateTagRequest
-	14, // 33: nyttig.v1.Nyttig.RemoveTag:input_type -> nyttig.v1.RemoveTagRequest
-	43, // 34: nyttig.v1.Nyttig.ListTags:input_type -> google.protobuf.Empty
-	29, // 35: nyttig.v1.Nyttig.AddTagRule:input_type -> nyttig.v1.AddTagRuleRequest
-	30, // 36: nyttig.v1.Nyttig.RemoveTagRule:input_type -> nyttig.v1.RemoveTagRuleRequest
-	43, // 37: nyttig.v1.Nyttig.ListTagRules:input_type -> google.protobuf.Empty
-	32, // 38: nyttig.v1.Nyttig.TestTagRule:input_type -> nyttig.v1.TestTagRuleRequest
-	18, // 39: nyttig.v1.Nyttig.AddSavedView:input_type -> nyttig.v1.AddSavedViewRequest
-	19, // 40: nyttig.v1.Nyttig.UpdateSavedView:input_type -> nyttig.v1.UpdateSavedViewRequest
-	20, // 41: nyttig.v1.Nyttig.RemoveSavedView:input_type -> nyttig.v1.RemoveSavedViewRequest
-	43, // 42: nyttig.v1.Nyttig.ListSavedViews:input_type -> google.protobuf.Empty
-	21, // 43: nyttig.v1.Nyttig.ReorderSavedViews:input_type -> nyttig.v1.ReorderSavedViewsRequest
-	23, // 44: nyttig.v1.Nyttig.AddAssessor:input_type -> nyttig.v1.AddAssessorRequest
-	24, // 45: nyttig.v1.Nyttig.UpdateAssessor:input_type -> nyttig.v1.UpdateAssessorRequest
-	25, // 46: nyttig.v1.Nyttig.RemoveAssessor:input_type -> nyttig.v1.RemoveAssessorRequest
-	43, // 47: nyttig.v1.Nyttig.ListAssessors:input_type -> google.protobuf.Empty
-	27, // 48: nyttig.v1.Nyttig.PutAssessment:input_type -> nyttig.v1.PutAssessmentRequest
-	28, // 49: nyttig.v1.Nyttig.RemoveAssessment:input_type -> nyttig.v1.RemoveAssessmentRequest
-	37, // 50: nyttig.v1.Nyttig.StreamItems:input_type -> nyttig.v1.ClientMessage
-	34, // 51: nyttig.v1.Nyttig.Search:input_type -> nyttig.v1.SearchRequest
-	36, // 52: nyttig.v1.Nyttig.MarkViewed:input_type -> nyttig.v1.MarkViewedRequest
-	0,  // 53: nyttig.v1.Nyttig.AddSource:output_type -> nyttig.v1.Source
-	43, // 54: nyttig.v1.Nyttig.RemoveSource:output_type -> google.protobuf.Empty
-	0,  // 55: nyttig.v1.Nyttig.UpdateSource:output_type -> nyttig.v1.Source
-	9,  // 56: nyttig.v1.Nyttig.ListSources:output_type -> nyttig.v1.ListSourcesResponse
-	43, // 57: nyttig.v1.Nyttig.RefreshSource:output_type -> google.protobuf.Empty
-	2,  // 58: nyttig.v1.Nyttig.AddTag:output_type -> nyttig.v1.Tag
-	2,  // 59: nyttig.v1.Nyttig.UpdateTag:output_type -> nyttig.v1.Tag
-	43, // 60: nyttig.v1.Nyttig.RemoveTag:output_type -> google.protobuf.Empty
-	15, // 61: nyttig.v1.Nyttig.ListTags:output_type -> nyttig.v1.ListTagsResponse
-	5,  // 62: nyttig.v1.Nyttig.AddTagRule:output_type -> nyttig.v1.TagRule
-	43, // 63: nyttig.v1.Nyttig.RemoveTagRule:output_type -> google.protobuf.Empty
-	31, // 64: nyttig.v1.Nyttig.ListTagRules:output_type -> nyttig.v1.ListTagRulesResponse
-	33, // 65: nyttig.v1.Nyttig.TestTagRule:output_type -> nyttig.v1.TestTagRuleResponse
-	17, // 66: nyttig.v1.Nyttig.AddSavedView:output_type -> nyttig.v1.SavedView
-	17, // 67: nyttig.v1.Nyttig.UpdateSavedView:output_type -> nyttig.v1.SavedView
-	43, // 68: nyttig.v1.Nyttig.RemoveSavedView:output_type -> google.protobuf.Empty
-	22, // 69: nyttig.v1.Nyttig.ListSavedViews:output_type -> nyttig.v1.ListSavedViewsResponse
-	22, // 70: nyttig.v1.Nyttig.ReorderSavedViews:output_type -> nyttig.v1.ListSavedViewsResponse
-	3,  // 71: nyttig.v1.Nyttig.AddAssessor:output_type -> nyttig.v1.Assessor
-	3,  // 72: nyttig.v1.Nyttig.UpdateAssessor:output_type -> nyttig.v1.Assessor
-	43, // 73: nyttig.v1.Nyttig.RemoveAssessor:output_type -> google.protobuf.Empty
-	26, // 74: nyttig.v1.Nyttig.ListAssessors:output_type -> nyttig.v1.ListAssessorsResponse
-	4,  // 75: nyttig.v1.Nyttig.PutAssessment:output_type -> nyttig.v1.Assessment
-	43, // 76: nyttig.v1.Nyttig.RemoveAssessment:output_type -> google.protobuf.Empty
-	39, // 77: nyttig.v1.Nyttig.StreamItems:output_type -> nyttig.v1.ServerMessage
-	35, // 78: nyttig.v1.Nyttig.Search:output_type -> nyttig.v1.SearchResponse
-	43, // 79: nyttig.v1.Nyttig.MarkViewed:output_type -> google.protobuf.Empty
-	53, // [53:80] is the sub-list for method output_type
-	26, // [26:53] is the sub-list for method input_type
-	26, // [26:26] is the sub-list for extension type_name
-	26, // [26:26] is the sub-list for extension extendee
-	0,  // [0:26] is the sub-list for field type_name
+	59, // 26: nyttig.v1.DigestSeries.created_at:type_name -> google.protobuf.Timestamp
+	59, // 27: nyttig.v1.DigestSeries.latest_period_end:type_name -> google.protobuf.Timestamp
+	59, // 28: nyttig.v1.DigestItem.published:type_name -> google.protobuf.Timestamp
+	59, // 29: nyttig.v1.DigestRef.period_end:type_name -> google.protobuf.Timestamp
+	59, // 30: nyttig.v1.Digest.period_start:type_name -> google.protobuf.Timestamp
+	59, // 31: nyttig.v1.Digest.period_end:type_name -> google.protobuf.Timestamp
+	59, // 32: nyttig.v1.Digest.created_at:type_name -> google.protobuf.Timestamp
+	59, // 33: nyttig.v1.Digest.updated_at:type_name -> google.protobuf.Timestamp
+	43, // 34: nyttig.v1.Digest.items:type_name -> nyttig.v1.DigestItem
+	44, // 35: nyttig.v1.Digest.inputs:type_name -> nyttig.v1.DigestRef
+	42, // 36: nyttig.v1.ListDigestSeriesResponse.series:type_name -> nyttig.v1.DigestSeries
+	59, // 37: nyttig.v1.AddDigestRequest.period_start:type_name -> google.protobuf.Timestamp
+	59, // 38: nyttig.v1.AddDigestRequest.period_end:type_name -> google.protobuf.Timestamp
+	59, // 39: nyttig.v1.UpdateDigestRequest.period_start:type_name -> google.protobuf.Timestamp
+	59, // 40: nyttig.v1.UpdateDigestRequest.period_end:type_name -> google.protobuf.Timestamp
+	52, // 41: nyttig.v1.UpdateDigestRequest.item_ids:type_name -> nyttig.v1.IDList
+	52, // 42: nyttig.v1.UpdateDigestRequest.input_ids:type_name -> nyttig.v1.IDList
+	45, // 43: nyttig.v1.ListDigestsResponse.digests:type_name -> nyttig.v1.Digest
+	6,  // 44: nyttig.v1.Nyttig.AddSource:input_type -> nyttig.v1.AddSourceRequest
+	7,  // 45: nyttig.v1.Nyttig.RemoveSource:input_type -> nyttig.v1.RemoveSourceRequest
+	8,  // 46: nyttig.v1.Nyttig.UpdateSource:input_type -> nyttig.v1.UpdateSourceRequest
+	60, // 47: nyttig.v1.Nyttig.ListSources:input_type -> google.protobuf.Empty
+	10, // 48: nyttig.v1.Nyttig.RefreshSource:input_type -> nyttig.v1.RefreshSourceRequest
+	11, // 49: nyttig.v1.Nyttig.AddTag:input_type -> nyttig.v1.AddTagRequest
+	13, // 50: nyttig.v1.Nyttig.UpdateTag:input_type -> nyttig.v1.UpdateTagRequest
+	14, // 51: nyttig.v1.Nyttig.RemoveTag:input_type -> nyttig.v1.RemoveTagRequest
+	60, // 52: nyttig.v1.Nyttig.ListTags:input_type -> google.protobuf.Empty
+	29, // 53: nyttig.v1.Nyttig.AddTagRule:input_type -> nyttig.v1.AddTagRuleRequest
+	30, // 54: nyttig.v1.Nyttig.RemoveTagRule:input_type -> nyttig.v1.RemoveTagRuleRequest
+	60, // 55: nyttig.v1.Nyttig.ListTagRules:input_type -> google.protobuf.Empty
+	32, // 56: nyttig.v1.Nyttig.TestTagRule:input_type -> nyttig.v1.TestTagRuleRequest
+	18, // 57: nyttig.v1.Nyttig.AddSavedView:input_type -> nyttig.v1.AddSavedViewRequest
+	19, // 58: nyttig.v1.Nyttig.UpdateSavedView:input_type -> nyttig.v1.UpdateSavedViewRequest
+	20, // 59: nyttig.v1.Nyttig.RemoveSavedView:input_type -> nyttig.v1.RemoveSavedViewRequest
+	60, // 60: nyttig.v1.Nyttig.ListSavedViews:input_type -> google.protobuf.Empty
+	21, // 61: nyttig.v1.Nyttig.ReorderSavedViews:input_type -> nyttig.v1.ReorderSavedViewsRequest
+	23, // 62: nyttig.v1.Nyttig.AddAssessor:input_type -> nyttig.v1.AddAssessorRequest
+	24, // 63: nyttig.v1.Nyttig.UpdateAssessor:input_type -> nyttig.v1.UpdateAssessorRequest
+	25, // 64: nyttig.v1.Nyttig.RemoveAssessor:input_type -> nyttig.v1.RemoveAssessorRequest
+	60, // 65: nyttig.v1.Nyttig.ListAssessors:input_type -> google.protobuf.Empty
+	27, // 66: nyttig.v1.Nyttig.PutAssessment:input_type -> nyttig.v1.PutAssessmentRequest
+	28, // 67: nyttig.v1.Nyttig.RemoveAssessment:input_type -> nyttig.v1.RemoveAssessmentRequest
+	46, // 68: nyttig.v1.Nyttig.AddDigestSeries:input_type -> nyttig.v1.AddDigestSeriesRequest
+	47, // 69: nyttig.v1.Nyttig.UpdateDigestSeries:input_type -> nyttig.v1.UpdateDigestSeriesRequest
+	48, // 70: nyttig.v1.Nyttig.RemoveDigestSeries:input_type -> nyttig.v1.RemoveDigestSeriesRequest
+	49, // 71: nyttig.v1.Nyttig.ListDigestSeries:input_type -> nyttig.v1.ListDigestSeriesRequest
+	51, // 72: nyttig.v1.Nyttig.ReorderDigestSeries:input_type -> nyttig.v1.ReorderDigestSeriesRequest
+	53, // 73: nyttig.v1.Nyttig.AddDigest:input_type -> nyttig.v1.AddDigestRequest
+	54, // 74: nyttig.v1.Nyttig.UpdateDigest:input_type -> nyttig.v1.UpdateDigestRequest
+	55, // 75: nyttig.v1.Nyttig.RemoveDigest:input_type -> nyttig.v1.RemoveDigestRequest
+	56, // 76: nyttig.v1.Nyttig.GetDigest:input_type -> nyttig.v1.GetDigestRequest
+	57, // 77: nyttig.v1.Nyttig.ListDigests:input_type -> nyttig.v1.ListDigestsRequest
+	37, // 78: nyttig.v1.Nyttig.StreamItems:input_type -> nyttig.v1.ClientMessage
+	34, // 79: nyttig.v1.Nyttig.Search:input_type -> nyttig.v1.SearchRequest
+	36, // 80: nyttig.v1.Nyttig.MarkViewed:input_type -> nyttig.v1.MarkViewedRequest
+	0,  // 81: nyttig.v1.Nyttig.AddSource:output_type -> nyttig.v1.Source
+	60, // 82: nyttig.v1.Nyttig.RemoveSource:output_type -> google.protobuf.Empty
+	0,  // 83: nyttig.v1.Nyttig.UpdateSource:output_type -> nyttig.v1.Source
+	9,  // 84: nyttig.v1.Nyttig.ListSources:output_type -> nyttig.v1.ListSourcesResponse
+	60, // 85: nyttig.v1.Nyttig.RefreshSource:output_type -> google.protobuf.Empty
+	2,  // 86: nyttig.v1.Nyttig.AddTag:output_type -> nyttig.v1.Tag
+	2,  // 87: nyttig.v1.Nyttig.UpdateTag:output_type -> nyttig.v1.Tag
+	60, // 88: nyttig.v1.Nyttig.RemoveTag:output_type -> google.protobuf.Empty
+	15, // 89: nyttig.v1.Nyttig.ListTags:output_type -> nyttig.v1.ListTagsResponse
+	5,  // 90: nyttig.v1.Nyttig.AddTagRule:output_type -> nyttig.v1.TagRule
+	60, // 91: nyttig.v1.Nyttig.RemoveTagRule:output_type -> google.protobuf.Empty
+	31, // 92: nyttig.v1.Nyttig.ListTagRules:output_type -> nyttig.v1.ListTagRulesResponse
+	33, // 93: nyttig.v1.Nyttig.TestTagRule:output_type -> nyttig.v1.TestTagRuleResponse
+	17, // 94: nyttig.v1.Nyttig.AddSavedView:output_type -> nyttig.v1.SavedView
+	17, // 95: nyttig.v1.Nyttig.UpdateSavedView:output_type -> nyttig.v1.SavedView
+	60, // 96: nyttig.v1.Nyttig.RemoveSavedView:output_type -> google.protobuf.Empty
+	22, // 97: nyttig.v1.Nyttig.ListSavedViews:output_type -> nyttig.v1.ListSavedViewsResponse
+	22, // 98: nyttig.v1.Nyttig.ReorderSavedViews:output_type -> nyttig.v1.ListSavedViewsResponse
+	3,  // 99: nyttig.v1.Nyttig.AddAssessor:output_type -> nyttig.v1.Assessor
+	3,  // 100: nyttig.v1.Nyttig.UpdateAssessor:output_type -> nyttig.v1.Assessor
+	60, // 101: nyttig.v1.Nyttig.RemoveAssessor:output_type -> google.protobuf.Empty
+	26, // 102: nyttig.v1.Nyttig.ListAssessors:output_type -> nyttig.v1.ListAssessorsResponse
+	4,  // 103: nyttig.v1.Nyttig.PutAssessment:output_type -> nyttig.v1.Assessment
+	60, // 104: nyttig.v1.Nyttig.RemoveAssessment:output_type -> google.protobuf.Empty
+	42, // 105: nyttig.v1.Nyttig.AddDigestSeries:output_type -> nyttig.v1.DigestSeries
+	42, // 106: nyttig.v1.Nyttig.UpdateDigestSeries:output_type -> nyttig.v1.DigestSeries
+	60, // 107: nyttig.v1.Nyttig.RemoveDigestSeries:output_type -> google.protobuf.Empty
+	50, // 108: nyttig.v1.Nyttig.ListDigestSeries:output_type -> nyttig.v1.ListDigestSeriesResponse
+	50, // 109: nyttig.v1.Nyttig.ReorderDigestSeries:output_type -> nyttig.v1.ListDigestSeriesResponse
+	45, // 110: nyttig.v1.Nyttig.AddDigest:output_type -> nyttig.v1.Digest
+	45, // 111: nyttig.v1.Nyttig.UpdateDigest:output_type -> nyttig.v1.Digest
+	60, // 112: nyttig.v1.Nyttig.RemoveDigest:output_type -> google.protobuf.Empty
+	45, // 113: nyttig.v1.Nyttig.GetDigest:output_type -> nyttig.v1.Digest
+	58, // 114: nyttig.v1.Nyttig.ListDigests:output_type -> nyttig.v1.ListDigestsResponse
+	39, // 115: nyttig.v1.Nyttig.StreamItems:output_type -> nyttig.v1.ServerMessage
+	35, // 116: nyttig.v1.Nyttig.Search:output_type -> nyttig.v1.SearchResponse
+	60, // 117: nyttig.v1.Nyttig.MarkViewed:output_type -> google.protobuf.Empty
+	81, // [81:118] is the sub-list for method output_type
+	44, // [44:81] is the sub-list for method input_type
+	44, // [44:44] is the sub-list for extension type_name
+	44, // [44:44] is the sub-list for extension extendee
+	0,  // [0:44] is the sub-list for field type_name
 }
 
 func init() { file_nyttig_v1_nyttig_proto_init() }
@@ -3383,13 +4679,15 @@ func file_nyttig_v1_nyttig_proto_init() {
 		(*ServerMessage_Complete)(nil),
 		(*ServerMessage_ItemUpdate)(nil),
 	}
+	file_nyttig_v1_nyttig_proto_msgTypes[47].OneofWrappers = []any{}
+	file_nyttig_v1_nyttig_proto_msgTypes[54].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_nyttig_v1_nyttig_proto_rawDesc), len(file_nyttig_v1_nyttig_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   42,
+			NumMessages:   59,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

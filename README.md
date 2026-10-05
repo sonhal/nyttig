@@ -457,9 +457,11 @@ clients get the same checks:
 | Assessor        | Name ≤ 64 characters, description ≤ 500 characters without control characters, optional `#RRGGBB` color |
 | Score           | A number from 0 to 1 (NaN and infinities are rejected); `min_score` follows the same rule and, like `sort: score`, needs an assessor |
 | Note            | Valid UTF-8, at most 4096 bytes; an assessment needs a score or a note |
+| Digest series   | Name ≤ 64 characters (unique per assessor, case-insensitive), description ≤ 500 characters, both without control characters |
+| Digest          | Title ≤ 200 characters; body valid UTF-8, at most 64 KiB, no control characters except newline and tab; `period_start` and `period_end` (`period_end >= period_start`, whole seconds, UTC); at most 1000 linked items and 100 input digests, which must exist |
 | Tag rule pattern| Valid Go (RE2) regex, at most 1024 bytes; `field` is `title`, `description` or `both` |
 
-A duplicate source URL, tag name or assessor name is rejected with `AlreadyExists`. Sources,
+A duplicate source URL, tag name, assessor name or digest series name (per assessor) is rejected with `AlreadyExists`. Sources,
 tags and rules from the config file are seeded directly and are not checked.
 
 ## Fetching and SSRF

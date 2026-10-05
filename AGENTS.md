@@ -377,7 +377,14 @@ which phases are done and whether they are merged; keep it current.
   `db.ListDigests` pages by a `(period_end, id)` cursor (`beforeID`), so
   equal period ends page without skipping. Bodies are untrusted text (an
   LLM's output can repeat feed markup): never `{@html}`, strip control
-  characters in the TUI.
+  characters in the TUI. The service (`service/digests.go`) validates the
+  title, the body (≤ 64 KiB, UTF-8, no control characters but newline and
+  tab), periods (whole UTC seconds, `period_end >= period_start`, also when
+  an update sets only one) and the link lists (≤ 1000 items, ≤ 100 inputs,
+  duplicates dropped, `NotFound` names the first missing ID);
+  `client.EnsureDigestSeries` is the find / create / find-again pattern of
+  `EnsureMe`. `UpdateDigestRequest.item_ids` / `input_ids` are `IDList`
+  wrappers for field presence (unset = unchanged, empty = none).
 - **TUI assessments.** The filter bar cycles the assessor (`a`) and the
   minimum score (`m`); the score sort exists only while an assessor is
   selected, and dropping the assessor drops the minimum and the sort
