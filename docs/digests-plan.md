@@ -1,6 +1,6 @@
 # Digests plan: summaries and notes from assessors, kept as a history
 
-Status: **phases 1–7 implemented, not yet merged.** Phases 1–7 below.
+Status: **phases 1–7 implemented and merged** (sonhal/nyttig#32, 2026-10-05: database layer, RPCs, CLI, HTTP API, web page, Markdown, TUI).
 
 Assessments judge one item. A **digest** is a document an assessor writes
 about **one to many items**: "today's CVE news", "September in review".
