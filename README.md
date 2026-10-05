@@ -872,17 +872,20 @@ digests go with it.
 
 #### Digests in the web app
 
-`:digests` (or the tab, and the phone's `⚙` sheet) reads
+`:digests` (or the tab; on a phone the feed's `▤` button or the `⚙` sheet) reads
 [digests](#digests): a list of series grouped by assessor (in the assessor's
 color, with each series' digest count and latest period), the selected
 series' history (newest period first, `load older` for more) and the digest
-being read: its title, assessor, series, period (UTC) and update time, the
+being read: its title, assessor, series, period (in the browser's time zone,
+as dates when it is whole days: `2026-09-28 .. 10-04`) and update time, the
 body, "Based on N items" (links to the articles) and "Inputs" (the earlier
 digests it used; each opens that digest, also from another series). The URL is
 the state: `/digests?series=<id>&digest=<id>`, and with no `digest` the newest
 one of the series is shown. `:digest <assessor>/<series>` opens a series
 (`Tab` completes). On a phone the series list, the history and the digest are
-separate screens, with a `back` button.
+separate screens, with a `back` button; the history shows each digest's title
+with its period under it. On a phone every page but the feed keeps `‹ feed`
+pinned at the left of its tab row.
 
 The body is a **Markdown subset**: headings (`#` to `###`), paragraphs (a line
 break stays a line break), bullet and numbered lists (nested), block quotes,

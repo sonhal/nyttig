@@ -391,6 +391,9 @@ which phases are done and whether they are merged; keep it current.
   its tests check), and the URL `/digests?series=&digest=` is the state, an
   input link carries only `digest=` and the page learns the series from the
   fetched digest, and the keys live in `keymap.ts` (`digestsKeyAction`).
+  The web app shows periods in the browser's time zone (`formatPeriod`; its
+  tests build local times so they pass in any zone, and the e2e digests use
+  `+02:00`, as Playwright runs in Europe/Oslo); the TUI and CLI print UTC.
   The service (`service/digests.go`) validates the
   title, the body (≤ 64 KiB, UTF-8, no control characters but newline and
   tab), periods (whole UTC seconds, `period_end >= period_start`, also when

@@ -141,6 +141,7 @@
 		<button type="button" class="icon" onclick={onopensheet} aria-label="filters" data-testid="open-filters"
 			>⚙</button
 		>
+		<a class="icon" href="/digests" aria-label="digests" title="digests" data-testid="open-digests">▤</a>
 		<button type="button" class="icon" onclick={onrefresh} aria-label="refresh all sources">⟳</button>
 		<button type="button" class="icon" onclick={onhelp} aria-label="help" data-testid="open-help">?</button>
 	</div>
@@ -300,10 +301,13 @@
 		.slash {
 			display: none;
 		}
-		/* 16px keeps iOS from zooming in on focus. */
+		/* 16px keeps iOS from zooming in on focus. The zero width keeps the
+		   input's default size out of the bar's minimum: flex sizes it, and
+		   the bar never grows past a phone's width. */
 		input {
 			font-size: 16px;
 			padding: 0;
+			width: 0;
 		}
 		input:focus {
 			text-decoration: none;
@@ -327,6 +331,13 @@
 			background: none;
 			border: 1px solid var(--sel);
 			border-radius: 4px;
+		}
+		a.icon {
+			display: grid;
+			place-items: center;
+			box-sizing: border-box;
+			color: var(--fg);
+			text-decoration: none;
 		}
 	}
 </style>

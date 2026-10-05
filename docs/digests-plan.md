@@ -1,6 +1,7 @@
 # Digests plan: summaries and notes from assessors, kept as a history
 
-Status: **phases 1–7 implemented, not yet merged.** Phases 1–7 below.
+Status: **phases 1–7 implemented and merged** (#32). Phases 1–7 below; a
+later mobile fix is under "Deviations from this plan".
 
 Assessments judge one item. A **digest** is a document an assessor writes
 about **one to many items**: "today's CVE news", "September in review".
@@ -490,3 +491,13 @@ By hand, with nyttigd on `sample_config.toml`:
   and prints a link as `text (url)`. The series list reads every series
   (`ListDigestSeries` with assessor 0); an input from another series switches
   the screen to that series. Tests are in `internal/tui/digests_test.go`.
+- **After the merge (mobile fix):** the web app shows periods in the
+  browser's time zone, like the feed's dates, not in UTC: an assessor's
+  local week (`2026-09-27T22:00:00Z` .. `2026-10-04T21:59:59Z` in Oslo) read
+  as `2026-09-27 22:00Z .. 2026-10-04 21:59Z` and squeezed the title into a
+  column on a phone. `formatPeriod` now gives `2026-09-28 .. 10-04` (the end
+  leaves out the year, and with times the day, it shares with the start).
+  On a phone the history puts the title on top and the period under it.
+  `PageTabs` pins `‹ feed` at the left of the scrolling tab row, and the
+  feed's mobile bar has a `▤` button to `/digests`. The TUI and CLI still
+  print UTC.
