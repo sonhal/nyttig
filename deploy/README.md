@@ -47,7 +47,7 @@ git tag v0.1.0 && git push origin v0.1.0     # a tag with a hyphen is a pre-rele
 
 ```
 nyttig-v0.1.0-linux-amd64/
-  bin/      nyttigd, nyttig, nyttig-api
+  bin/      nyttigd, nyttig, nyttig-api, nyttig-clef (see the Docker guide for the last)
   web/      build/ and package.json (the nyttig-web Node server)
   deploy/   these systemd units, the Caddyfile and this README
   sample_config.toml
@@ -82,7 +82,7 @@ BUNDLE=nyttig-dev-linux-amd64
 docker run --rm -v "$PWD":/src -w /src golang:1.26-trixie \
   sh -c "apt-get update && apt-get install -y --no-install-recommends libsqlite3-dev &&
          git config --global --add safe.directory /src &&
-         go build -trimpath -tags libsqlite3 -ldflags='-s -w' -o $BUNDLE/bin/ ./cmd/nyttigd ./cmd/nyttig ./cmd/nyttig-api"
+         go build -trimpath -tags libsqlite3 -ldflags='-s -w' -o $BUNDLE/bin/ ./cmd/nyttigd ./cmd/nyttig ./cmd/nyttig-api ./cmd/nyttig-clef"
 
 pnpm --dir web install --frozen-lockfile
 pnpm --dir web build        # web/build/ is plain JavaScript; any OS can build it
@@ -223,6 +223,16 @@ things follow from that:
 The `database opened` line in the journal shows the version in use as
 `sqlite_version`. A development build (`-tags sqlite_fts5`, see the main
 README) compiles go-sqlite3's bundled SQLite into the binary instead.
+
+## Clef assessor
+
+`nyttig-clef`, the optional assessor that scores items with Cloudflare's Clef
+models (see [Clef assessor](../README.md#clef-assessor) in the README), is
+deployed as a container, not as a systemd unit. Its image and a compose
+overlay are in the Docker guide: [`docker/README.md`](docker/README.md#the-clef-assessor-opt-in).
+The release bundle's `bin/nyttig-clef` is the same program for running it by
+hand against this server's socket (`--config` with `deploy/clef.sample.toml`
+as the starting point); a systemd unit for it is a follow-up.
 
 ## Upgrading
 

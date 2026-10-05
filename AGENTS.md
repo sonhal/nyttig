@@ -57,7 +57,7 @@ commit subject and on the PR title:
   anything else happens to it. Renaming a PR before merge is free; a missed
   release is not.
 - Scope names in use: `web`, `api`, `db`, `service`, `fetcher`, `scheduler`,
-  `tagger`, `tui`, `cli`, `deploy`, `ci`. Pick the one that names the part
+  `tagger`, `tui`, `cli`, `deploy`, `ci`, `clef`. Pick the one that names the part
   that changed; leave it out when the change spans the repo.
 - Dependabot's `build(deps):` titles are correct as they are and never
   release.
@@ -101,6 +101,7 @@ Docker model — a daemon and clients that talk over **gRPC**:
 | `nyttigd`    | `cmd/nyttigd`    | Daemon/server. Fetches RSS/Atom feeds on a schedule, tags items, serves gRPC. |
 | `nyttig`     | `cmd/nyttig`     | Client. Bubble Tea TUI (no args) or CLI subcommands for headless management.  |
 | `nyttig-api` | `cmd/nyttig-api` | Client. The web app's API (JSON + SSE over the gRPC API), behind a proxy.     |
+| `nyttig-clef` | `cmd/nyttig-clef` | Client. Assessor: scores items with Cloudflare's Clef models, writes assessments. |
 
 The web app itself (`web/`) is a SvelteKit app served by its own Node
 server; Caddy routes `/api/*` to nyttig-api and everything else to it.
@@ -147,6 +148,10 @@ internal/api/               nyttig-api's HTTP API: routing (server.go), JSON han
                             (digests.go), SSE bridge (stream.go), security middleware
                             (security.go)
 cmd/nyttig-api/main.go      nyttig-api entrypoint: flags, listen-address guard, HTTP server
+cmd/nyttig-clef/main.go     nyttig-clef entrypoint: flags, token, dial, wires internal/clef
+internal/clef/              nyttig-clef's engine: client.go (Workers AI HTTP client), config.go (its TOML
+                            file), assess.go (state, applicable questions, answer checks and mapping),
+                            loop.go (the polling loop); uses internal/client, never the db
 web/                        The SvelteKit app (pnpm); "pnpm build" writes a Node server to web/build/
 web/src/lib/                Pure modules (reducer, keymap, filter, query, command, highlight,
                             fuzzy, history, help, sanitize, markdown, viewed, forms, latest, meta, since,
@@ -181,14 +186,18 @@ deploy/systemd/             Hardened system units; nyttigd runs as a dedicated `
 deploy/README.md            VPS guide: sizing, build for Debian, mTLS for the TUI, backups, upgrades
 deploy/Caddyfile            Example reverse proxy (TLS, basic auth, /api/* vs the app)
 deploy/docker/              compose.yaml (the three images, their networks and volume), nyttigd's
-                            config.toml for it, .env.example, and the guide (README.md)
-Dockerfile, .dockerignore   One target per image: nyttigd, nyttig-api, nyttig-web
+                            config.toml for it, .env.example, and the guide (README.md);
+                            compose.mtls.yaml and compose.clef.yaml are the opt-in overlays
+                            (clef.toml is nyttig-clef's config in the container)
+deploy/clef.sample.toml     Example nyttig-clef config for a bare install (loaded by a test)
+Dockerfile, .dockerignore   One target per image: nyttigd, nyttig-api, nyttig-web, nyttig-clef
 docs/web-client-plan.md     Plan for the nyttig-api browser client (phases and decisions)
 docs/tag-tree-plan.md       Plan for parent tags (the tag tree): decisions and phases
 docs/saved-views-plan.md    Plan for saved views (named filters, feed tabs): decisions and phases
 docs/date-filter-plan.md    Plan for the date window (since:7d) in filters and views: decisions and phases
 docs/assessments-plan.md    Plan for assessments (scores and notes from external assessors): decisions and phases
 docs/docker-plan.md         Plan for the container images and compose setup: decisions and phases
+docs/clef-assessor-plan.md  Plan for nyttig-clef (an assessor using Cloudflare's Clef decision models): decisions and phases
 docs/digests-plan.md        Plan for digests (assessor-written summaries over many items, in series): decisions and phases
 CLAUDE.md                   `@AGENTS.md`: makes Claude Code load this file
 ```
@@ -259,7 +268,16 @@ which phases are done and whether they are merged; keep it current.
   images must keep building nyttigd the way the release does (`-tags
   libsqlite3` on trixie, with `ldd` checked), and the clients with
   `CGO_ENABLED=0`. A new build input outside `cmd/`, `internal/` and `web/`
-  must be added to `.dockerignore`'s allowlist.
+  must be added to `.dockerignore`'s allowlist. The Clef assessor is an
+  opt-in overlay, `compose.clef.yaml` (`COMPOSE_FILE=compose.yaml:compose.clef.yaml`):
+  `nyttig-clef` (distroless static, uid 10001, built `CGO_ENABLED=0` with the
+  other clients) mounts `nyttig-socket`, `clef.toml` and the compose secret
+  `cf-token` (`./clef-token`, gitignored, must be readable by uid 10001, read
+  via `token_file = "/run/secrets/cf-token"`), and sits alone on a `clef`
+  network with no published port. YAML anchors don't cross files, so the
+  overlay repeats the `*hardening` settings: keep them in step with
+  `compose.yaml`. CI's Images and Publish images matrices include it (no
+  healthcheck, it prints `-version`). There is no systemd unit for it.
 - **Item dates are text in UTC.** `items.published` is sorted as text, so
   every value must have one shape. The fetcher normalizes parsed dates to UTC
   with whole seconds, `db.InsertItem` does it again for any caller, and
@@ -422,6 +440,25 @@ which phases are done and whether they are merged; keep it current.
   (`:rate`, `=` in the web app). Both look it up by name and, on
   `AlreadyExists` / 409, look again, so two clients racing is fine. The daemon
   knows nothing special about it. Ratings are for the item as a whole.
+- **nyttig-clef** (`internal/clef`, `docs/clef-assessor-plan.md`) is an
+  assessor, i.e. an ordinary client: it reads a saved view with
+  `client.FindView` / `ViewSearchRequest`, asks Clef (Cloudflare Workers AI) the
+  questions in its own TOML file and calls `PutAssessment`. The daemon, the
+  proto, nyttig-api and the web app know nothing about it; the token comes
+  from `token_file` or `$CLOUDFLARE_API_TOKEN` (a `token` key in the TOML is
+  rejected). **The `unassessed` caveat:** `unassessed_by` hides an item once it
+  has *any* in-scope assessment by the assessor (`assessmentScopeSQL`), so the
+  loop must (1) never leave an item half-written without trying: each
+  `PutAssessment` is retried 3 times and a final failure is logged as
+  `assessment write failed`, and (2) page past items it cannot assess (no
+  applicable question, or 3 failed passes) with an in-memory skip set and
+  `offset`, because those items match the view forever. It also overrides the
+  view's `unassessed` with its own assessor, since a view without it would be
+  re-scored on every pass. Questions with a tag apply under the same subtree
+  rule as `ListItems` (`internal/clef/assess.go`, `Applicable`) but are written
+  with the configured tag's ID. Answers are checked (`CheckAnswers`) before
+  any write; Clef's response envelope (bare or `{"result": ...}`) is accepted
+  both ways. Feed text leaves the host for Cloudflare, so the README says so.
 - **Tagging** is rule-based only (no manual tagging). Rules are regex over
   `title`/`description`/`both`, global or per-source, evaluated by `priority`.
 - **View tracking** is K9s-style: the TUI marks items viewed as they scroll

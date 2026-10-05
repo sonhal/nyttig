@@ -231,7 +231,13 @@ jobs:
           go build -trimpath -tags libsqlite3 \
             -ldflags="-s -w -X github.com/sonhal/nyttig/internal/version.Version=$VERSION" \
             -o dist/ ./cmd/nyttig ./cmd/nyttigd ./cmd/nyttig-api
+          # nyttig-clef is a pure-Go client, built without cgo like the
+          # other clients in the container images.
+          CGO_ENABLED=0 go build -trimpath \
+            -ldflags="-s -w -X github.com/sonhal/nyttig/internal/version.Version=$VERSION" \
+            -o dist/ ./cmd/nyttig-clef
           dist/nyttigd -version
+          dist/nyttig-clef -version
           # Prove nyttigd links the system library rather than a bundled copy.
           ldd dist/nyttigd | grep -q libsqlite3
 
@@ -252,7 +258,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: [nyttigd, nyttig-api, nyttig-web]
+        target: [nyttigd, nyttig-api, nyttig-web, nyttig-clef]
     steps:
       - uses: actions/checkout@v7
 
@@ -295,7 +301,8 @@ jobs:
                 --tls-listen :9090 --tls-cert /certs/server.pem --tls-key /certs/server.key \
                 --tls-client-ca /certs/ca.pem
               ;;
-            nyttig-api)
+            nyttig-api | nyttig-clef)
+              # Distroless, no shell and so no healthcheck: it prints its version.
               "${run[@]}" "nyttig-ci/$TARGET" -version
               exit 0
               ;;
@@ -334,7 +341,7 @@ jobs:
     needs: [lint, generated, test, web, build, vulncheck, images]
     strategy:
       matrix:
-        target: [nyttigd, nyttig-api, nyttig-web]
+        target: [nyttigd, nyttig-api, nyttig-web, nyttig-clef]
     permissions:
       contents: read
       packages: write     # push to ghcr.io
@@ -458,7 +465,7 @@ jobs:
   # bundle with everything the server needs, laid out for deploy/README.md:
   #
   #   nyttig-<tag>-linux-amd64/
-  #     bin/      nyttigd, nyttig, nyttig-api
+  #     bin/      nyttigd, nyttig, nyttig-api, nyttig-clef
   #     web/      build/ and package.json (the nyttig-web Node server)
   #     deploy/   systemd units, Caddyfile, README.md
   #     sample_config.toml

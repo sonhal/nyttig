@@ -1,4 +1,5 @@
 # Nyttig in containers: nyttigd, nyttig-api and the web app (nyttig-web).
+# compose.clef.yaml optionally adds the Clef assessor (nyttig-clef).
 # The guide is README.md next to this file.
 #
 #   cp .env.example .env        # set NYTTIG_ORIGIN
