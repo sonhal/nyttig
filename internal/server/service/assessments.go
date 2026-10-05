@@ -183,12 +183,12 @@ func (s *Service) PutAssessment(ctx context.Context, req *pb.PutAssessmentReques
 	return dbAssessmentToProto(stored), nil
 }
 
-// pushItemUpdate sends the item, with all its assessments, to the stream
+// pushItemUpdate sends the item, with all its tags and assessments, to the stream
 // subscribers. The write has already succeeded, so a failure is only logged.
 func (s *Service) pushItemUpdate(itemID int64) {
 	item, err := db.GetItem(s.db, itemID)
 	if err != nil || item == nil {
-		slog.Warn("push assessment update", "item_id", itemID, "error", err)
+		slog.Warn("push item update", "item_id", itemID, "error", err)
 		return
 	}
 	s.hub.PushUpdate(ItemToProto(item))

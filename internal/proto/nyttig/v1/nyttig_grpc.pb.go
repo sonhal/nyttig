@@ -33,6 +33,7 @@ const (
 	Nyttig_RemoveTagRule_FullMethodName     = "/nyttig.v1.Nyttig/RemoveTagRule"
 	Nyttig_ListTagRules_FullMethodName      = "/nyttig.v1.Nyttig/ListTagRules"
 	Nyttig_TestTagRule_FullMethodName       = "/nyttig.v1.Nyttig/TestTagRule"
+	Nyttig_ApplyTagRules_FullMethodName     = "/nyttig.v1.Nyttig/ApplyTagRules"
 	Nyttig_AddSavedView_FullMethodName      = "/nyttig.v1.Nyttig/AddSavedView"
 	Nyttig_UpdateSavedView_FullMethodName   = "/nyttig.v1.Nyttig/UpdateSavedView"
 	Nyttig_RemoveSavedView_FullMethodName   = "/nyttig.v1.Nyttig/RemoveSavedView"
@@ -69,6 +70,10 @@ type NyttigClient interface {
 	RemoveTagRule(ctx context.Context, in *RemoveTagRuleRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	ListTagRules(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*ListTagRulesResponse, error)
 	TestTagRule(ctx context.Context, in *TestTagRuleRequest, opts ...grpc.CallOption) (*TestTagRuleResponse, error)
+	// Makes item_tags match the current rules for the tags in scope: adds the
+	// tags the rules give and removes the ones they no longer give. Tags with
+	// a rule whose pattern does not compile are skipped.
+	ApplyTagRules(ctx context.Context, in *ApplyTagRulesRequest, opts ...grpc.CallOption) (*ApplyTagRulesResponse, error)
 	// Saved views
 	AddSavedView(ctx context.Context, in *AddSavedViewRequest, opts ...grpc.CallOption) (*SavedView, error)
 	UpdateSavedView(ctx context.Context, in *UpdateSavedViewRequest, opts ...grpc.CallOption) (*SavedView, error)
@@ -222,6 +227,16 @@ func (c *nyttigClient) TestTagRule(ctx context.Context, in *TestTagRuleRequest, 
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(TestTagRuleResponse)
 	err := c.cc.Invoke(ctx, Nyttig_TestTagRule_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nyttigClient) ApplyTagRules(ctx context.Context, in *ApplyTagRulesRequest, opts ...grpc.CallOption) (*ApplyTagRulesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ApplyTagRulesResponse)
+	err := c.cc.Invoke(ctx, Nyttig_ApplyTagRules_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -391,6 +406,10 @@ type NyttigServer interface {
 	RemoveTagRule(context.Context, *RemoveTagRuleRequest) (*emptypb.Empty, error)
 	ListTagRules(context.Context, *emptypb.Empty) (*ListTagRulesResponse, error)
 	TestTagRule(context.Context, *TestTagRuleRequest) (*TestTagRuleResponse, error)
+	// Makes item_tags match the current rules for the tags in scope: adds the
+	// tags the rules give and removes the ones they no longer give. Tags with
+	// a rule whose pattern does not compile are skipped.
+	ApplyTagRules(context.Context, *ApplyTagRulesRequest) (*ApplyTagRulesResponse, error)
 	// Saved views
 	AddSavedView(context.Context, *AddSavedViewRequest) (*SavedView, error)
 	UpdateSavedView(context.Context, *UpdateSavedViewRequest) (*SavedView, error)
@@ -458,6 +477,9 @@ func (UnimplementedNyttigServer) ListTagRules(context.Context, *emptypb.Empty) (
 }
 func (UnimplementedNyttigServer) TestTagRule(context.Context, *TestTagRuleRequest) (*TestTagRuleResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method TestTagRule not implemented")
+}
+func (UnimplementedNyttigServer) ApplyTagRules(context.Context, *ApplyTagRulesRequest) (*ApplyTagRulesResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ApplyTagRules not implemented")
 }
 func (UnimplementedNyttigServer) AddSavedView(context.Context, *AddSavedViewRequest) (*SavedView, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method AddSavedView not implemented")
@@ -752,6 +774,24 @@ func _Nyttig_TestTagRule_Handler(srv interface{}, ctx context.Context, dec func(
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(NyttigServer).TestTagRule(ctx, req.(*TestTagRuleRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Nyttig_ApplyTagRules_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ApplyTagRulesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NyttigServer).ApplyTagRules(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Nyttig_ApplyTagRules_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NyttigServer).ApplyTagRules(ctx, req.(*ApplyTagRulesRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1055,6 +1095,10 @@ var Nyttig_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "TestTagRule",
 			Handler:    _Nyttig_TestTagRule_Handler,
+		},
+		{
+			MethodName: "ApplyTagRules",
+			Handler:    _Nyttig_ApplyTagRules_Handler,
 		},
 		{
 			MethodName: "AddSavedView",

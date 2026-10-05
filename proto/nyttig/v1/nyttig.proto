@@ -277,6 +277,28 @@ message TestTagRuleResponse {
     int32         scanned = 2;  // how many recent items were checked
 }
 
+// ApplyTagRulesRequest re-runs the current tag rules over stored items.
+// Rules otherwise only tag items as they are fetched.
+message ApplyTagRulesRequest {
+    int64 tag_id    = 1;  // 0 = every tag
+    int64 source_id = 2;  // 0 = every source's items
+    bool  dry_run   = 3;  // compute and report, change nothing
+}
+
+message TagSyncCount {
+    int64  tag_id   = 1;
+    string tag_name = 2;
+    int32  added    = 3;
+    int32  removed  = 4;
+}
+
+message ApplyTagRulesResponse {
+    int32 items_scanned           = 1;
+    int32 items_changed           = 2;  // items that gained or lost a tag
+    repeated TagSyncCount tags    = 3;  // only tags with a change, by name
+    repeated TagSyncCount skipped = 4;  // tags left alone: a rule's pattern does not compile
+}
+
 // ── Full-text search ────────────────────────────────────────
 
 message SearchRequest {
@@ -331,7 +353,7 @@ message ServerMessage {
         Item     item     = 1;
         Reset    reset    = 2;
         Complete complete = 3;
-        Item     item_update = 4;  // an item whose assessments changed, with all of them
+        Item     item_update = 4;  // an item whose tags or assessments changed, with all of them
     }
     // Only with item_update: whether the item matches the stream's current
     // filter. A client replaces an item_update it shows, and inserts one it
@@ -363,6 +385,10 @@ service Nyttig {
     rpc RemoveTagRule(RemoveTagRuleRequest) returns (google.protobuf.Empty);
     rpc ListTagRules(google.protobuf.Empty) returns (ListTagRulesResponse);
     rpc TestTagRule(TestTagRuleRequest) returns (TestTagRuleResponse);
+    // Makes item_tags match the current rules for the tags in scope: adds the
+    // tags the rules give and removes the ones they no longer give. Tags with
+    // a rule whose pattern does not compile are skipped.
+    rpc ApplyTagRules(ApplyTagRulesRequest) returns (ApplyTagRulesResponse);
 
     // Saved views
     rpc AddSavedView(AddSavedViewRequest) returns (SavedView);

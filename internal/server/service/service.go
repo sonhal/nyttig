@@ -988,7 +988,8 @@ func (h *Hub) Push(item *pb.Item) {
 	}
 }
 
-// PushUpdate broadcasts an item whose assessments changed, with all of them.
+// PushUpdate broadcasts an item whose tags or assessments changed, with all
+// of them.
 // Like Push it never blocks and drops the message for a slow subscriber.
 // Each subscriber's StreamItems decides whether the item matches its filter.
 func (h *Hub) PushUpdate(item *pb.Item) {

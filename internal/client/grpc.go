@@ -534,6 +534,17 @@ func (c *Client) TestTagRule(ctx context.Context, req *pb.TestTagRuleRequest) (*
 	return client.TestTagRule(ctx, req)
 }
 
+// ApplyTagRules re-runs the current tag rules over stored items.
+func (c *Client) ApplyTagRules(ctx context.Context, req *pb.ApplyTagRulesRequest) (*pb.ApplyTagRulesResponse, error) {
+	if err := c.ensureConn(ctx); err != nil {
+		return nil, err
+	}
+	c.mu.RLock()
+	client := c.grpc
+	c.mu.RUnlock()
+	return client.ApplyTagRules(ctx, req)
+}
+
 // Search performs an FTS5 full-text search.
 func (c *Client) Search(ctx context.Context, req *pb.SearchRequest) (*pb.SearchResponse, error) {
 	if err := c.ensureConn(ctx); err != nil {
