@@ -115,7 +115,8 @@ via a **bidirectional gRPC stream**.
 - TUI: **Bubble Tea** + **Lipgloss** (a custom table, not the bubbles table)
 - Wire: **Protocol Buffers (proto3)** + **gRPC** (bidi streaming)
 - Storage: **SQLite** with **FTS5** full-text search (cgo via mattn/go-sqlite3; see the build-tag note under [Build, test, run](#build-test-run))
-- Feed parsing: standard library `encoding/xml` (RSS 2.0 and Atom), with
+- Feed parsing: standard library `encoding/xml` (RSS 2.0, RSS 1.0 / 0.90
+  and Atom) and `encoding/json` (JSON Feed 1.x), with
   `golang.org/x/net/html/charset` for non-UTF-8 feeds
 - Config: **TOML**
 - Logging: `slog` with JSON output to stderr
@@ -190,6 +191,7 @@ docs/date-filter-plan.md    Plan for the date window (since:7d) in filters and v
 docs/assessments-plan.md    Plan for assessments (scores and notes from external assessors): decisions and phases
 docs/docker-plan.md         Plan for the container images and compose setup: decisions and phases
 docs/digests-plan.md        Plan for digests (assessor-written summaries over many items, in series): decisions and phases
+docs/source-types-plan.md   Plan for RSS 1.0 / JSON Feed detection and the CISA KEV source type: decisions and phases
 CLAUDE.md                   `@AGENTS.md`: makes Claude Code load this file
 ```
 
@@ -273,6 +275,18 @@ which phases are done and whether they are merged; keep it current.
   real feeds' dates. An unreadable date leaves `published` NULL and logs
   `unrecognized item date` once per new item batch. Such items sort last
   (`NULLS LAST`), and the web app and TUI show their fetch time in italics.
+- **Feed formats** (`docs/source-types-plan.md`). For `rss` and `atom`
+  sources the format comes from the document, not the type: `feedKind`
+  (`fetcher/fetch.go`) skips a BOM, calls a body starting with `{` a JSON
+  Feed (`jsonfeed.go`; JSON without a `jsonfeed.org/version/1` version is an
+  error), and otherwise reads XML tokens up to the root element: `rss`,
+  `feed` or `RDF`. Anything else is `unrecognized feed format`; there is no
+  "try every parser" fallback. `dc:creator` wins over RSS 2.0's `<author>`
+  (an e-mail address). `<comments>` also matches `slash:comments` (a count),
+  so `commentsURL` takes the first absolute http(s) value; `addComments`
+  appends it to the description unless it is the link or already there.
+  Titles derived from text (Bluesky, JSON Feed without a title) go through
+  `firstLine` and `truncateTitle` (120 characters).
 - **Fetch errors.** A failure to insert an item is reported as the source's
   `fetch_error` (the first failure plus a count), and a clean fetch clears it.
 - **Removing** a source, tag or rule that does not exist is `codes.NotFound`
@@ -833,14 +847,18 @@ pattern for new update RPCs rather than treating zero values as "unset".
   `@types/node` on purpose. A `*.test.ts` under `src/` can't use `node:fs`,
   `__dirname` or other Node APIs; `web/e2e/` is outside the checked set and
   is where Node code goes.
-- **Adding a source type** (today `rss` and `atom`) touches five places,
+- **Adding a source type** (today `rss`, `atom` and `bluesky`) touches five places,
   and missing one fails quietly: `validateFeedType` in
   `internal/server/service/validate.go`, the `--type` help in
   `cmd/nyttig/main.go`, the proto comment on `Source.type`, the `type`
   union in `web/src/lib/forms.ts` (it coerces anything that isn't `atom`
   to `rss`, so an unknown type gets rewritten on edit) and the select in
-  `web/src/lib/SourceForm.svelte`. The fetcher itself picks the parser from
-  the document, not from `type`.
+  `web/src/lib/SourceForm.svelte`. For `rss` and `atom` the fetcher picks
+  the parser from the document, not from `type`, so a new feed *format*
+  (like RSS 1.0 or JSON Feed) is a change to `feedKind` only, not a new
+  type. A type with its own request or parser (`bluesky`) also needs
+  `buildRequest` and `parseBody` in the fetcher, and usually the service's
+  add/update path.
 - Build artifacts (`bin/`, `dist/`, `main`, `nyttig`, `nyttigd`, `nyttig-api`,
   and `web/build/` via `web/.gitignore`) and tool caches
   (`.deps/`, `.modcache/`, `.pi/`) are covered by `.gitignore`. Its patterns are
