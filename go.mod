@@ -2,7 +2,7 @@ module github.com/sonhal/nyttig
 
 go 1.26.3
 
-toolchain go1.26.8
+toolchain go1.26.9
 
 require (
 	github.com/BurntSushi/toml v1.4.0
