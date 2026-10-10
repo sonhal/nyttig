@@ -225,7 +225,7 @@ which phases are done and whether they are merged; keep it current.
   package defines its own store interfaces (`scheduler.SourceStore`,
   `tagger.RuleStore`) so they don't import the db package directly.
 - **Fetching** uses one shared `http.Client` from `fetcher.NewHTTPClient`
-  with a 30s timeout, and caps response bodies at 10 MiB (`fetcher/fetch.go`).
+  with a 30s timeout, and caps response bodies at 32 MiB (`fetcher/fetch.go`).
   Keep both bounds when changing the fetcher; feeds are untrusted input.
   With `block_private_addresses` the client refuses non-public destinations
   in the dialer's `Control` hook, i.e. on the resolved IP at connect time.

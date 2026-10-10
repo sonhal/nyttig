@@ -201,13 +201,13 @@ func fetchInternal(database *sql.DB, src *db.Source, client doer) (*FetchResult,
 	}
 
 	// 3. Read response body with size limit.
-	const maxBodySize = 10 * 1024 * 1024 // 10 MiB
+	const maxBodySize = 32 * 1024 * 1024 // 32 MiB
 	body, err := io.ReadAll(io.LimitReader(resp.Body, maxBodySize+1))
 	if err != nil {
 		return fail(err)
 	}
 	if int64(len(body)) > maxBodySize {
-		return fail(fmt.Errorf("response body exceeds 10MiB limit"))
+		return fail(fmt.Errorf("response body exceeds 32MiB limit"))
 	}
 
 	// 4. Parse entries.
