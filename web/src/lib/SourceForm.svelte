@@ -2,7 +2,7 @@
 <script lang="ts">
 	import { onMount, untrack } from 'svelte';
 	import ColorField from './ColorField.svelte';
-	import { hasErrors, validateSource, type SourceForm } from './forms';
+	import { EUVD_DEFAULT_URL, hasErrors, validateSource, type SourceForm } from './forms';
 
 	interface Props {
 		initial: SourceForm;
@@ -71,7 +71,11 @@
 					type={f.type === 'bluesky' ? 'text' : 'url'}
 					bind:value={f.url}
 					maxlength="2048"
-					placeholder={f.type === 'bluesky' ? 'alice.bsky.social' : 'https://example.com/feed.xml'}
+					placeholder={f.type === 'bluesky'
+						? 'alice.bsky.social'
+						: f.type === 'euvd'
+							? EUVD_DEFAULT_URL
+							: 'https://example.com/feed.xml'}
 					autocomplete="off"
 					autocapitalize="off"
 					spellcheck="false"
@@ -86,6 +90,11 @@
 				<span class="hint"
 					>a handle (alice.bsky.social), a DID, or a bsky.app profile URL; the name is optional</span
 				>
+			{:else if f.type === 'euvd'}
+				<span class="hint"
+					>an EUVD /api/search URL with filters (exploited=true, fromScore=9, vendor=…); leave it empty
+					for exploited vulnerabilities; the name is optional</span
+				>
 			{/if}
 		</div>
 		<div class="field">
@@ -94,6 +103,7 @@
 					<option value="rss">rss</option>
 					<option value="atom">atom</option>
 					<option value="bluesky">bluesky</option>
+					<option value="euvd">euvd</option>
 				</select></label
 			>
 		</div>
