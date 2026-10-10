@@ -1,4 +1,4 @@
-// Package fetcher handles fetching RSS/Atom feeds and Bluesky accounts from
+// Package fetcher handles fetching RSS, Atom and JSON feeds and Bluesky accounts from
 // remote sources, parsing them, deduplicating entries, and inserting new
 // items into the database.
 package fetcher
@@ -12,10 +12,12 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"regexp"
 	"strings"
 	"time"
 	"unicode"
+	"unicode/utf8"
 
 	"golang.org/x/net/html/charset"
 
@@ -42,12 +44,34 @@ type rssChannel struct {
 }
 
 type rssItem struct {
-	Title       string `xml:"title"`
-	Link        string `xml:"link"`
-	Description string `xml:"description"`
-	Author      string `xml:"author"`
-	GUID        string `xml:"guid"`
-	PubDate     string `xml:"pubDate"`
+	Title       string   `xml:"title"`
+	Link        string   `xml:"link"`
+	Description string   `xml:"description"`
+	Author      string   `xml:"author"`
+	Creators    []string `xml:"http://purl.org/dc/elements/1.1/ creator"`
+	GUID        string   `xml:"guid"`
+	PubDate     string   `xml:"pubDate"`
+	// Comments also matches slash:comments, a comment count that WordPress
+	// feeds send next to the URL; commentsURL picks the URL.
+	Comments []string `xml:"comments"`
+}
+
+// ── RSS 1.0 / 0.90 (RDF) types ──────────────────────────────────
+
+type rdfFeed struct {
+	XMLName xml.Name `xml:"http://www.w3.org/1999/02/22-rdf-syntax-ns# RDF"`
+	// Items are siblings of <channel>, not inside it. "item" without a
+	// namespace matches both RSS 1.0's and RSS 0.90's.
+	Items []rdfItem `xml:"item"`
+}
+
+type rdfItem struct {
+	About       string   `xml:"http://www.w3.org/1999/02/22-rdf-syntax-ns# about,attr"`
+	Title       string   `xml:"title"`
+	Link        string   `xml:"link"`
+	Description string   `xml:"description"`
+	Date        string   `xml:"http://purl.org/dc/elements/1.1/ date"`
+	Creators    []string `xml:"http://purl.org/dc/elements/1.1/ creator"`
 }
 
 // ── Atom 1.0 types ──────────────────────────────────────────────
@@ -141,7 +165,7 @@ type doer interface {
 // Atom, the author-feed API call for Bluesky. An error means the source is
 // misconfigured; it is reported as the source's fetch error.
 func buildRequest(src *db.Source) (*http.Request, error) {
-	reqURL, accept := src.URL, "application/rss+xml, application/atom+xml, application/xml, */*"
+	reqURL, accept := src.URL, "application/rss+xml, application/atom+xml, application/feed+json, application/rdf+xml, application/xml, */*"
 	if src.Type == TypeBluesky {
 		// Config-seeded sources skip the service's validation, so check
 		// the account here.
@@ -165,7 +189,7 @@ func parseBody(src *db.Source, body []byte) ([]parsedEntry, error) {
 	if src.Type == TypeBluesky {
 		return parseBluesky(body)
 	}
-	// Auto-detect RSS vs Atom by root element.
+	// Detect the format from the document.
 	return parseFeed(body)
 }
 
@@ -281,37 +305,64 @@ func fetchInternal(database *sql.DB, src *db.Source, client doer) (*FetchResult,
 	return result, nil
 }
 
-// parseFeed detects the root XML element and dispatches to the appropriate
+// parseFeed detects the feed format (see feedKind) and dispatches to its
 // parser. Returns normalized parsedEntry values.
 func parseFeed(body []byte) ([]parsedEntry, error) {
-	s := strings.TrimSpace(string(body))
-
-	// Auto-detect format by scanning for the root opening tag.
-	if strings.HasPrefix(s, "<?xml") {
-		// Skip XML declaration.
-		idx := strings.Index(s, ">")
-		if idx >= 0 {
-			s = s[idx+1:]
-		}
-	}
-	s = strings.TrimSpace(s)
-
-	if strings.HasPrefix(s, "<rss") || strings.HasPrefix(s, "<rss ") {
+	body = bytes.TrimPrefix(body, utf8BOM)
+	switch feedKind(body) {
+	case kindRSS:
 		return parseRSS(body)
-	}
-	if strings.HasPrefix(s, "<feed") || strings.HasPrefix(s, "<feed ") {
+	case kindAtom:
 		return parseAtom(body)
+	case kindRDF:
+		return parseRDF(body)
+	case kindJSON:
+		return parseJSONFeed(body)
 	}
-
-	// Try both parsers as a fallback.
-	if entries, err := parseRSS(body); err == nil && len(entries) > 0 {
-		return entries, nil
-	}
-	if entries, err := parseAtom(body); err == nil && len(entries) > 0 {
-		return entries, nil
-	}
-
 	return nil, fmt.Errorf("unrecognized feed format")
+}
+
+// utf8BOM is the byte order mark some feeds start with.
+var utf8BOM = []byte("\xef\xbb\xbf")
+
+// Feed formats feedKind recognizes.
+const (
+	kindRSS  = "rss"  // RSS 2.0 (and 0.9x): <rss>
+	kindAtom = "atom" // Atom 1.0: <feed>
+	kindRDF  = "rdf"  // RSS 1.0 and 0.90: <rdf:RDF>
+	kindJSON = "json" // JSON Feed 1.x
+)
+
+// feedKind tells the format of a body without parsing all of it: a JSON
+// object is a JSON Feed, and XML is decided by its root element's local
+// name, read with a token scan that skips the declaration, comments, a
+// doctype and whitespace. "" means neither.
+func feedKind(body []byte) string {
+	body = bytes.TrimPrefix(body, utf8BOM)
+	if trimmed := bytes.TrimLeftFunc(body, unicode.IsSpace); len(trimmed) > 0 && trimmed[0] == '{' {
+		return kindJSON
+	}
+	dec := xml.NewDecoder(bytes.NewReader(body))
+	dec.CharsetReader = charset.NewReaderLabel
+	for {
+		tok, err := dec.Token()
+		if err != nil {
+			return ""
+		}
+		start, ok := tok.(xml.StartElement)
+		if !ok {
+			continue
+		}
+		switch start.Name.Local {
+		case "rss":
+			return kindRSS
+		case "feed":
+			return kindAtom
+		case "RDF":
+			return kindRDF
+		}
+		return ""
+	}
 }
 
 // decodeXML is xml.Unmarshal with support for the encoding named in the XML
@@ -337,14 +388,115 @@ func parseRSS(body []byte) ([]parsedEntry, error) {
 			Title:       cleanText(item.Title),
 			Link:        strings.TrimSpace(item.Link),
 			Description: sanitizeHTML(item.Description),
-			Author:      cleanText(item.Author),
+			Author:      joinNames(item.Creators),
 			GUID:        strings.TrimSpace(item.GUID),
 		}
+		// dc:creator is a name; RSS 2.0's <author> is an e-mail address.
+		if entry.Author == "" {
+			entry.Author = cleanText(item.Author)
+		}
+		addComments(&entry, item.Comments)
 		entry.Published, entry.BadDate = entryDate(item.PubDate)
 		entries = append(entries, entry)
 	}
 
 	return entries, nil
+}
+
+// parseRDF parses an RSS 1.0 or 0.90 (RDF) feed into normalized entries.
+func parseRDF(body []byte) ([]parsedEntry, error) {
+	var feed rdfFeed
+	if err := decodeXML(body, &feed); err != nil {
+		return nil, fmt.Errorf("rss 1.0 parse: %w", err)
+	}
+
+	var entries []parsedEntry
+	for _, item := range feed.Items {
+		entry := parsedEntry{
+			Title:       cleanText(item.Title),
+			Link:        strings.TrimSpace(item.Link),
+			Description: sanitizeHTML(item.Description),
+			Author:      joinNames(item.Creators),
+			GUID:        strings.TrimSpace(item.About),
+		}
+		entry.Published, entry.BadDate = entryDate(item.Date)
+		entries = append(entries, entry)
+	}
+
+	return entries, nil
+}
+
+// ── Shared entry helpers ────────────────────────────────────────
+
+// joinNames joins author names (dc:creator elements, JSON Feed authors)
+// with ", ", leaving out blank ones.
+func joinNames(names []string) string {
+	var out []string
+	for _, n := range names {
+		if n = cleanText(n); n != "" {
+			out = append(out, n)
+		}
+	}
+	return strings.Join(out, ", ")
+}
+
+// addComments records an RSS item's <comments> URL, the discussion thread
+// on sites like Hacker News and Lobsters. Items have one link, so the
+// article stays the link and the thread is appended to the description,
+// unless the description already has it; an item without a link links to
+// the thread instead.
+func addComments(e *parsedEntry, comments []string) {
+	c := commentsURL(comments)
+	switch {
+	case c == "" || c == e.Link:
+	case e.Link == "":
+		e.Link = c
+	case strings.Contains(e.Description, c):
+	case e.Description == "":
+		e.Description = "Comments: " + c
+	default:
+		e.Description += " Comments: " + c
+	}
+}
+
+// commentsURL returns the first value that is an absolute http(s) URL, so
+// slash:comments counts and other schemes are skipped.
+func commentsURL(values []string) string {
+	for _, v := range values {
+		v = strings.TrimSpace(v)
+		if strings.ContainsFunc(v, unicode.IsSpace) {
+			continue
+		}
+		u, err := url.Parse(v)
+		if err == nil && (u.Scheme == "http" || u.Scheme == "https") && u.Host != "" {
+			return v
+		}
+	}
+	return ""
+}
+
+// derivedTitleMax is the longest title, in characters, made from an item's
+// text when it has no title of its own (Bluesky posts, microblog JSON Feeds).
+const derivedTitleMax = 120
+
+// firstLine is the first line of text that is not blank, cleaned.
+func firstLine(text string) string {
+	for _, line := range strings.Split(text, "\n") {
+		if l := cleanText(line); l != "" {
+			return l
+		}
+	}
+	return ""
+}
+
+// truncateTitle shortens s to at most max characters, ending in an ellipsis
+// when it cut something.
+func truncateTitle(s string, max int) string {
+	if utf8.RuneCountInString(s) <= max {
+		return s
+	}
+	r := []rune(s)[:max-1]
+	return strings.TrimSpace(string(r)) + "…"
 }
 
 // parseAtom parses an Atom 1.0 XML feed into normalized entries.

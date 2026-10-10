@@ -11,7 +11,6 @@ import (
 	"regexp"
 	"strings"
 	"time"
-	"unicode/utf8"
 )
 
 // TypeBluesky is the source type for a Bluesky account's own posts. The
@@ -27,7 +26,7 @@ const (
 	blueskyProfileURLPrefix = "https://bsky.app/profile/"
 	blueskyFeedLimit        = "50"
 	// blueskyTitleMax is the longest post title, in characters.
-	blueskyTitleMax = 120
+	blueskyTitleMax = derivedTitleMax
 	// maxXRPCBody caps what is read from an error or profile response.
 	maxXRPCBody = 1 << 20
 	// profileTimeout bounds a single handle resolution.
@@ -398,12 +397,7 @@ func blueskyDescription(text string, e embedText) string {
 // characters. A post without text is titled by its first image's alt text or
 // its link card.
 func blueskyTitle(text string, e embedText) string {
-	var title string
-	for _, line := range strings.Split(text, "\n") {
-		if title = cleanText(line); title != "" {
-			break
-		}
-	}
+	title := firstLine(text)
 	if title == "" {
 		switch {
 		case len(e.alts) > 0:
@@ -414,11 +408,7 @@ func blueskyTitle(text string, e embedText) string {
 			return "(no text)"
 		}
 	}
-	if utf8.RuneCountInString(title) > blueskyTitleMax {
-		r := []rune(title)[:blueskyTitleMax-1]
-		title = strings.TrimSpace(string(r)) + "…"
-	}
-	return title
+	return truncateTitle(title, blueskyTitleMax)
 }
 
 // blueskyPublished is the post's own createdAt, which the author's client

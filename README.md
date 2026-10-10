@@ -218,11 +218,47 @@ clients such as nyttig-api; `socket` must then be a Unix socket path.
 | Field         | Required | Default | Description                                      |
 |---------------|----------|---------|--------------------------------------------------|
 | `name`        | yes      | —       | Display name for the feed                        |
-| `url`         | yes      | —       | Feed URL (RSS or Atom), or for `bluesky` the profile URL |
+| `url`         | yes      | —       | Feed URL (RSS, Atom or JSON Feed), or for `bluesky` the profile URL |
 | `type`        | no       | `rss`   | Feed type: `rss`, `atom` or `bluesky`            |
 | `refresh_sec` | no       | `3600`  | Fetch interval in seconds                        |
 | `color`       | no       | —       | Hex color for the source chip in the TUI         |
 | `abbreviation`| no       | —       | Short display name in the TUI (falls back to `name`) |
+
+#### Feed formats
+
+For `rss` and `atom` sources the daemon reads the format from the document,
+not from `type`, so either type works for any of these:
+
+- **RSS 2.0** (and 0.9x), **RSS 1.0** and **RSS 0.90** (the RDF formats, an
+  `<rdf:RDF>` root), **Atom 1.0**, and **JSON Feed** 1.0 and 1.1.
+- The author is `dc:creator` when the item has one (several are joined with
+  ", "), otherwise RSS 2.0's `<author>`, which is often an e-mail address.
+- An RSS item's `<comments>` URL, the discussion thread on sites like Hacker
+  News and Lobsters, is added to the description as `Comments: <url>`; the
+  article stays the item's link. An item without a link links to the thread.
+- A JSON Feed item without a title (microblog posts) is titled by the first
+  line of its text, at most 120 characters.
+
+#### Developer feeds that work as-is
+
+These are plain RSS or Atom sources; nothing beyond `url` is needed.
+
+| What | URL |
+|---|---|
+| Hacker News front page | `https://news.ycombinator.com/rss` |
+| Hacker News, filtered ([hnrss.org](https://hnrss.org), third party) | `https://hnrss.org/newest?points=100`, `https://hnrss.org/show?points=50`, `https://hnrss.org/newest?q=rust&points=30` (`frontpage`, `newest`, `show`, `ask`, `jobs`; `points`, `comments`, `q`) |
+| Lobsters | `https://lobste.rs/rss`, one tag: `https://lobste.rs/t/<tag>.rss` |
+| GitHub releases, tags, commits | `https://github.com/<owner>/<repo>/releases.atom`, `.../tags.atom`, `.../commits.atom` |
+| arXiv categories (daily) | `https://rss.arxiv.org/rss/cs.CR+cs.PL` (join categories with `+`) |
+| PyPI releases of a project | `https://pypi.org/rss/project/<name>/releases.xml` |
+| crates.io (experimental) | `https://static.crates.io/rss/crates/<name>.xml` |
+| Mastodon account or hashtag | `https://<instance>/@<user>.rss`, `https://<instance>/tags/<tag>.rss` (the instance's view of the tag; boosts are not included) |
+| E-mail newsletters | Through an e-mail-to-Atom bridge such as [Kill the Newsletter](https://kill-the-newsletter.com) or the self-hosted kill-the-news |
+
+Hacker News and Lobsters feeds put the discussion link in `<comments>`, which
+shows up as `Comments: <url>` in the description. hnrss.org and the
+newsletter bridges are run by third parties; mind their rate limits with a
+`refresh_sec` of an hour or more.
 
 #### Bluesky sources
 

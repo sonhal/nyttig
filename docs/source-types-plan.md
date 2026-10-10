@@ -1,6 +1,7 @@
 # Source types plan: more feed formats and a CISA KEV source
 
-Status: **plan, not started.** Two phases, one PR each.
+Status: **phase 1 implemented, not yet merged**; phase 2 not started. Two
+phases, one PR each.
 
 nyttig reads RSS 2.0, Atom and Bluesky accounts. This plan adds:
 
@@ -297,4 +298,12 @@ file server (the sandbox blocks most feed hosts):
 
 ## Deviations from this plan
 
-None yet.
+- **Phase 1:** the detection, RDF and comments tests are in a new
+  `formats_test.go` rather than `fetch_test.go`, which is already long.
+  `<comments>` is read as a list because the unnamespaced tag also matches
+  `slash:comments` (WordPress and Slashdot send a comment count there);
+  the first absolute http(s) value is the URL. A JSON Feed whose version
+  URL uses `http://` is accepted too. The README's crates.io URL
+  (`static.crates.io/rss/crates/<name>.xml`) and the Lobsters front-page
+  feed (`/rss`) could not be fetched from the sandbox; the other URL shapes
+  were confirmed by search results, not by fetching them.
