@@ -111,7 +111,7 @@ daemons. The daemon pushes newly fetched items to connected TUIs in real time
 via a **bidirectional gRPC stream**.
 
 - Language: **Go 1.26+** (`go.mod` sets `go 1.26.3` as the minimum and
-  `toolchain go1.26.8` as the version to build with; see [Dependencies](#dependencies))
+  `toolchain go1.26.9` as the version to build with; see [Dependencies](#dependencies))
 - TUI: **Bubble Tea** + **Lipgloss** (a custom table, not the bubbles table)
 - Wire: **Protocol Buffers (proto3)** + **gRPC** (bidi streaming)
 - Storage: **SQLite** with **FTS5** full-text search (cgo via mattn/go-sqlite3; see the build-tag note under [Build, test, run](#build-test-run))
