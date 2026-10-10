@@ -412,6 +412,15 @@ func seedFromConfig(database *sql.DB, cfg *config.Config, logger *slog.Logger) e
 		srcIDByName[s.Name] = s.ID
 	}
 	for _, cs := range cfg.Sources {
+		if cs.Type == fetcher.TypeEUVD {
+			// The same defaults as AddSource.
+			if cs.URL == "" {
+				cs.URL = fetcher.EUVDDefaultURL
+			}
+			if cs.Name == "" {
+				cs.Name = fetcher.EUVDDefaultName
+			}
+		}
 		if cs.URL == "" {
 			logger.Warn("skipping config source with empty url", "name", cs.Name)
 			continue

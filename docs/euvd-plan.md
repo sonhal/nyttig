@@ -114,6 +114,15 @@ assumptions marked **(verify)** against a live response.
 
 PR title: **`feat: EUVD source type with CVSS and EPSS assessments`**.
 
+## Deviations
+
+- Config seeding (`seedFromConfig`) fills in the default URL and name for a
+  `type = "euvd"` entry without them, as `AddSource` does; the plan only
+  had the service do it.
+- The daemon's push of `UpdatedItemIDs` is covered by
+  `TestDoFetch_EUVD` (the assessment is updated in place), not by a
+  stream-level test: the Hub's subscribe is unexported to `cmd/nyttigd`.
+
 ## Security
 
 - Every text field is untrusted: it goes through `cleanText`, and clients
