@@ -11,6 +11,7 @@ import (
 
 	"github.com/sonhal/nyttig/internal/config"
 	"github.com/sonhal/nyttig/internal/server/db"
+	"github.com/sonhal/nyttig/internal/server/fetcher"
 )
 
 func openSeedDB(t *testing.T) *sql.DB {
@@ -217,5 +218,23 @@ func TestSeed_SampleConfigAssessors(t *testing.T) {
 		if a, err := db.GetAssessorByName(database, name); err != nil || a == nil {
 			t.Errorf("assessor %q not seeded: %v, %v", name, a, err)
 		}
+	}
+}
+
+func TestSeed_EUVDDefaults(t *testing.T) {
+	database := openSeedDB(t)
+	logger, _ := captureLogger()
+	cfg := &config.Config{Sources: []config.Source{{Type: "euvd"}}}
+	for range 2 { // seeding is idempotent
+		if err := seedFromConfig(database, cfg, logger); err != nil {
+			t.Fatal(err)
+		}
+	}
+	list, err := db.ListSources(database)
+	if err != nil || len(list) != 1 {
+		t.Fatalf("sources = %v, %v", list, err)
+	}
+	if list[0].URL != fetcher.EUVDDefaultURL || list[0].Name != "EUVD" || list[0].Type != "euvd" {
+		t.Errorf("source = %+v", list[0])
 	}
 }

@@ -58,6 +58,13 @@ type = "atom"
 # type = "bluesky"
 # refresh_sec = 900
 
+# The EU Vulnerability Database (EUVD): exploited vulnerabilities when url is
+# left out, or any https://euvdservices.enisa.europa.eu/api/search?... query.
+# Scores become the euvd-cvss and euvd-epss assessors' assessments.
+# [[sources]]
+# type = "euvd"
+# refresh_sec = 21600
+
 [[tags]]
 name = "rust"
 color = "#FF6B35"

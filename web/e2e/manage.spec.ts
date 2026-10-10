@@ -153,6 +153,42 @@ test('sources: add, edit, enable/disable, refresh, fetch errors and delete', asy
 	await expect(page.getByTestId('note')).toContainText(`deleted ${name}`);
 });
 
+test('sources: an euvd source reads a search, with CVSS and EPSS scores', async ({ page }) => {
+	const slug = `euvd-${test.info().project.name}`;
+	await openFeed(page);
+	await goTo(page, 'sources');
+
+	await act(page, 'add');
+	await page.locator('select').first().selectOption('euvd');
+	const url = page.getByTestId('source-url');
+	await expect(url).toHaveAttribute('placeholder', /euvdservices\.enisa\.europa\.eu\/api\/search/);
+	await expect(page.getByTestId('source-form')).toContainText('leave it empty');
+	// The name is optional, the url is the test server's search.
+	await url.fill(`${FEEDS_URL}/euvd/${slug}/api/search?exploited=true`);
+	await save(page, url);
+	await expect(page.getByTestId('source-form')).toHaveCount(0);
+	const row = listRow(page, 'sources', `/euvd/${slug}/`);
+	await expect(row).toContainText('EUVD');
+	await expect(row.locator('.last')).not.toContainText('never', { timeout: 15_000 });
+	await expect(row.getByTestId('fetch-error')).toHaveCount(0);
+
+	// The records are items, with their scores as assessments.
+	await backToFeed(page);
+	const item = page.locator('[role=row]').filter({ hasText: `CVE-2026-90001: ${slug} remote code execution` });
+	await expect(item).toBeVisible();
+	await expect(item.getByTestId('score-chip').filter({ hasText: 'euvd-cvss 0.98' })).toHaveCount(1);
+	await expect(item.getByTestId('score-chip').filter({ hasText: 'euvd-epss 0.42' })).toHaveCount(1);
+	// No CVE alias: the title starts with the EUVD ID.
+	await expect(page.locator('[role=row]').filter({ hasText: `EUVD-2026-90002: ${slug} information disclosure` })).toBeVisible();
+
+	await goTo(page, 'sources');
+	await pick(row);
+	await act(page, 'delete');
+	await expect(page.getByTestId('confirm')).toContainText('2 items');
+	await confirmDelete(page);
+	await expect(row).toHaveCount(0);
+});
+
 test('tags: add, recolor and delete, and the feed follows', async ({ page }) => {
 	const name = `e2e-${test.info().project.name}`;
 	await openFeed(page);

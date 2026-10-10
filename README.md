@@ -217,9 +217,9 @@ clients such as nyttig-api; `socket` must then be a Unix socket path.
 
 | Field         | Required | Default | Description                                      |
 |---------------|----------|---------|--------------------------------------------------|
-| `name`        | yes      | —       | Display name for the feed                        |
-| `url`         | yes      | —       | Feed URL (RSS, Atom or JSON Feed), or for `bluesky` the profile URL |
-| `type`        | no       | `rss`   | Feed type: `rss`, `atom` or `bluesky`            |
+| `name`        | yes      | —       | Display name for the feed (`euvd`: optional, defaults to `EUVD`) |
+| `url`         | yes      | —       | Feed URL (RSS, Atom or JSON Feed), for `bluesky` the profile URL, for `euvd` an EUVD search URL (optional, see [EUVD sources](#euvd-sources)) |
+| `type`        | no       | `rss`   | Feed type: `rss`, `atom`, `bluesky` or `euvd`    |
 | `refresh_sec` | no       | `3600`  | Fetch interval in seconds                        |
 | `color`       | no       | —       | Hex color for the source chip in the TUI         |
 | `abbreviation`| no       | —       | Short display name in the TUI (falls back to `name`) |
@@ -289,6 +289,57 @@ name is optional for Bluesky sources: it defaults to the account's display
 name, or `@handle`. Each post becomes an item: the title is the post's first
 line, the description holds the full text plus any quoted post, image alt text
 and link card.
+
+#### EUVD sources
+
+`type = "euvd"` reads ENISA's [EU Vulnerability Database](https://euvd.enisa.europa.eu)
+(EUVD), the European counterpart of NVD and CISA's KEV, through its public
+JSON API; no key is needed. The `url` is an `/api/search` URL with the
+filters you want, and may be left out, which means exploited
+vulnerabilities:
+
+```toml
+[[sources]]
+type = "euvd"                # https://euvdservices.enisa.europa.eu/api/search?exploited=true, named "EUVD"
+refresh_sec = 21600
+
+[[sources]]
+name = "EUVD critical"
+url = "https://euvdservices.enisa.europa.eu/api/search?fromScore=9"
+type = "euvd"
+refresh_sec = 21600
+```
+
+The search takes `exploited`, `fromScore`/`toScore` (whole numbers 0–10),
+`fromEpss`/`toEpss` (0–100), `fromDate`/`toDate` (published,
+`YYYY-MM-DD`), `vendor`, `product`, `assigner` and `text`. EUVD answers a
+malformed query (a decimal score, say) with HTTP 403, which shows as the
+source's fetch error. The EUVD shortcuts `/api/lastvulnerabilities` and
+`/api/exploitedvulnerabilities` return only 8 records and are not supported.
+
+Every fetch reads the records **updated in the last 14 days**, 100 per
+request, up to 2,000. A search that matches more still inserts the first
+2,000 and sets the fetch error to `euvd: query matches N records, read the
+first 2000; narrow the query`. Each record becomes one item:
+
+- title `CVE-2026-1234: <first line of the description>` (the EUVD ID when
+  there is no CVE alias), link `https://euvd.enisa.europa.eu/vulnerability/<EUVD ID>`,
+  author the assigning CNA, date the record's publication date;
+- a one-line description: the text, the EUVD and CVE IDs, `Vendor:`,
+  `Product:` (with versions), `CVSS 9.8 (3.1) <vector>.`, `EPSS 12.5%.`,
+  `Exploited since 2026-10-01.` and up to 10 reference URLs. Tag rules
+  can match on it, e.g. a rule on `Exploited since` or on a vendor you run.
+
+The scores are also stored as [assessments](#assessments) by two assessors
+that the daemon creates the first time it needs them: **`euvd-cvss`**, the
+CVSS base score divided by 10 (9.8 is 0.98), and **`euvd-epss`**, the EPSS
+percentage as a fraction (12.5% is 0.125). So `score:euvd-cvss>=0.9` in the
+web app's filter bar, `nyttig search -assessor euvd-cvss -min-score 0.9`, or a
+saved view lists the critical ones, and `sort:score` orders them. Items are
+written once, but the scores are checked on every fetch: when EUVD rescores a
+record, its assessment is updated and pushed to open clients. Deleting
+`euvd-cvss` or `euvd-epss` deletes their scores, and the next fetch creates
+the assessor again; a renamed one is no longer written to.
 
 ### `[[tags]]`
 
@@ -431,9 +482,10 @@ Items are automatically marked as viewed when you scroll past them in the TUI (K
 When invoked with arguments, `nyttig` acts as a CLI management tool:
 
 ```
-nyttig add-source      -n <name> -u <url> [-t rss|atom|bluesky] [-r refresh_sec] [-color <hex>] [-abbreviation <short>]
+nyttig add-source      -n <name> -u <url> [-t rss|atom|bluesky|euvd] [-r refresh_sec] [-color <hex>] [-abbreviation <short>]
+nyttig add-source      -t euvd [-u <EUVD /api/search url>] [-n <name>]     # both optional, see EUVD sources
 nyttig list-sources
-nyttig update-source   -id <source_id> [-n <name>] [-u <url>] [-t rss|atom|bluesky] [-r refresh_sec]
+nyttig update-source   -id <source_id> [-n <name>] [-u <url>] [-t rss|atom|bluesky|euvd] [-r refresh_sec]
                        [-enable|-disable] [-color <hex>] [-abbreviation <short>]
 nyttig remove-source   -id <source_id>
 nyttig add-tag         -n <name> [-c <hex_color>] [-parent <name|id>]...
@@ -535,11 +587,11 @@ clients get the same checks:
 
 | Value           | Rule                                                        |
 |-----------------|-------------------------------------------------------------|
-| Source URL      | Absolute `http`/`https` URL with a host, no credentials, at most 2048 bytes; for `bluesky`, a handle, DID or bsky.app profile URL |
-| Source type     | `rss`, `atom` or `bluesky`                                  |
+| Source URL      | Absolute `http`/`https` URL with a host, no credentials, at most 2048 bytes; for `bluesky`, a handle, DID or bsky.app profile URL; for `euvd`, empty means the default search |
+| Source type     | `rss`, `atom`, `bluesky` or `euvd`                          |
 | Refresh interval| 60 seconds to 7 days (default 3600)                         |
 | Colors          | `#RRGGBB`, or empty for none                                |
-| Names           | Non-empty (a `bluesky` source may omit its name), no control characters; sources ≤ 200, tags ≤ 64, abbreviations ≤ 16 characters |
+| Names           | Non-empty (a `bluesky` or `euvd` source may omit its name), no control characters; sources ≤ 200, tags ≤ 64, abbreviations ≤ 16 characters |
 | Assessor        | Name ≤ 64 characters, description ≤ 500 characters without control characters, optional `#RRGGBB` color |
 | Score           | A number from 0 to 1 (NaN and infinities are rejected); `min_score` follows the same rule and, like `sort: score`, needs an assessor |
 | Note            | Valid UTF-8, at most 4096 bytes; an assessment needs a score or a note |
@@ -1389,7 +1441,7 @@ Removing a source, tag or tag rule that does not exist fails with gRPC
 | Database      | SQLite with FTS5                    |
 | Migrations    | Embedded SQL files                  |
 | Configuration | TOML                                |
-| Feed parsing  | `encoding/xml` (RSS 2.0 / Atom), any encoding the feed declares; `encoding/json` (Bluesky) |
+| Feed parsing  | `encoding/xml` (RSS 2.0 / Atom), any encoding the feed declares; `encoding/json` (JSON Feed, Bluesky, EUVD) |
 | Logging       | `slog` with JSON output             |
 
 ## License

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+	EUVD_DEFAULT_URL,
 	assessorAddBody,
 	assessorForm,
 	assessorPatchBody,
@@ -207,6 +208,32 @@ describe('source form', () => {
 		}
 		// A bluesky account is not a feed URL.
 		expect(validateSource({ ...valid, type: 'rss', url: 'alice.bsky.social' }).url).toBeDefined();
+	});
+
+	it('keeps an euvd source an euvd source, with an optional name and url', () => {
+		const orig: Source = {
+			id: '5',
+			name: 'EUVD',
+			url: EUVD_DEFAULT_URL,
+			type: 'euvd',
+			refresh_sec: 21600,
+			enabled: true
+		};
+		const f = sourceForm(orig);
+		expect(f.type).toBe('euvd');
+		expect(sourcePatchBody(orig, f)).toEqual({});
+
+		const add: SourceForm = { ...f, name: '', url: '' };
+		expect(validateSource(add)).toEqual({});
+		expect(sourceAddBody(add)).toMatchObject({ type: 'euvd', url: '', name: '' });
+		expect(validateSource({ ...add, url: 'https://euvdservices.enisa.europa.eu/api/search?fromScore=9' })).toEqual({});
+		expect(validateSource({ ...add, url: 'ftp://x/api/search' }).url).toBeDefined();
+		// A blank name keeps the current one; a blank url resets to the default.
+		expect(sourcePatchBody(orig, { ...f, name: '' })).toEqual({});
+		const mirror = { ...orig, url: 'https://mirror.example/api/search' };
+		expect(sourcePatchBody(mirror, { ...sourceForm(mirror), url: '' })).toEqual({ url: '' });
+		// A blank url is still an error for a feed.
+		expect(validateSource({ ...add, type: 'rss' }).url).toBeDefined();
 	});
 
 	it('treats a missing type as rss and a missing enabled as false', () => {

@@ -28,7 +28,7 @@ type Source struct {
 	Id            int64                  `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
 	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
 	Url           string                 `protobuf:"bytes,3,opt,name=url,proto3" json:"url,omitempty"`
-	Type          string                 `protobuf:"bytes,4,opt,name=type,proto3" json:"type,omitempty"` // rss, atom, bluesky
+	Type          string                 `protobuf:"bytes,4,opt,name=type,proto3" json:"type,omitempty"` // rss, atom, bluesky, euvd
 	RefreshSec    int32                  `protobuf:"varint,5,opt,name=refresh_sec,json=refreshSec,proto3" json:"refresh_sec,omitempty"`
 	Enabled       bool                   `protobuf:"varint,6,opt,name=enabled,proto3" json:"enabled,omitempty"`
 	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
@@ -632,7 +632,7 @@ type AddSourceRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	Url           string                 `protobuf:"bytes,2,opt,name=url,proto3" json:"url,omitempty"`
-	Type          string                 `protobuf:"bytes,3,opt,name=type,proto3" json:"type,omitempty"` // rss, atom, bluesky; defaults to "rss"
+	Type          string                 `protobuf:"bytes,3,opt,name=type,proto3" json:"type,omitempty"` // rss, atom, bluesky, euvd; defaults to "rss"
 	RefreshSec    int32                  `protobuf:"varint,4,opt,name=refresh_sec,json=refreshSec,proto3" json:"refresh_sec,omitempty"`
 	Enabled       bool                   `protobuf:"varint,5,opt,name=enabled,proto3" json:"enabled,omitempty"`
 	Color         string                 `protobuf:"bytes,6,opt,name=color,proto3" json:"color,omitempty"`               // optional hex color for source chip

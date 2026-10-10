@@ -113,6 +113,16 @@ type parsedEntry struct {
 	Published   *time.Time
 	// BadDate is the feed's date when it could not be parsed, for the log.
 	BadDate string
+	// Assessments are scores the source itself gives the entry (EUVD),
+	// written on every fetch when they change.
+	Assessments []entryAssessment
+}
+
+// entryAssessment is a whole-item score from the source, by assessor name.
+type entryAssessment struct {
+	Assessor string
+	Score    float64 // 0 to 1
+	Note     string
 }
 
 // entryDate parses an entry's date. It returns the raw string as bad when
@@ -132,9 +142,12 @@ func entryDate(s string) (*time.Time, string) {
 
 // FetchResult describes the outcome of a single feed fetch.
 type FetchResult struct {
-	SourceID   int64
-	NewItems   []*db.Item
-	FetchError string
+	SourceID int64
+	NewItems []*db.Item
+	// UpdatedItemIDs are items that existed before this fetch and whose
+	// assessments it changed (EUVD scores), for the daemon to push.
+	UpdatedItemIDs []int64
+	FetchError     string
 }
 
 // ── Public API ──────────────────────────────────────────────────
@@ -193,6 +206,64 @@ func parseBody(src *db.Source, body []byte) ([]parsedEntry, error) {
 	return parseFeed(body)
 }
 
+// maxBodySize caps a response body.
+const maxBodySize = 32 * 1024 * 1024 // 32 MiB
+
+// getBody issues req and reads the body of a 200 answer, at most
+// maxBodySize. Any other status is an error (Bluesky's carries its message).
+func getBody(client doer, req *http.Request, typ string) ([]byte, error) {
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		if typ == TypeBluesky {
+			return nil, xrpcError(resp)
+		}
+		return nil, fmt.Errorf("HTTP %d", resp.StatusCode)
+	}
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxBodySize+1))
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(body)) > maxBodySize {
+		return nil, fmt.Errorf("response body exceeds 32MiB limit")
+	}
+	return body, nil
+}
+
+// applyAssessments writes an entry's assessments of item itemID, skipping
+// those already stored with the same score and note. It reports whether
+// it wrote any. assessorIDs caches the assessors' IDs by name for one fetch.
+func applyAssessments(database *sql.DB, assessorIDs map[string]int64, itemID int64, list []entryAssessment) (bool, error) {
+	changed := false
+	for _, a := range list {
+		assessorID, ok := assessorIDs[a.Assessor]
+		if !ok {
+			var err error
+			if assessorID, err = db.EnsureAssessor(database, a.Assessor, euvdAssessorDescriptions[a.Assessor]); err != nil {
+				return changed, fmt.Errorf("assessor %q: %w", a.Assessor, err)
+			}
+			assessorIDs[a.Assessor] = assessorID
+		}
+		stored, err := db.GetAssessment(database, itemID, assessorID, 0)
+		if err != nil {
+			return changed, err
+		}
+		if stored != nil && stored.Score != nil && *stored.Score == a.Score && stored.Note == a.Note {
+			continue
+		}
+		score := a.Score
+		if _, err := db.PutAssessment(database, &db.Assessment{ItemID: itemID, AssessorID: assessorID, Score: &score, Note: a.Note}); err != nil {
+			return changed, err
+		}
+		changed = true
+	}
+	return changed, nil
+}
+
 func fetchInternal(database *sql.DB, src *db.Source, client doer) (*FetchResult, error) {
 	result := &FetchResult{SourceID: src.ID}
 
@@ -204,45 +275,33 @@ func fetchInternal(database *sql.DB, src *db.Source, client doer) (*FetchResult,
 		return result, nil
 	}
 
-	// 1. Build HTTP request.
-	req, err := buildRequest(src)
-	if err != nil {
-		return fail(err)
-	}
-
-	// 2. Issue HTTP GET.
-	resp, err := client.Do(req)
-	if err != nil {
-		return fail(err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		if src.Type == TypeBluesky {
-			return fail(xrpcError(resp))
+	// 1. Fetch and parse the entries.
+	var entries []parsedEntry
+	if src.Type == TypeEUVD {
+		var note string
+		var err error
+		if entries, note, err = fetchEUVD(client, src); err != nil {
+			return fail(err)
 		}
-		return fail(fmt.Errorf("HTTP %d", resp.StatusCode))
+		result.FetchError = note
+	} else {
+		req, err := buildRequest(src)
+		if err != nil {
+			return fail(err)
+		}
+		body, err := getBody(client, req, src.Type)
+		if err != nil {
+			return fail(err)
+		}
+		if entries, err = parseBody(src, body); err != nil {
+			return fail(err)
+		}
 	}
 
-	// 3. Read response body with size limit.
-	const maxBodySize = 32 * 1024 * 1024 // 32 MiB
-	body, err := io.ReadAll(io.LimitReader(resp.Body, maxBodySize+1))
-	if err != nil {
-		return fail(err)
-	}
-	if int64(len(body)) > maxBodySize {
-		return fail(fmt.Errorf("response body exceeds 32MiB limit"))
-	}
-
-	// 4. Parse entries.
-	entries, parseErr := parseBody(src, body)
-	if parseErr != nil {
-		return fail(parseErr)
-	}
-
-	// 5. Insert new items with deduplication.
+	// 2. Insert new items with deduplication.
 	var insertErrs []string
 	badDates, badDate := 0, ""
+	assessorIDs := map[string]int64{}
 	for _, entry := range entries {
 		if entry.GUID == "" && entry.Link == "" {
 			continue
@@ -276,6 +335,21 @@ func fetchInternal(database *sql.DB, src *db.Source, client doer) (*FetchResult,
 			insertErrs = append(insertErrs, fmt.Sprintf("insert item %q: %v", dedupKey, err))
 			continue
 		}
+		if len(entry.Assessments) > 0 {
+			if !inserted {
+				// INSERT OR IGNORE reports no id for an existing row.
+				if id, err = db.ItemIDByGUID(database, src.ID, dedupKey); err != nil {
+					insertErrs = append(insertErrs, fmt.Sprintf("look up item %q: %v", dedupKey, err))
+					continue
+				}
+			}
+			changed, err := applyAssessments(database, assessorIDs, id, entry.Assessments)
+			if err != nil {
+				insertErrs = append(insertErrs, fmt.Sprintf("assess item %q: %v", dedupKey, err))
+			} else if changed && !inserted && id != 0 {
+				result.UpdatedItemIDs = append(result.UpdatedItemIDs, id)
+			}
+		}
 		if inserted {
 			item.ID = id
 			result.NewItems = append(result.NewItems, item)
@@ -297,7 +371,7 @@ func fetchInternal(database *sql.DB, src *db.Source, client doer) (*FetchResult,
 		}
 	}
 
-	// 6. Update source fetch status. FetchError is empty when every entry
+	// 3. Update source fetch status. FetchError is empty when every entry
 	// was handled, which clears an earlier error.
 	_ = db.UpdateSourceLastFetch(database, src.ID, time.Now())
 	_ = db.UpdateSourceFetchError(database, src.ID, result.FetchError)

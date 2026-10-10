@@ -703,3 +703,40 @@ func TestListItems_ExactScopeExcludesChildTags(t *testing.T) {
 		t.Errorf("exact unassessed: %v, want [D G]", got)
 	}
 }
+
+func TestEnsureAssessor(t *testing.T) {
+	database := openTestDB(t)
+	id, err := EnsureAssessor(database, "euvd-cvss", "CVSS / 10")
+	if err != nil || id == 0 {
+		t.Fatalf("create: %d %v", id, err)
+	}
+	again, err := EnsureAssessor(database, "euvd-cvss", "another description")
+	if err != nil || again != id {
+		t.Fatalf("again: %d %v, want %d", again, err, id)
+	}
+	a, _ := GetAssessor(database, id)
+	if a.Description != "CVSS / 10" {
+		t.Errorf("description = %q, the first one should stay", a.Description)
+	}
+	// An existing assessor, e.g. from the config, is the same one.
+	seeded := mustAssessor(t, database, "euvd-epss")
+	if got, err := EnsureAssessor(database, "euvd-epss", "x"); err != nil || got != seeded {
+		t.Errorf("seeded: %d %v, want %d", got, err, seeded)
+	}
+}
+
+func TestItemIDByGUID(t *testing.T) {
+	database := openTestDB(t)
+	src := testSource(t, database, "feed")
+	other := testSource(t, database, "other")
+	item := mustItem(t, database, src, "g1")
+	if id, err := ItemIDByGUID(database, src, "g1"); err != nil || id != item {
+		t.Errorf("found %d %v, want %d", id, err, item)
+	}
+	if id, err := ItemIDByGUID(database, other, "g1"); err != nil || id != 0 {
+		t.Errorf("other source: %d %v", id, err)
+	}
+	if id, err := ItemIDByGUID(database, src, "nope"); err != nil || id != 0 {
+		t.Errorf("missing: %d %v", id, err)
+	}
+}
