@@ -190,6 +190,7 @@ docs/date-filter-plan.md    Plan for the date window (since:7d) in filters and v
 docs/assessments-plan.md    Plan for assessments (scores and notes from external assessors): decisions and phases
 docs/docker-plan.md         Plan for the container images and compose setup: decisions and phases
 docs/digests-plan.md        Plan for digests (assessor-written summaries over many items, in series): decisions and phases
+docs/source-types-plan.md   Plan for RSS 1.0 / JSON Feed detection and the CISA KEV source type: decisions and phases
 CLAUDE.md                   `@AGENTS.md`: makes Claude Code load this file
 ```
 
