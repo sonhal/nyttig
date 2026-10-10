@@ -13,7 +13,7 @@ message Source {
     int64  id          = 1;
     string name        = 2;
     string url         = 3;
-    string type        = 4;  // rss, atom, bluesky
+    string type        = 4;  // rss, atom, bluesky, kev
     int32  refresh_sec = 5;
     bool   enabled     = 6;
     google.protobuf.Timestamp created_at = 7;
@@ -85,7 +85,7 @@ message TagRule {
 message AddSourceRequest {
     string name        = 1;
     string url         = 2;
-    string type        = 3;  // rss, atom, bluesky; defaults to "rss"
+    string type        = 3;  // rss, atom, bluesky, kev; defaults to "rss"
     int32  refresh_sec = 4;
     bool   enabled     = 5;
     string color       = 6;  // optional hex color for source chip

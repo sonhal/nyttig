@@ -127,7 +127,7 @@ export function formatInterval(sec: number | undefined): string {
 export interface SourceForm {
 	name: string;
 	url: string;
-	type: 'rss' | 'atom' | 'bluesky';
+	type: 'rss' | 'atom' | 'bluesky' | 'kev';
 	/** A refresh interval as typed, e.g. "1h". */
 	refresh: string;
 	enabled: boolean;
@@ -140,7 +140,7 @@ export function sourceForm(s?: Source): SourceForm {
 	return {
 		name: s?.name ?? '',
 		url: s?.url ?? '',
-		type: s?.type === 'atom' || s?.type === 'bluesky' ? s.type : 'rss',
+		type: s?.type === 'atom' || s?.type === 'bluesky' || s?.type === 'kev' ? s.type : 'rss',
 		refresh: formatInterval(s ? s.refresh_sec : DEFAULT_REFRESH_SEC),
 		// New sources are enabled unless unchecked: proto3's default for
 		// AddSourceRequest.enabled is false, so it is always sent.
@@ -152,12 +152,15 @@ export function sourceForm(s?: Source): SourceForm {
 
 export function validateSource(f: SourceForm): Errors<SourceForm> {
 	const e: Errors<SourceForm> = {};
-	// A Bluesky source is named after the account when the name is blank.
-	const name = f.type === 'bluesky' && f.name.trim() === '' ? undefined : nameError('name', f.name, MAX_NAME);
+	// A Bluesky source is named after the account when the name is blank, a
+	// KEV source "CISA KEV".
+	const name = optionalName(f.type) && f.name.trim() === '' ? undefined : nameError('name', f.name, MAX_NAME);
 	if (name) e.name = name;
 	// The daemon resolves a Bluesky handle, DID or profile URL, so only
-	// the shape common to all of them is checked here.
-	const url = f.type === 'bluesky' ? accountError(f.url.trim()) : urlError(f.url.trim());
+	// the shape common to all of them is checked here. A KEV source with no
+	// URL reads CISA's catalogue.
+	const u = f.url.trim();
+	const url = f.type === 'bluesky' ? accountError(u) : f.type === 'kev' && u === '' ? undefined : urlError(u);
 	if (url) e.url = url;
 	const sec = parseInterval(f.refresh);
 	if (sec === null) e.refresh = 'an interval like 30m, 1h or 3600';
@@ -171,6 +174,14 @@ export function validateSource(f: SourceForm): Errors<SourceForm> {
 	}
 	return e;
 }
+
+/** Source types whose name may be left blank: the daemon names them. */
+function optionalName(type: SourceForm['type']): boolean {
+	return type === 'bluesky' || type === 'kev';
+}
+
+/** CISA's catalogue, which a KEV source with a blank URL reads (fetcher.KEVDefaultURL). */
+export const KEV_DEFAULT_URL = 'https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json';
 
 function sourceValues(f: SourceForm) {
 	return {
@@ -206,8 +217,8 @@ export function sourceAddBody(f: SourceForm): SourceBody {
 export function sourcePatchBody(orig: Source, f: SourceForm): SourceBody {
 	const v = sourceValues(f);
 	const p: SourceBody = {};
-	// A blank name on a Bluesky source means "keep the current one".
-	if (v.name !== (orig.name ?? '') && !(v.type === 'bluesky' && v.name === '')) p.name = v.name;
+	// A blank name on a Bluesky or KEV source means "keep the current one".
+	if (v.name !== (orig.name ?? '') && !(optionalName(v.type) && v.name === '')) p.name = v.name;
 	if (v.url !== (orig.url ?? '')) p.url = v.url;
 	if (v.type !== (orig.type || 'rss')) p.type = v.type;
 	if (v.refresh_sec !== (orig.refresh_sec ?? 0)) p.refresh_sec = v.refresh_sec;

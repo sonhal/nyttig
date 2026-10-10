@@ -11,6 +11,7 @@ import (
 
 	"github.com/sonhal/nyttig/internal/config"
 	"github.com/sonhal/nyttig/internal/server/db"
+	"github.com/sonhal/nyttig/internal/server/fetcher"
 )
 
 func openSeedDB(t *testing.T) *sql.DB {
@@ -217,5 +218,36 @@ func TestSeed_SampleConfigAssessors(t *testing.T) {
 		if a, err := db.GetAssessorByName(database, name); err != nil || a == nil {
 			t.Errorf("assessor %q not seeded: %v, %v", name, a, err)
 		}
+	}
+}
+
+func TestSeed_KEVDefaults(t *testing.T) {
+	database := openSeedDB(t)
+	logger, logs := captureLogger()
+	cfg := &config.Config{Sources: []config.Source{
+		{Type: "kev"},
+		{Type: "kev", Name: "KEV mirror", URL: "https://mirror.example/kev.json"},
+		{Type: "rss", Name: "no url"},
+	}}
+	if err := seedFromConfig(database, cfg, logger); err != nil {
+		t.Fatal(err)
+	}
+	sources, err := db.ListSources(database)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]string{}
+	for _, s := range sources {
+		got[s.Name] = s.Type + " " + s.URL
+	}
+	want := map[string]string{
+		fetcher.KEVDefaultName: "kev " + fetcher.KEVDefaultURL,
+		"KEV mirror":           "kev https://mirror.example/kev.json",
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("sources = %v, want %v", got, want)
+	}
+	if n := strings.Count(logs.b.String(), "level=WARN"); n != 1 {
+		t.Errorf("got %d warnings, want 1 (the rss source without a url):\n%s", n, logs.b.String())
 	}
 }

@@ -1,7 +1,7 @@
 # Source types plan: more feed formats and a CISA KEV source
 
-Status: **phase 1 implemented, not yet merged**; phase 2 not started. Two
-phases, one PR each.
+Status: **phase 1 merged** (#39); **phase 2 implemented, not yet merged**.
+Two phases, one PR each.
 
 nyttig reads RSS 2.0, Atom and Bluesky accounts. This plan adds:
 
@@ -307,3 +307,18 @@ file server (the sandbox blocks most feed hosts):
   (`static.crates.io/rss/crates/<name>.xml`) and the Lobsters front-page
   feed (`/rss`) could not be fetched from the sandbox; the other URL shapes
   were confirmed by search results, not by fetching them.
+- **Phase 2:** the window is `kevWindowDays = 30` counted in calendar days
+  from midnight UTC (dateAdded is a day), not `30 * 24h` from now; the clock
+  is `kevNow`. `parseKEV` takes `now` and returns the number of invalid
+  entries, so `parseBody` logs them with the source ID. Text fields go
+  through `cleanText` only (they are plain text; markup stays text, as
+  clients render text). The plan's "a blank name in a patch keeps the
+  current name" holds in the web form (`sourcePatchBody` leaves it out, as
+  for Bluesky); the daemon still refuses an explicit blank name in
+  `UpdateSource`, as it does for Bluesky. Config seeding also fills in the
+  KEV defaults (`seedFromConfig` skipped a source without a URL), which the
+  plan did not list; `TestSeed_KEVDefaults` covers it. The e2e fixture is
+  `/kev/<name>.json` (one per Playwright project, since both share a
+  daemon), and the e2e test names its source, so the blank-URL default is
+  covered by the service and fetcher tests rather than by fetching
+  cisa.gov.

@@ -89,17 +89,22 @@ func validateFeedURL(raw string) error {
 }
 
 // validateSourceName is validateName for a source's name, which a Bluesky
-// source may leave blank: AddSource then names it after the account.
+// or KEV source may leave blank: AddSource then names it after the account,
+// or "CISA KEV".
 func validateSourceName(typ, name string) error {
-	if typ == fetcher.TypeBluesky && strings.TrimSpace(name) == "" {
+	if (typ == fetcher.TypeBluesky || typ == fetcher.TypeKEV) && strings.TrimSpace(name) == "" {
 		return nil
 	}
 	return validateName("name", name, maxNameLen)
 }
 
 // validateSourceURL checks a source's url for its type. A Bluesky source
-// takes an account (handle, DID or profile URL) rather than a feed URL.
+// takes an account (handle, DID or profile URL) rather than a feed URL; a
+// KEV source may leave it blank for CISA's catalogue.
 func validateSourceURL(typ, raw string) error {
+	if typ == fetcher.TypeKEV && strings.TrimSpace(raw) == "" {
+		return nil
+	}
 	if typ != fetcher.TypeBluesky {
 		return validateFeedURL(raw)
 	}
@@ -113,10 +118,10 @@ func validateSourceURL(typ, raw string) error {
 // validateFeedType accepts the feed types the fetcher understands.
 func validateFeedType(typ string) error {
 	switch typ {
-	case "rss", "atom", fetcher.TypeBluesky:
+	case "rss", "atom", fetcher.TypeBluesky, fetcher.TypeKEV:
 		return nil
 	default:
-		return fmt.Errorf("type must be rss, atom or bluesky, got %q", typ)
+		return fmt.Errorf("type must be rss, atom, bluesky or kev, got %q", typ)
 	}
 }
 

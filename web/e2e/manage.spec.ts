@@ -153,6 +153,44 @@ test('sources: add, edit, enable/disable, refresh, fetch errors and delete', asy
 	await expect(page.getByTestId('note')).toContainText(`deleted ${name}`);
 });
 
+test('sources: a kev source reads a CISA KEV catalogue', async ({ page }) => {
+	const slug = `kev-${test.info().project.name}`;
+	const name = `KEV ${test.info().project.name}`;
+	await openFeed(page);
+	await goTo(page, 'sources');
+
+	await act(page, 'add');
+	const form = page.getByTestId('source-form');
+	await form.locator('select').selectOption('kev');
+	await expect(form).toContainText("leave empty for CISA's catalogue");
+	await expect(page.getByTestId('source-url')).toHaveAttribute('placeholder', /known_exploited_vulnerabilities\.json$/);
+	await page.getByTestId('source-name').fill(name);
+	await page.getByTestId('source-url').fill(`${FEEDS_URL}/kev/${slug}.json`);
+	await save(page, page.getByTestId('source-url'));
+	await expect(form).toHaveCount(0);
+
+	const row = listRow(page, 'sources', name);
+	await expect(row).toBeVisible();
+	await expect(row.locator('.last')).not.toContainText('never', { timeout: 15_000 });
+	await expect(row.getByTestId('fetch-error')).toHaveCount(0);
+	const id = await row.getAttribute('data-id');
+
+	// One item per CVE added in the last 30 days; the 40-day-old entry is left out.
+	await page.goto(`/?source=${id}`);
+	const items = page.locator('[role=row]');
+	await expect(items.filter({ hasText: `${slug} today vulnerability` })).toBeVisible();
+	await expect(items.filter({ hasText: `${slug} recent vulnerability` })).toBeVisible();
+	await expect(items.filter({ hasText: 'CVE-2026-9001' })).toBeVisible();
+	await expect(items.filter({ hasText: `${slug} old vulnerability` })).toHaveCount(0);
+
+	await goTo(page, 'sources');
+	await pick(row);
+	await act(page, 'delete');
+	await expect(page.getByTestId('confirm')).toContainText('2 items');
+	await confirmDelete(page);
+	await expect(row).toHaveCount(0);
+});
+
 test('tags: add, recolor and delete, and the feed follows', async ({ page }) => {
 	const name = `e2e-${test.info().project.name}`;
 	await openFeed(page);

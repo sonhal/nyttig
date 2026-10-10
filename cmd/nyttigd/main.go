@@ -412,6 +412,15 @@ func seedFromConfig(database *sql.DB, cfg *config.Config, logger *slog.Logger) e
 		srcIDByName[s.Name] = s.ID
 	}
 	for _, cs := range cfg.Sources {
+		// A kev source may leave out its url and name, as through the API.
+		if cs.Type == fetcher.TypeKEV {
+			if cs.URL == "" {
+				cs.URL = fetcher.KEVDefaultURL
+			}
+			if cs.Name == "" {
+				cs.Name = fetcher.KEVDefaultName
+			}
+		}
 		if cs.URL == "" {
 			logger.Warn("skipping config source with empty url", "name", cs.Name)
 			continue

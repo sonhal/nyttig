@@ -3,7 +3,7 @@
 > Warning: This project is generated using LLMs
 
 
-Nyttig is a news aggregator with a developer-oriented terminal UI. Subscribe to RSS/Atom feeds and Bluesky accounts, apply regex-based tags, full-text search, and browse your collected news stream in a compact, keyboard-driven interface inspired by [K9s](https://k9scli.io/) and Kibana.
+Nyttig is a news aggregator with a developer-oriented terminal UI. Subscribe to RSS/Atom/JSON feeds, Bluesky accounts and CISA's Known Exploited Vulnerabilities catalogue, apply regex-based tags, full-text search, and browse your collected news stream in a compact, keyboard-driven interface inspired by [K9s](https://k9scli.io/) and Kibana.
 
 ## Architecture
 
@@ -217,9 +217,9 @@ clients such as nyttig-api; `socket` must then be a Unix socket path.
 
 | Field         | Required | Default | Description                                      |
 |---------------|----------|---------|--------------------------------------------------|
-| `name`        | yes      | —       | Display name for the feed                        |
-| `url`         | yes      | —       | Feed URL (RSS, Atom or JSON Feed), or for `bluesky` the profile URL |
-| `type`        | no       | `rss`   | Feed type: `rss`, `atom` or `bluesky`            |
+| `name`        | yes      | —       | Display name for the feed (optional for `kev`: `CISA KEV`) |
+| `url`         | yes      | —       | Feed URL (RSS, Atom or JSON Feed), or for `bluesky` the profile URL (optional for `kev`: CISA's catalogue) |
+| `type`        | no       | `rss`   | Feed type: `rss`, `atom`, `bluesky` or `kev`     |
 | `refresh_sec` | no       | `3600`  | Fetch interval in seconds                        |
 | `color`       | no       | —       | Hex color for the source chip in the TUI         |
 | `abbreviation`| no       | —       | Short display name in the TUI (falls back to `name`) |
@@ -289,6 +289,46 @@ name is optional for Bluesky sources: it defaults to the account's display
 name, or `@handle`. Each post becomes an item: the title is the post's first
 line, the description holds the full text plus any quoted post, image alt text
 and link card.
+
+#### CISA KEV sources
+
+`type = "kev"` reads CISA's
+[Known Exploited Vulnerabilities](https://www.cisa.gov/known-exploited-vulnerabilities-catalog)
+catalogue, the CVEs CISA knows are being exploited, as one item per CVE:
+
+```toml
+[[sources]]
+type = "kev"
+refresh_sec = 21600   # CISA adds entries a few times a week; the file is about 1.5 MB
+```
+
+- `url` is optional: left out, it is CISA's own
+  `https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json`,
+  which the daemon stores as the source's URL. Any other http(s) URL serving
+  the same JSON works too, such as the `cisagov/kev-data` mirror on GitHub.
+  `name` is optional and defaults to `CISA KEV`.
+- Only CVEs **added to the catalogue in the last 30 days** become items, on
+  every fetch, so a new source starts with about a month of entries rather
+  than the whole catalogue back to 2021.
+- An item's title is `CVE-…: <vulnerability name>`, its link the CVE's NVD
+  page, its date the day CISA added it. The description reads
+  `<vendor> <product>. <description> Required action: … Due: <date>.`,
+  followed by `Known ransomware use.` when CISA says so, and CISA's notes.
+- Items are stored once: if CISA later edits an entry (a new due date,
+  ransomware use becoming known), the item keeps its first text.
+
+Tag rules on `description` pick out the products you run:
+
+```toml
+[[tags]]
+name = "kev-mine"
+color = "#F44747"
+
+[[tag_rules]]
+tag = "kev-mine"
+pattern = "(?i)\\b(ivanti|fortinet|citrix|confluence)\\b"
+field = "description"
+```
 
 ### `[[tags]]`
 
@@ -431,9 +471,10 @@ Items are automatically marked as viewed when you scroll past them in the TUI (K
 When invoked with arguments, `nyttig` acts as a CLI management tool:
 
 ```
-nyttig add-source      -n <name> -u <url> [-t rss|atom|bluesky] [-r refresh_sec] [-color <hex>] [-abbreviation <short>]
+nyttig add-source      -n <name> -u <url> [-t rss|atom|bluesky|kev] [-r refresh_sec] [-color <hex>] [-abbreviation <short>]
+nyttig add-source      -t kev [-u <url>] [-n <name>] [-r refresh_sec]   # CISA's catalogue when -u is left out
 nyttig list-sources
-nyttig update-source   -id <source_id> [-n <name>] [-u <url>] [-t rss|atom|bluesky] [-r refresh_sec]
+nyttig update-source   -id <source_id> [-n <name>] [-u <url>] [-t rss|atom|bluesky|kev] [-r refresh_sec]
                        [-enable|-disable] [-color <hex>] [-abbreviation <short>]
 nyttig remove-source   -id <source_id>
 nyttig add-tag         -n <name> [-c <hex_color>] [-parent <name|id>]...
@@ -535,11 +576,11 @@ clients get the same checks:
 
 | Value           | Rule                                                        |
 |-----------------|-------------------------------------------------------------|
-| Source URL      | Absolute `http`/`https` URL with a host, no credentials, at most 2048 bytes; for `bluesky`, a handle, DID or bsky.app profile URL |
-| Source type     | `rss`, `atom` or `bluesky`                                  |
+| Source URL      | Absolute `http`/`https` URL with a host, no credentials, at most 2048 bytes; for `bluesky`, a handle, DID or bsky.app profile URL; for `kev`, empty means CISA's catalogue |
+| Source type     | `rss`, `atom`, `bluesky` or `kev`                           |
 | Refresh interval| 60 seconds to 7 days (default 3600)                         |
 | Colors          | `#RRGGBB`, or empty for none                                |
-| Names           | Non-empty (a `bluesky` source may omit its name), no control characters; sources ≤ 200, tags ≤ 64, abbreviations ≤ 16 characters |
+| Names           | Non-empty (a `bluesky` or `kev` source may omit its name), no control characters; sources ≤ 200, tags ≤ 64, abbreviations ≤ 16 characters |
 | Assessor        | Name ≤ 64 characters, description ≤ 500 characters without control characters, optional `#RRGGBB` color |
 | Score           | A number from 0 to 1 (NaN and infinities are rejected); `min_score` follows the same rule and, like `sort: score`, needs an assessor |
 | Note            | Valid UTF-8, at most 4096 bytes; an assessment needs a score or a note |

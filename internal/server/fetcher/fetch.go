@@ -1,4 +1,5 @@
-// Package fetcher handles fetching RSS, Atom and JSON feeds and Bluesky accounts from
+// Package fetcher handles fetching RSS, Atom and JSON feeds, Bluesky accounts
+// and CISA's Known Exploited Vulnerabilities catalogue from
 // remote sources, parsing them, deduplicating entries, and inserting new
 // items into the database.
 package fetcher
@@ -162,11 +163,13 @@ type doer interface {
 // ── Internal ────────────────────────────────────────────────────
 
 // buildRequest returns the GET request for a source: its URL for RSS and
-// Atom, the author-feed API call for Bluesky. An error means the source is
+// Atom, the author-feed API call for Bluesky, the catalogue for KEV (CISA's
+// when the URL is blank). An error means the source is
 // misconfigured; it is reported as the source's fetch error.
 func buildRequest(src *db.Source) (*http.Request, error) {
 	reqURL, accept := src.URL, "application/rss+xml, application/atom+xml, application/feed+json, application/rdf+xml, application/xml, */*"
-	if src.Type == TypeBluesky {
+	switch src.Type {
+	case TypeBluesky:
 		// Config-seeded sources skip the service's validation, so check
 		// the account here.
 		var err error
@@ -174,6 +177,8 @@ func buildRequest(src *db.Source) (*http.Request, error) {
 			return nil, err
 		}
 		accept = "application/json"
+	case TypeKEV:
+		reqURL, accept = kevRequestURL(src.URL), "application/json"
 	}
 	req, err := http.NewRequest(http.MethodGet, reqURL, nil)
 	if err != nil {
@@ -186,8 +191,15 @@ func buildRequest(src *db.Source) (*http.Request, error) {
 
 // parseBody parses a response body according to the source's type.
 func parseBody(src *db.Source, body []byte) ([]parsedEntry, error) {
-	if src.Type == TypeBluesky {
+	switch src.Type {
+	case TypeBluesky:
 		return parseBluesky(body)
+	case TypeKEV:
+		entries, invalid, err := parseKEV(body, kevNow())
+		if invalid > 0 {
+			slog.Warn("skipped invalid KEV entries", "source_id", src.ID, "entries", invalid)
+		}
+		return entries, err
 	}
 	// Detect the format from the document.
 	return parseFeed(body)

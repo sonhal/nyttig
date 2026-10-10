@@ -165,6 +165,31 @@ ${items}
 </channel></rss>`;
 }
 
+// GET /kev/<name>.json is a CISA KEV catalogue (the kev source type) with
+// three entries named after <name>: added today, 2 days ago and 40 days ago.
+// The daemon only stores entries added in the last 30 days, so the third
+// never shows.
+function kevCatalog(name) {
+	const day = (ago) => new Date(Date.now() - ago * 86400_000).toISOString().slice(0, 10);
+	const entry = (n, label, ago) => ({
+		cveID: `CVE-2026-${9000 + n}`,
+		vendorProject: 'Acme',
+		product: name,
+		vulnerabilityName: `${name} ${label} vulnerability`,
+		dateAdded: day(ago),
+		shortDescription: `A flaw in ${name}.`,
+		requiredAction: 'Apply mitigations per vendor instructions.',
+		dueDate: day(ago - 21),
+		knownRansomwareCampaignUse: n === 1 ? 'Known' : 'Unknown',
+		notes: ''
+	});
+	return JSON.stringify({
+		title: 'CISA Catalog of Known Exploited Vulnerabilities',
+		count: 3,
+		vulnerabilities: [entry(1, 'today', 0), entry(2, 'recent', 2), entry(3, 'old', 40)]
+	});
+}
+
 export function startFeedServer() {
 	let pixelHits = 0;
 	let added = 0;
@@ -198,6 +223,12 @@ export function startFeedServer() {
 		if (dated) {
 			res.writeHead(200, { 'Content-Type': 'application/rss+xml' });
 			res.end(datedFeed(dated[1]));
+			return;
+		}
+		const kev = url.pathname.match(/^\/kev\/([\w-]+)\.json$/);
+		if (kev) {
+			res.writeHead(200, { 'Content-Type': 'application/json' });
+			res.end(kevCatalog(kev[1]));
 			return;
 		}
 		const big = url.pathname.match(/^\/bulk\/([\w-]+)\.xml$/);

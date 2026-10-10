@@ -4,6 +4,7 @@ import {
 	assessorForm,
 	assessorPatchBody,
 	formatInterval,
+	KEV_DEFAULT_URL,
 	hasErrors,
 	parseInterval,
 	ruleBody,
@@ -207,6 +208,36 @@ describe('source form', () => {
 		}
 		// A bluesky account is not a feed URL.
 		expect(validateSource({ ...valid, type: 'rss', url: 'alice.bsky.social' }).url).toBeDefined();
+	});
+
+	it('keeps a kev source a kev source, with its name and url optional', () => {
+		const orig: Source = {
+			id: '5',
+			name: 'CISA KEV',
+			url: KEV_DEFAULT_URL,
+			type: 'kev',
+			refresh_sec: 21600,
+			enabled: true
+		};
+		const f = sourceForm(orig);
+		expect(f.type).toBe('kev');
+		expect(sourcePatchBody(orig, f)).toEqual({});
+
+		// Blank name and url: the daemon fills in "CISA KEV" and CISA's URL.
+		const add: SourceForm = { ...f, name: '', url: '' };
+		expect(validateSource(add)).toEqual({});
+		expect(sourceAddBody(add)).toMatchObject({ type: 'kev', url: '', name: '' });
+		// Another URL must still be an http(s) URL.
+		expect(validateSource({ ...add, url: 'https://mirror.example/kev.json' })).toEqual({});
+		expect(validateSource({ ...add, url: 'ftp://mirror.example/kev.json' }).url).toBeDefined();
+
+		// On an edit a blank name keeps the current one; a blank url goes to
+		// the daemon, which stores the default.
+		expect(sourcePatchBody(orig, { ...f, name: '' })).toEqual({});
+		expect(sourcePatchBody(orig, { ...f, url: '' })).toEqual({ url: '' });
+
+		// rss still needs both.
+		expect(Object.keys(validateSource({ ...add, type: 'rss' })).sort()).toEqual(['name', 'url']);
 	});
 
 	it('treats a missing type as rss and a missing enabled as false', () => {

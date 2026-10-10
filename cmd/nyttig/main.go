@@ -234,12 +234,12 @@ func addSourceCmd() {
 		abbreviation string
 	)
 
-	flags.StringVar(&name, "n", "", "Source display name (required, except for bluesky)")
-	flags.StringVar(&name, "name", "", "Source display name (required, except for bluesky)")
-	flags.StringVar(&url, "u", "", "Feed URL, or for bluesky a handle, DID or profile URL (required)")
-	flags.StringVar(&url, "url", "", "Feed URL, or for bluesky a handle, DID or profile URL (required)")
-	flags.StringVar(&sourceType, "t", "rss", "Feed type: rss, atom or bluesky")
-	flags.StringVar(&sourceType, "type", "rss", "Feed type: rss, atom or bluesky")
+	flags.StringVar(&name, "n", "", "Source display name (required, except for bluesky and kev)")
+	flags.StringVar(&name, "name", "", "Source display name (required, except for bluesky and kev)")
+	flags.StringVar(&url, "u", "", "Feed URL, or for bluesky a handle, DID or profile URL (required, except for kev: CISA's catalogue when empty)")
+	flags.StringVar(&url, "url", "", "Feed URL, or for bluesky a handle, DID or profile URL (required, except for kev: CISA's catalogue when empty)")
+	flags.StringVar(&sourceType, "t", "rss", "Feed type: rss, atom, bluesky or kev")
+	flags.StringVar(&sourceType, "type", "rss", "Feed type: rss, atom, bluesky or kev")
 	flags.IntVar(&refreshSec, "r", 3600, "Refresh interval in seconds")
 	flags.IntVar(&refreshSec, "refresh", 3600, "Refresh interval in seconds")
 	flags.BoolVar(&enabled, "enabled", true, "Enable the source immediately")
@@ -249,18 +249,20 @@ func addSourceCmd() {
 	// Parse args starting after "add-source".
 	args := os.Args[2:]
 	if len(args) == 0 || args[0] == "--help" {
-		fmt.Fprintf(os.Stderr, "Usage: nyttig add-source -n <name> -u <url> [flags]\n       nyttig add-source -t bluesky -u <handle|did|profile url> [-n <name>] [flags]\n\n")
+		fmt.Fprintf(os.Stderr, "Usage: nyttig add-source -n <name> -u <url> [flags]\n       nyttig add-source -t bluesky -u <handle|did|profile url> [-n <name>] [flags]\n       nyttig add-source -t kev [-u <url>] [-n <name>] [flags]\n\n")
 		flags.PrintDefaults()
 		os.Exit(0)
 	}
 	flags.Parse(args)
 
-	// A bluesky source is named after the account when no name is given.
-	if name == "" && sourceType != "bluesky" {
+	// A bluesky source is named after the account when no name is given, a
+	// kev source "CISA KEV".
+	if name == "" && sourceType != "bluesky" && sourceType != "kev" {
 		fmt.Fprintf(os.Stderr, "Error: --name (-n) is required\n")
 		os.Exit(1)
 	}
-	if url == "" {
+	// A kev source reads CISA's catalogue when no URL is given.
+	if url == "" && sourceType != "kev" {
 		fmt.Fprintf(os.Stderr, "Error: --url (-u) is required\n")
 		os.Exit(1)
 	}
@@ -381,8 +383,8 @@ func updateSourceCmd() {
 	flags.StringVar(&name, "name", "", "New source name")
 	flags.StringVar(&url, "u", "", "New feed URL")
 	flags.StringVar(&url, "url", "", "New feed URL")
-	flags.StringVar(&sourceType, "t", "", "New feed type: rss, atom or bluesky")
-	flags.StringVar(&sourceType, "type", "", "New feed type: rss, atom or bluesky")
+	flags.StringVar(&sourceType, "t", "", "New feed type: rss, atom, bluesky or kev")
+	flags.StringVar(&sourceType, "type", "", "New feed type: rss, atom, bluesky or kev")
 	flags.IntVar(&refresh, "r", 0, "New refresh interval in seconds")
 	flags.IntVar(&refresh, "refresh", 0, "New refresh interval in seconds")
 	flags.BoolVar(&enable, "enable", false, "Enable the source")

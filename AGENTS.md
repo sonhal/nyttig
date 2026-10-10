@@ -287,6 +287,17 @@ which phases are done and whether they are merged; keep it current.
   appends it to the description unless it is the link or already there.
   Titles derived from text (Bluesky, JSON Feed without a title) go through
   `firstLine` and `truncateTitle` (120 characters).
+- **KEV sources** (`type = "kev"`, `fetcher/kev.go`). CISA's Known
+  Exploited Vulnerabilities catalogue, one JSON document, read as one item
+  per CVE (GUID = the CVE ID, link built from the ID only after it matches
+  `^CVE-\d{4}-\d{4,}$`). Only entries whose `dateAdded` is in the last 30
+  days (`kevWindowDays`, from midnight UTC; `kevNow` is the clock tests
+  fix) are inserted, so a new source doesn't get the whole history; items
+  are write-once like any other. A blank URL means `fetcher.KEVDefaultURL`
+  and a blank name `KEVDefaultName`: the service stores both on add and
+  update, config seeding fills them in, and `buildRequest` falls back to the
+  default too. Invalid entries (bad ID or date) are skipped and counted in
+  one `skipped invalid KEV entries` warning per fetch.
 - **Fetch errors.** A failure to insert an item is reported as the source's
   `fetch_error` (the first failure plus a count), and a clean fetch clears it.
 - **Removing** a source, tag or rule that does not exist is `codes.NotFound`
@@ -847,18 +858,24 @@ pattern for new update RPCs rather than treating zero values as "unset".
   `@types/node` on purpose. A `*.test.ts` under `src/` can't use `node:fs`,
   `__dirname` or other Node APIs; `web/e2e/` is outside the checked set and
   is where Node code goes.
-- **Adding a source type** (today `rss`, `atom` and `bluesky`) touches five places,
-  and missing one fails quietly: `validateFeedType` in
-  `internal/server/service/validate.go`, the `--type` help in
-  `cmd/nyttig/main.go`, the proto comment on `Source.type`, the `type`
-  union in `web/src/lib/forms.ts` (it coerces anything that isn't `atom`
-  to `rss`, so an unknown type gets rewritten on edit) and the select in
-  `web/src/lib/SourceForm.svelte`. For `rss` and `atom` the fetcher picks
+- **Adding a source type** (today `rss`, `atom`, `bluesky` and `kev`)
+  touches these places, and missing one fails quietly:
+  `validateFeedType` (and, for different name or URL rules,
+  `validateSourceName` / `validateSourceURL`) in
+  `internal/server/service/validate.go`; defaults in `AddSource` /
+  `UpdateSource` (`service/service.go`) and in config seeding
+  (`seedFromConfig` in `cmd/nyttigd/main.go`); `buildRequest` and
+  `parseBody` in the fetcher; the `--type` help and required-flag checks
+  in `cmd/nyttig/main.go`; the proto comments on `Source.type` and
+  `AddSourceRequest.type` (then `buf generate`); the comment on
+  `scheduler.Source.Type`; the `type` union, `sourceForm`'s coercion
+  (anything unknown becomes `rss`, so an unknown type gets rewritten on
+  edit) and the validation in `web/src/lib/forms.ts`; the select and hints
+  in `web/src/lib/SourceForm.svelte`; and the README's `[[sources]]`,
+  CLI and input-validation tables. For `rss` and `atom` the fetcher picks
   the parser from the document, not from `type`, so a new feed *format*
   (like RSS 1.0 or JSON Feed) is a change to `feedKind` only, not a new
-  type. A type with its own request or parser (`bluesky`) also needs
-  `buildRequest` and `parseBody` in the fetcher, and usually the service's
-  add/update path.
+  type.
 - Build artifacts (`bin/`, `dist/`, `main`, `nyttig`, `nyttigd`, `nyttig-api`,
   and `web/build/` via `web/.gitignore`) and tool caches
   (`.deps/`, `.modcache/`, `.pi/`) are covered by `.gitignore`. Its patterns are

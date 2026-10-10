@@ -193,6 +193,16 @@ func (s *Service) AddSource(ctx context.Context, req *pb.AddSourceRequest) (*pb.
 	); err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
+	if src.Type == fetcher.TypeKEV {
+		// Store the URL that is read, so the source list shows it and
+		// sources.url's UNIQUE sees it.
+		if strings.TrimSpace(src.URL) == "" {
+			src.URL = fetcher.KEVDefaultURL
+		}
+		if strings.TrimSpace(src.Name) == "" {
+			src.Name = fetcher.KEVDefaultName
+		}
+	}
 	if src.Type == fetcher.TypeBluesky {
 		// Store the account by DID: a handle can change hands.
 		profile, err := s.resolveBluesky(ctx, src.URL)
@@ -307,6 +317,9 @@ func (s *Service) UpdateSource(ctx context.Context, req *pb.UpdateSourceRequest)
 	}
 	if err := firstErr(errs...); err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+	if existing.Type == fetcher.TypeKEV && strings.TrimSpace(existing.URL) == "" {
+		existing.URL = fetcher.KEVDefaultURL
 	}
 	if existing.Type == fetcher.TypeBluesky && (existing.Type != before.Type || existing.URL != before.URL) {
 		profile, err := s.resolveBluesky(ctx, existing.URL)
