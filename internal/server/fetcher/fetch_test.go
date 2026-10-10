@@ -693,8 +693,8 @@ func TestFetch_ResponseSizeLimit(t *testing.T) {
 	database := setupDB(t)
 	defer database.Close()
 
-	// Create a feed body larger than 10 MiB
-	largeBody := make([]byte, 11*1024*1024) // 11 MiB
+	// Create a feed body larger than 32 MiB
+	largeBody := make([]byte, 33*1024*1024) // 33 MiB
 	for i := range largeBody {
 		largeBody[i] = 'x'
 	}
@@ -715,8 +715,8 @@ func TestFetch_ResponseSizeLimit(t *testing.T) {
 	if result.FetchError == "" {
 		t.Error("expected fetch error for oversized response")
 	}
-	if !strings.Contains(result.FetchError, "10MiB limit") {
-		t.Errorf("expected error to mention 10MiB limit, got: %s", result.FetchError)
+	if !strings.Contains(result.FetchError, "32MiB limit") {
+		t.Errorf("expected error to mention 32MiB limit, got: %s", result.FetchError)
 	}
 	if len(result.NewItems) != 0 {
 		t.Errorf("expected 0 new items from oversized response, got %d", len(result.NewItems))
