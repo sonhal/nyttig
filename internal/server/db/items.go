@@ -94,6 +94,17 @@ func InsertItem(db *sql.DB, item *Item) (int64, bool, error) {
 	return id, affected > 0, nil
 }
 
+// ItemIDByGUID returns the ID of a source's item with that GUID, or 0 when
+// there is none.
+func ItemIDByGUID(db *sql.DB, sourceID int64, guid string) (int64, error) {
+	var id int64
+	err := db.QueryRow(`SELECT id FROM items WHERE source_id = ? AND guid = ?`, sourceID, guid).Scan(&id)
+	if err == sql.ErrNoRows {
+		return 0, nil
+	}
+	return id, err
+}
+
 // GetItem retrieves a single item by ID, including source name, tags, and view status.
 func GetItem(db *sql.DB, id int64) (*Item, error) {
 	item := &Item{}

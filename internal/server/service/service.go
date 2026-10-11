@@ -207,6 +207,16 @@ func (s *Service) AddSource(ctx context.Context, req *pb.AddSourceRequest) (*pb.
 			return nil, status.Error(codes.InvalidArgument, err.Error())
 		}
 	}
+	if src.Type == fetcher.TypeEUVD {
+		// Store what is read, so the list shows it and a second default
+		// source is a duplicate.
+		if strings.TrimSpace(src.URL) == "" {
+			src.URL = fetcher.EUVDDefaultURL
+		}
+		if strings.TrimSpace(src.Name) == "" {
+			src.Name = fetcher.EUVDDefaultName
+		}
+	}
 	if req.Color != "" {
 		src.Color = &req.Color
 	}
@@ -314,6 +324,9 @@ func (s *Service) UpdateSource(ctx context.Context, req *pb.UpdateSourceRequest)
 			return nil, err
 		}
 		existing.URL = fetcher.BlueskyProfileURL(profile.DID)
+	}
+	if existing.Type == fetcher.TypeEUVD && strings.TrimSpace(existing.URL) == "" {
+		existing.URL = fetcher.EUVDDefaultURL
 	}
 
 	err = db.UpdateSource(s.db, existing)

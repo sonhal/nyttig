@@ -67,6 +67,23 @@ func InsertAssessor(db *sql.DB, a *Assessor) (int64, error) {
 	return res.LastInsertId()
 }
 
+// EnsureAssessor returns the ID of the assessor with that name, creating it
+// with the description if there is none. Concurrent callers get the same row.
+func EnsureAssessor(db *sql.DB, name, description string) (int64, error) {
+	if _, err := db.Exec(`INSERT INTO assessors (name, description) VALUES (?, ?) ON CONFLICT DO NOTHING`,
+		name, nullableString(description)); err != nil {
+		return 0, err
+	}
+	a, err := GetAssessorByName(db, name)
+	if err != nil {
+		return 0, err
+	}
+	if a == nil { // deleted between the insert and the lookup
+		return 0, errors.New("assessor " + name + " was deleted")
+	}
+	return a.ID, nil
+}
+
 // GetAssessor returns one assessor, or nil when it does not exist.
 func GetAssessor(db *sql.DB, id int64) (*Assessor, error) {
 	a, err := scanAssessor(db.QueryRow(`SELECT `+assessorColumns+` FROM assessors WHERE id = ?`, id))

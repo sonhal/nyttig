@@ -412,6 +412,15 @@ func seedFromConfig(database *sql.DB, cfg *config.Config, logger *slog.Logger) e
 		srcIDByName[s.Name] = s.ID
 	}
 	for _, cs := range cfg.Sources {
+		if cs.Type == fetcher.TypeEUVD {
+			// The same defaults as AddSource.
+			if cs.URL == "" {
+				cs.URL = fetcher.EUVDDefaultURL
+			}
+			if cs.Name == "" {
+				cs.Name = fetcher.EUVDDefaultName
+			}
+		}
 		if cs.URL == "" {
 			logger.Warn("skipping config source with empty url", "name", cs.Name)
 			continue
@@ -711,10 +720,24 @@ func doFetch(
 		hub.Push(service.ItemToProto(full))
 	}
 
+	// 4. Push earlier items whose source-given scores changed (EUVD).
+	for _, id := range result.UpdatedItemIDs {
+		full, err := db.GetItem(database, id)
+		if err != nil {
+			logger.Warn("reload item failed", "item_id", id, "error", err)
+			continue
+		}
+		if full == nil {
+			continue
+		}
+		hub.PushUpdate(service.ItemToProto(full))
+	}
+
 	logger.Info("fetch complete",
 		"source_id", s.ID,
 		"source_name", s.Name,
 		"new_items", len(result.NewItems),
+		"updated_items", len(result.UpdatedItemIDs),
 		"fetch_error", result.FetchError,
 	)
 

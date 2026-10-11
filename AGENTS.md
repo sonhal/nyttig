@@ -168,7 +168,8 @@ internal/server/db/         SQLite layer: items, sources, tags, views, assessors
                             (assessments.go), digest series and digests (digests.go); embedded
                             migrations
 internal/server/fetcher/    Feed fetch/parse + GUID-based dedup; client.go builds the HTTP
-                            client, including the private-address (SSRF) block
+                            client, including the private-address (SSRF) block; euvd.go: the
+                            EUVD source type (paged JSON search, scores as assessments)
 internal/server/tagger/     Regex-based auto-tagging engine
 internal/server/scheduler/  Per-source fetch timers; refresh/enable/disable lifecycle
 migrations/                 Copy of the migrations; the DB applies the embedded set in internal/server/db/migrations
@@ -192,6 +193,7 @@ docs/assessments-plan.md    Plan for assessments (scores and notes from external
 docs/docker-plan.md         Plan for the container images and compose setup: decisions and phases
 docs/digests-plan.md        Plan for digests (assessor-written summaries over many items, in series): decisions and phases
 docs/source-types-plan.md   Plan for RSS 1.0 / JSON Feed detection and the CISA KEV source type: decisions and phases
+docs/euvd-plan.md           Plan for the EUVD source type (EU Vulnerability Database, scores as assessments): decisions and phases
 CLAUDE.md                   `@AGENTS.md`: makes Claude Code load this file
 ```
 
@@ -287,6 +289,24 @@ which phases are done and whether they are merged; keep it current.
   appends it to the description unless it is the link or already there.
   Titles derived from text (Bluesky, JSON Feed without a title) go through
   `firstLine` and `truncateTitle` (120 characters).
+- **EUVD** (`fetcher/euvd.go`, `docs/euvd-plan.md`). A `euvd` source is an
+  EUVD `/api/search` URL (blank: `EUVDDefaultURL`, exploited
+  vulnerabilities; the service and the config seeding store the default).
+  `fetchInternal` pages it itself: `euvdPageURL` sets `fromUpdatedDate`
+  (14 days back from the fetcher's `now`), `size=100` and `page` and keeps
+  the other parameters; at most 20 pages, and hitting the cap is a
+  `fetch_error` note while the items read are still inserted. GUID is the
+  validated EUVD ID, and the link is built from it. Scores are the first
+  source-given assessments: `parsedEntry.Assessments` are written by
+  `applyAssessments` on **every** fetch, new items and existing ones (found
+  with `db.ItemIDByGUID`), but only when score or note differ from the
+  stored one, under the assessors `euvd-cvss` (CVSS / 10) and `euvd-epss`
+  (EPSS % / 100), created on demand with `db.EnsureAssessor`. Existing
+  items whose assessments changed come back in `FetchResult.UpdatedItemIDs`,
+  and `doFetch` pushes them with `Hub.PushUpdate`. Items stay write-once.
+  The API shape was taken from third-party docs (the sandbox can't reach
+  ENISA); the plan marks what to check against a live answer. The e2e feed
+  server answers `/euvd/<name>/api/search`.
 - **Fetch errors.** A failure to insert an item is reported as the source's
   `fetch_error` (the first failure plus a count), and a clean fetch clears it.
 - **Removing** a source, tag or rule that does not exist is `codes.NotFound`
@@ -847,18 +867,25 @@ pattern for new update RPCs rather than treating zero values as "unset".
   `@types/node` on purpose. A `*.test.ts` under `src/` can't use `node:fs`,
   `__dirname` or other Node APIs; `web/e2e/` is outside the checked set and
   is where Node code goes.
-- **Adding a source type** (today `rss`, `atom` and `bluesky`) touches five places,
-  and missing one fails quietly: `validateFeedType` in
-  `internal/server/service/validate.go`, the `--type` help in
-  `cmd/nyttig/main.go`, the proto comment on `Source.type`, the `type`
-  union in `web/src/lib/forms.ts` (it coerces anything that isn't `atom`
-  to `rss`, so an unknown type gets rewritten on edit) and the select in
-  `web/src/lib/SourceForm.svelte`. For `rss` and `atom` the fetcher picks
-  the parser from the document, not from `type`, so a new feed *format*
-  (like RSS 1.0 or JSON Feed) is a change to `feedKind` only, not a new
-  type. A type with its own request or parser (`bluesky`) also needs
-  `buildRequest` and `parseBody` in the fetcher, and usually the service's
-  add/update path.
+- **Adding a source type** (today `rss`, `atom`, `bluesky` and `euvd`)
+  touches these places, and missing one fails quietly: `validateFeedType`
+  (and, for an optional name or URL, `validateSourceName` /
+  `validateSourceURL`) in `internal/server/service/validate.go`, the
+  `--type` help and the required-flag checks in `cmd/nyttig/main.go`, the
+  proto comments on `Source.type` and `AddSourceRequest.type` (then
+  `buf generate`), the comment on `scheduler.Source.Type`, the `type`
+  union and the coercion in `sourceForm` in `web/src/lib/forms.ts` (it
+  coerces anything it doesn't know to `rss`, so an unknown type gets
+  rewritten on edit), the select and hint in
+  `web/src/lib/SourceForm.svelte`, and the README's sources table and
+  validation table. For `rss` and `atom` the fetcher picks the parser from
+  the document, not from `type`, so a new feed *format* (like RSS 1.0 or
+  JSON Feed) is a change to `feedKind` only, not a new type. A type with
+  its own request or parser (`bluesky`) also needs `buildRequest` and
+  `parseBody` in the fetcher; one that needs several requests per fetch
+  (`euvd`) gets its own branch in `fetchInternal`. Defaults for a blank
+  URL or name go in the service's `AddSource` / `UpdateSource` and in the
+  config seeding in `cmd/nyttigd/main.go`, which skips the service.
 - Build artifacts (`bin/`, `dist/`, `main`, `nyttig`, `nyttigd`, `nyttig-api`,
   and `web/build/` via `web/.gitignore`) and tool caches
   (`.deps/`, `.modcache/`, `.pi/`) are covered by `.gitignore`. Its patterns are

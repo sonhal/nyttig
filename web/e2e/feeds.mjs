@@ -165,6 +165,55 @@ ${items}
 </channel></rss>`;
 }
 
+/** A date as EUVD writes it: "Apr 16, 2025, 7:00:16 AM", in UTC. */
+function euvdDate(d) {
+	const mon = d.toLocaleString('en-US', { month: 'short', timeZone: 'UTC' });
+	const h = d.getUTCHours() % 12 || 12;
+	const pad = (n) => String(n).padStart(2, '0');
+	const ampm = d.getUTCHours() < 12 ? 'AM' : 'PM';
+	return `${mon} ${d.getUTCDate()}, ${d.getUTCFullYear()}, ${h}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())} ${ampm}`;
+}
+
+/**
+ * An EUVD /api/search answer with two records named after name; page 0
+ * only, as the API pages (a later page is empty).
+ */
+function euvdSearch(name, page) {
+	const published = euvdDate(new Date(Date.now() - 3 * 3600_000));
+	const items =
+		page > 0
+			? []
+			: [
+					{
+						id: 'EUVD-2026-90001',
+						description: `${name} remote code execution in the <b>admin</b> panel`,
+						datePublished: published,
+						dateUpdated: published,
+						baseScore: 9.8,
+						baseScoreVersion: '3.1',
+						baseScoreVector: 'CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H',
+						references: 'https://example.com/advisory\n',
+						aliases: 'CVE-2026-90001\n',
+						assigner: 'ExampleCNA',
+						epss: 42,
+						exploitedSince: published,
+						enisaIdProduct: [{ id: 'p1', product: { name: 'Widget' }, product_version: '2.0' }],
+						enisaIdVendor: [{ id: 'v1', vendor: { name: 'Acme' } }]
+					},
+					{
+						id: 'EUVD-2026-90002',
+						description: `${name} information disclosure`,
+						datePublished: published,
+						dateUpdated: published,
+						baseScore: 4.3,
+						baseScoreVersion: '3.1',
+						aliases: '',
+						assigner: 'ExampleCNA'
+					}
+				];
+	return JSON.stringify({ items, total: 2 });
+}
+
 export function startFeedServer() {
 	let pixelHits = 0;
 	let added = 0;
@@ -186,6 +235,13 @@ export function startFeedServer() {
 		if (extra) {
 			res.writeHead(200, { 'Content-Type': 'application/rss+xml' });
 			res.end(extraFeed(extra[1]));
+			return;
+		}
+		// An EUVD search for euvd sources: /euvd/<name>/api/search.
+		const euvd = url.pathname.match(/^\/euvd\/([\w-]+)\/api\/search$/);
+		if (euvd) {
+			res.writeHead(200, { 'Content-Type': 'application/json' });
+			res.end(euvdSearch(euvd[1], Number(url.searchParams.get('page') ?? 0)));
 			return;
 		}
 		const undated = url.pathname.match(/^\/undated\/([\w-]+)\.xml$/);

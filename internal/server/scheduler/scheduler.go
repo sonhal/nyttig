@@ -18,7 +18,7 @@ type Source struct {
 	ID         int64
 	Name       string
 	URL        string
-	Type       string // rss, atom or bluesky; the fetcher picks its request and parser by it
+	Type       string // rss, atom, bluesky or euvd; the fetcher picks its request and parser by it
 	RefreshSec int64
 	Enabled    bool
 }

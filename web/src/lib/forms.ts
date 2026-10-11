@@ -127,7 +127,7 @@ export function formatInterval(sec: number | undefined): string {
 export interface SourceForm {
 	name: string;
 	url: string;
-	type: 'rss' | 'atom' | 'bluesky';
+	type: 'rss' | 'atom' | 'bluesky' | 'euvd';
 	/** A refresh interval as typed, e.g. "1h". */
 	refresh: string;
 	enabled: boolean;
@@ -140,7 +140,7 @@ export function sourceForm(s?: Source): SourceForm {
 	return {
 		name: s?.name ?? '',
 		url: s?.url ?? '',
-		type: s?.type === 'atom' || s?.type === 'bluesky' ? s.type : 'rss',
+		type: s?.type === 'atom' || s?.type === 'bluesky' || s?.type === 'euvd' ? s.type : 'rss',
 		refresh: formatInterval(s ? s.refresh_sec : DEFAULT_REFRESH_SEC),
 		// New sources are enabled unless unchecked: proto3's default for
 		// AddSourceRequest.enabled is false, so it is always sent.
@@ -152,12 +152,19 @@ export function sourceForm(s?: Source): SourceForm {
 
 export function validateSource(f: SourceForm): Errors<SourceForm> {
 	const e: Errors<SourceForm> = {};
-	// A Bluesky source is named after the account when the name is blank.
-	const name = f.type === 'bluesky' && f.name.trim() === '' ? undefined : nameError('name', f.name, MAX_NAME);
+	// A Bluesky source is named after the account when the name is blank,
+	// an EUVD source "EUVD".
+	const name = optionalName(f.type) && f.name.trim() === '' ? undefined : nameError('name', f.name, MAX_NAME);
 	if (name) e.name = name;
 	// The daemon resolves a Bluesky handle, DID or profile URL, so only
-	// the shape common to all of them is checked here.
-	const url = f.type === 'bluesky' ? accountError(f.url.trim()) : urlError(f.url.trim());
+	// the shape common to all of them is checked here. A blank EUVD URL is
+	// the daemon's default search (exploited vulnerabilities).
+	const url =
+		f.type === 'bluesky'
+			? accountError(f.url.trim())
+			: f.type === 'euvd' && f.url.trim() === ''
+				? undefined
+				: urlError(f.url.trim());
 	if (url) e.url = url;
 	const sec = parseInterval(f.refresh);
 	if (sec === null) e.refresh = 'an interval like 30m, 1h or 3600';
@@ -170,6 +177,14 @@ export function validateSource(f: SourceForm): Errors<SourceForm> {
 		if (a) e.abbreviation = a;
 	}
 	return e;
+}
+
+/** What a blank EUVD source URL reads (fetcher.EUVDDefaultURL). */
+export const EUVD_DEFAULT_URL = 'https://euvdservices.enisa.europa.eu/api/search?exploited=true';
+
+/** Whether a source of this type may leave its name blank. */
+function optionalName(type: SourceForm['type']): boolean {
+	return type === 'bluesky' || type === 'euvd';
 }
 
 function sourceValues(f: SourceForm) {
@@ -206,8 +221,8 @@ export function sourceAddBody(f: SourceForm): SourceBody {
 export function sourcePatchBody(orig: Source, f: SourceForm): SourceBody {
 	const v = sourceValues(f);
 	const p: SourceBody = {};
-	// A blank name on a Bluesky source means "keep the current one".
-	if (v.name !== (orig.name ?? '') && !(v.type === 'bluesky' && v.name === '')) p.name = v.name;
+	// A blank name on a Bluesky or EUVD source means "keep the current one".
+	if (v.name !== (orig.name ?? '') && !(optionalName(v.type) && v.name === '')) p.name = v.name;
 	if (v.url !== (orig.url ?? '')) p.url = v.url;
 	if (v.type !== (orig.type || 'rss')) p.type = v.type;
 	if (v.refresh_sec !== (orig.refresh_sec ?? 0)) p.refresh_sec = v.refresh_sec;
