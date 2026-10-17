@@ -930,7 +930,8 @@ fresh snapshot (the newest 200), dropping the older pages.
 a unique prefix is enough): `:feed` `:sources` `:tags` `:rules` `:views` (`:q` is
 the feed), `:assessors`, `:digests` (`:d`), `:digest <assessor>/<series>`, `:sort [newest|oldest|score]`, `:unviewed [on|off]`, `:src <name>|all`,
 `:tag <name>|all`, `:score <assessor>|all [min]`, `:unassessed <assessor>|all`, `:columns [<list>|all]` (`:cols`; alone, the checklist), `:rate <score> [note]`, `:view <name>|all` (`:v`), `:save [name]`,
-`:refresh [source]`, `:time [relative|absolute]`, `:follow`, `:help`. The
+`:refresh [source]`, `:time [relative|absolute]`, `:follow`, `:version` (the
+running versions of the web app, nyttig-api and nyttigd), `:help`. The
 filter and view commands also work from the management pages, and go to the
 feed.
 

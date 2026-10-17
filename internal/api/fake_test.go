@@ -55,6 +55,13 @@ type fakeClient struct {
 	streamErr error
 }
 
+func (f *fakeClient) GetVersion(context.Context, *emptypb.Empty, ...grpc.CallOption) (*pb.GetVersionResponse, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	return &pb.GetVersionResponse{Version: "v1.2.3"}, nil
+}
+
 func (f *fakeClient) ListSources(context.Context, *emptypb.Empty, ...grpc.CallOption) (*pb.ListSourcesResponse, error) {
 	if f.err != nil {
 		return nil, f.err
