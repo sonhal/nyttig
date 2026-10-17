@@ -366,7 +366,9 @@ which phases are done and whether they are merged; keep it current.
   `StreamFilter`, the Hub and `ViewSearchRequest` never carry it. The rules
   are `internal/columns` (`Normalize`: canonical names only, no duplicates,
   display order, the full set as nil; `Parse` adds the aliases for typed
-  input); the service stores the normalized list. `update-view` in the CLI
+  input, and a list of `-name`s as "every column but these", turned into
+  the shown list; `Spell` writes the shorter of the two for people); the
+  service stores the normalized list. `update-view` in the CLI
   copies the stored filter field by field, so a new `ViewFilter` field must
   be copied there too or any filter flag drops it. In the web app the
   columns are `Filter.columns` (`columns.ts`, the same case table as the
@@ -375,7 +377,12 @@ which phases are done and whether they are merged; keep it current.
   `sameFilter`, so a change of columns alone re-renders the rows without
   reconnecting (`e2e/columns.spec.ts` counts the requests). `FeedRow`
   takes `columns`; on mobile the description takes the title's line when
-  the title is hidden.
+  the title is hidden. `spellColumns` (the `/` bar) and `columnCandidates`
+  (completion in the bar and in `:columns`) live in `columns.ts`. `C` and
+  `:columns` alone open the picker as a checklist (`PickOption.checked`,
+  kind `column`): picking toggles and keeps it open, and the checklist's
+  options are the selection while it is open. The mobile sheet has a toggle
+  button per column. `toggleColumn` refuses to hide the last one.
 - **Date window** (`since`, `docs/date-filter-plan.md`): a rolling
   duration (`24h`, `7d`, `2w`, `1mo`, `1y`; parsed by `internal/since` and
   `web/src/lib/since.ts`, which share a table of cases) and a general filter

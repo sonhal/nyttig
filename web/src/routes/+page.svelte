@@ -29,7 +29,8 @@
 	import { keyAction, type Action, type Mode } from '$lib/keymap';
 	import { assessorDisplays, fetchTimes, sourceDisplays, tagDisplays } from '$lib/meta';
 	import { metadata } from '$lib/metadata.svelte';
-	import { Picker } from '$lib/picker.svelte';
+	import { Picker, type PickOption } from '$lib/picker.svelte';
+	import { COLUMNS, shows, toggleColumn, type Column } from '$lib/columns';
 	import { prefs } from '$lib/prefs.svelte';
 	import { treeOrder } from '$lib/tagtree';
 	import { applyCompletion, complete, format, parse, type Candidate } from '$lib/query';
@@ -352,7 +353,28 @@
 		if (last >= items.length - 1 - LOAD_AHEAD_ROWS) void stream.loadOlder();
 	}
 
-	function openPicker(kind: 'source' | 'tag' | 'view' | 'assessor') {
+	/** The column checklist for a selection. */
+	function columnOptions(columns: Column[]): PickOption[] {
+		return COLUMNS.map((c) => ({ id: c.name, label: c.label, checked: shows(columns, c.name) }));
+	}
+
+	/**
+	 * Toggles a column from the open checklist. The checklist is the
+	 * selection while it is open, so quick toggles don't wait for the URL.
+	 */
+	function toggleColumnPick(id: string) {
+		const on = picker.options.filter((o) => o.checked).map((o) => o.id as Column);
+		const next = toggleColumn(on.length === COLUMNS.length ? [] : on, id as Column);
+		if (!next) return flash('one column has to show');
+		picker.setOptions(columnOptions(next));
+		setFilter({ ...filter, columns: next });
+	}
+
+	function openPicker(kind: 'source' | 'tag' | 'view' | 'assessor' | 'column') {
+		if (kind === 'column') {
+			picker.start('column', columnOptions(filter.columns));
+			return;
+		}
 		if (kind === 'assessor') {
 			picker.start('assessor', [
 				{ id: '', label: 'all' },
@@ -389,6 +411,7 @@
 
 	function pick(id: string) {
 		const kind = picker.kind;
+		if (kind === 'column') return toggleColumnPick(id);
 		closePicker();
 		if (kind === 'view') return openViewById(id);
 		if (kind === 'assessor') return setFilter(withAssessor(filter, id));
@@ -414,7 +437,8 @@
 		setFilter,
 		activeView: () => openView?.id ?? '',
 		follow,
-		rate: (score, note) => void rate(score, note)
+		rate: (score, note) => void rate(score, note),
+		pickColumns: () => openPicker('column')
 	};
 
 	/** :rate: scores the selected item as the assessor "me", which is created the first time. */
@@ -478,6 +502,8 @@
 				return setFilter(withAssessor(filter, ''));
 			case 'viewPicker':
 				return openPicker('view');
+			case 'pickColumns':
+				return openPicker('column');
 			case 'viewTab': {
 				if (a.n === 0) return openViewById('');
 				const v = viewForKey(metadata.views, a.n);

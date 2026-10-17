@@ -39,6 +39,7 @@ func TestFormatViewFilter(t *testing.T) {
 		{"other colon words stay", &pb.ViewFilter{Search: "http://x"}, `http://x`},
 		{"columns go last", &pb.ViewFilter{Sort: "oldest", Columns: []string{"source", "title"}}, `sort:oldest cols:source,title`},
 		{"columns alone", &pb.ViewFilter{Columns: []string{"score"}}, `cols:score`},
+		{"most columns are written as the hidden ones", &pb.ViewFilter{Columns: []string{"date", "source", "tags", "score", "title"}}, `cols:-desc,-domain`},
 		{"cols-looking words are quoted", &pb.ViewFilter{Search: "cols:title columns:x"}, `"cols:title" "columns:x"`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

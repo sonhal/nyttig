@@ -394,3 +394,20 @@ describe('cols:', () => {
 		expect(complete('cols:title', 10, sources, tags)).toBeNull();
 	});
 });
+
+describe('cols: hiding columns', () => {
+	it('reads -names as every column but those, and writes the shorter form', () => {
+		const hidden = f({ columns: ['date', 'source', 'tags', 'score', 'title'] });
+		expect(ok('cols:-desc,-domain')).toEqual(hidden);
+		expect(format(hidden, sources, tags)).toBe('cols:-desc,-domain');
+		expect(format(f({ columns: ['source', 'title'] }), sources, tags)).toBe('cols:source,title');
+	});
+	it('refuses a mixed list and hiding everything', () => {
+		const err = (text: string) => parse(text, sources, tags).errors.map((e) => e.message)[0];
+		expect(err('cols:-desc,title')).toContain('mix');
+		expect(err('cols:-date,-source,-tags,-score,-title,-desc,-domain')).toContain('every column');
+	});
+	it('completes after a minus', () => {
+		expect(complete('cols:-desc,-do', 14, sources, tags)?.candidates.map((x) => x.insert)).toEqual(['cols:-desc,-domain']);
+	});
+});

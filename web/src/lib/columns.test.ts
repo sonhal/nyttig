@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { formatColumns, knownColumns, normalizeColumns, parseColumns, shows, toggleColumn } from './columns';
+import {
+	columnCandidates,
+	formatColumns,
+	knownColumns,
+	normalizeColumns,
+	parseColumns,
+	shows,
+	spellColumns,
+	toggleColumn
+} from './columns';
 
 // The same cases are in internal/columns/columns_test.go; keep them in step.
 const CASES: { in: string; want?: string; err?: string }[] = [
@@ -14,7 +23,16 @@ const CASES: { in: string; want?: string; err?: string }[] = [
 	{ in: 'title,time,date', err: 'twice' },
 	{ in: 'title,bogus', err: 'bogus' },
 	{ in: ',', err: 'empty' },
-	{ in: 'title,', err: 'empty' }
+	{ in: 'title,', err: 'empty' },
+	// Excluding: every column but these.
+	{ in: '-desc,-domain', want: 'date,source,tags,score,title' },
+	{ in: '-DESCRIPTION, -src', want: 'date,tags,score,title,domain' },
+	{ in: '- desc', want: 'date,source,tags,score,title,domain' },
+	{ in: '-title,source', err: 'mix' },
+	{ in: '-date,-source,-tags,-score,-title,-desc,-domain', err: 'every column' },
+	{ in: '-bogus', err: 'bogus' },
+	{ in: '-title,-title', err: 'twice' },
+	{ in: '-', err: 'empty' }
 ];
 
 describe('parseColumns', () => {
@@ -73,5 +91,37 @@ describe('toggleColumn', () => {
 	});
 	it('formats with commas', () => {
 		expect(formatColumns(['source', 'title'])).toBe('source,title');
+	});
+});
+
+// The same cases are in internal/columns/columns_test.go (TestSpell).
+describe('spellColumns', () => {
+	for (const [input, want] of [
+		['', ''],
+		['title', 'title'],
+		['source,title,score', 'source,score,title'],
+		['date,source,tags,title', '-score,-desc,-domain'],
+		['-desc,-domain', '-desc,-domain'],
+		['-title', '-title']
+	] as const) {
+		it(input || '(all)', () => {
+			const r = parseColumns(input);
+			if (!r.ok) throw new Error(r.error);
+			const got = spellColumns(r.columns);
+			expect(got).toBe(want);
+			expect(parseColumns(got)).toEqual(r);
+		});
+	}
+});
+
+describe('columnCandidates', () => {
+	it('completes the part after the last comma', () => {
+		expect(columnCandidates('ti')).toEqual({ offset: 0, candidates: ['title'] });
+		expect(columnCandidates('title,d')).toEqual({ offset: 6, candidates: ['date', 'desc', 'domain'] });
+		expect(columnCandidates('title, so')).toEqual({ offset: 7, candidates: ['source'] });
+	});
+	it('keeps the minus of a hidden column', () => {
+		expect(columnCandidates('-desc,-do')).toEqual({ offset: 6, candidates: ['-domain'] });
+		expect(columnCandidates('-de').candidates).toEqual(['-desc']);
 	});
 });

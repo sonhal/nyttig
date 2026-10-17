@@ -42,6 +42,8 @@ export type Action =
 	/** a: pick the assessor whose scores to show and use; A: none. */
 	| { type: 'pickAssessor' }
 	| { type: 'clearAssessor' }
+	/** C: the column checklist. */
+	| { type: 'pickColumns' }
 	/** 1-9: the nth favorite view; 0: the unfiltered feed. */
 	| { type: 'viewTab'; n: number }
 	| { type: 'viewPicker' }
@@ -124,6 +126,7 @@ const NORMAL: FeedBinding[] = [
 	b('Filter', ['a'], { type: 'pickAssessor' }, 'pick an assessor by name (its scores are shown first, and rows it scored above 0.5 glow amber, brighter the higher)'),
 	b('Filter', ['A'], { type: 'clearAssessor' }, 'clear the assessor (and the minimum score)'),
 	b('Filter', ['o'], { type: 'toggleSort' }, 'toggle newest/oldest first'),
+	b('Filter', ['C'], { type: 'pickColumns' }, 'choose the columns to show (Enter toggles one)'),
 	b('Saved views', ['1'], { type: 'viewTab', n: 1 }, 'go to favorite view 1-9'),
 	b('Saved views', ['2'], { type: 'viewTab', n: 2 }, 'go to favorite view 1-9'),
 	b('Saved views', ['3'], { type: 'viewTab', n: 3 }, 'go to favorite view 1-9'),
@@ -166,7 +169,7 @@ const COMMAND: Binding<CommandAction>[] = [
 ];
 
 const PICKER: FeedBinding[] = [
-	b('Picker', ['Enter'], { type: 'pickerSelect' }, 'choose the highlighted entry'),
+	b('Picker', ['Enter'], { type: 'pickerSelect' }, 'choose the highlighted entry (in the column picker: toggle it)'),
 	b('Picker', ['Escape'], { type: 'pickerCancel' }, 'close'),
 	b('Picker', ['ArrowDown', 'Tab'], { type: 'pickerMove', by: 1 }, 'next entry'),
 	b('Picker', ['ArrowUp'], { type: 'pickerMove', by: -1 }, 'previous entry')

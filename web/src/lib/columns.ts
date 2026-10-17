@@ -50,15 +50,30 @@ export function normalizeColumns(names: readonly string[]): ColumnsResult {
 	return { ok: true, columns: columns.length === ORDER.length ? [] : columns };
 }
 
-/** Reads "title, src": trimmed, case-insensitive, aliases accepted; "" is every column. */
+/**
+ * Reads "title, src": trimmed, case-insensitive, aliases accepted; "" is every
+ * column. A list whose names all start with "-" hides them instead
+ * ("-desc,-domain" is every column but those); mixing the two, or hiding every
+ * column, is an error. The result is always the shown columns.
+ */
 export function parseColumns(text: string): ColumnsResult {
 	if (text.trim() === '') return { ok: true, columns: [] };
-	return normalizeColumns(
-		text.split(',').map((p) => {
-			const n = p.trim().toLowerCase();
-			return ALIASES[n] ?? n;
-		})
-	);
+	let hidden = 0;
+	const names = text.split(',').map((p) => {
+		let n = p.trim().toLowerCase();
+		if (n.startsWith('-')) {
+			hidden++;
+			n = n.slice(1).trim();
+		}
+		return ALIASES[n] ?? n;
+	});
+	if (hidden === 0) return normalizeColumns(names);
+	if (hidden !== names.length) return { ok: false, error: "cols: don't mix shown and hidden (-name) columns" };
+	const checked = normalizeColumns(names);
+	if (!checked.ok) return checked;
+	const shown = ORDER.filter((c) => !names.includes(c));
+	if (shown.length === 0) return { ok: false, error: "cols: can't hide every column" };
+	return normalizeColumns(shown);
 }
 
 /**
@@ -70,8 +85,42 @@ export function knownColumns(names: readonly string[] | undefined): Column[] {
 	return r.ok ? r.columns : [];
 }
 
+/** The selection as the URL and the API carry it: the shown columns. */
 export function formatColumns(columns: readonly Column[]): string {
 	return columns.join(',');
+}
+
+/**
+ * The selection the shorter way for people to read: the shown columns
+ * ("source,title"), or the hidden ones when fewer ("-desc,-domain").
+ * parseColumns reads both back.
+ */
+export function spellColumns(columns: readonly Column[]): string {
+	if (columns.length === 0 || 2 * columns.length <= ORDER.length) return formatColumns(columns);
+	return ORDER.filter((c) => !columns.includes(c))
+		.map((c) => '-' + c)
+		.join(',');
+}
+
+/**
+ * Completion of a column list: the names for the part after the last comma,
+ * leaving out those already in the list. A part starting with "-" gets "-"
+ * names. offset is where that part's name starts in the list.
+ */
+export function columnCandidates(list: string): { offset: number; candidates: string[] } {
+	const comma = list.lastIndexOf(',');
+	const used = list
+		.slice(0, comma + 1)
+		.split(',')
+		.map((x) => x.trim().replace(/^-\s*/, '').toLowerCase());
+	const part = list.slice(comma + 1);
+	const word = part.trimStart();
+	const minus = word.startsWith('-') ? '-' : '';
+	const typed = word.slice(minus.length).toLowerCase();
+	const names = ORDER.filter((n) => !used.includes(n));
+	const starts = names.filter((n) => n.startsWith(typed));
+	const contains = names.filter((n) => !n.startsWith(typed) && n.includes(typed));
+	return { offset: comma + 1 + (part.length - word.length), candidates: [...starts, ...contains].map((n) => minus + n) };
 }
 
 /** Whether a row shows the column: [] shows everything. */

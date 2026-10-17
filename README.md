@@ -559,7 +559,8 @@ the view's window.
 `-columns title,source` or `-columns date,title`. The columns are `date`,
 `source`, `tags`, `score`, `title`, `desc` and `domain` (also spelled
 `time`, `src`, `tag`, `scores` and `description`); they always appear in
-that order, and the unviewed marker always shows. Without `-columns` a view
+that order, and the unviewed marker always shows. `-columns -desc,-domain`
+shows every column but those. Without `-columns` a view
 shows every column. Columns only change how the feed looks: `search -view`
 returns the same items with or without them. `list-views` shows them as
 `cols:source,title`.
@@ -861,6 +862,7 @@ the keymap, so it is always current.
 | `=`                | Rate the selected item yourself (types `:rate ` for you, see [Rating items yourself](#rating-items-yourself)) |
 | `a`, `A`           | Pick an assessor by name (its scores are shown first, see [Assessments](#assessments)) / clear it |
 | `o`                | Toggle sort (newest / oldest)                     |
+| `C`                | Choose the columns: a checklist, `Enter` (or a click) toggles a column and it stays open, `Esc` closes |
 | `F`                | Follow: jump to the newest and stick to it         |
 | `D`                | Relative ("12m ago") or absolute times; remembered in the browser |
 | `r`, `R`           | Refresh all sources / the selected item's source  |
@@ -887,7 +889,12 @@ tokenization is approximated).
 example `cols:date,title` or `cols:score,title`. The columns are `date`,
 `source`, `tags`, `score`, `title`, `desc` and `domain` (also `time`, `src`,
 `tag`, `scores`, `description`); they keep their usual order, and the
-unviewed dot always shows. Columns are part of the filter: they are in the
+unviewed dot always shows. A list of `-` names hides those instead:
+`cols:-desc,-domain` is every column but the description and the domain
+(a list can't mix the two, and can't hide every column). The bar writes
+whichever form is shorter. `C` opens a checklist of the columns,
+`:columns <list>|all` (`:cols`) sets them, and on a phone the `⚙` sheet has
+a button per column. Columns are part of the filter: they are in the
 URL (`cols=source,title`) and a saved view keeps them, so a changed column
 list marks the view's tab `*`. They only change how rows look, so changing
 them doesn't reload the feed. On a phone, with the title hidden, the
@@ -922,7 +929,7 @@ fresh snapshot (the newest 200), dropping the older pages.
 **Command line** (`:`; `Tab` completes, again to cycle; `↑`/`↓` history;
 a unique prefix is enough): `:feed` `:sources` `:tags` `:rules` `:views` (`:q` is
 the feed), `:assessors`, `:digests` (`:d`), `:digest <assessor>/<series>`, `:sort [newest|oldest|score]`, `:unviewed [on|off]`, `:src <name>|all`,
-`:tag <name>|all`, `:score <assessor>|all [min]`, `:unassessed <assessor>|all`, `:rate <score> [note]`, `:view <name>|all` (`:v`), `:save [name]`,
+`:tag <name>|all`, `:score <assessor>|all [min]`, `:unassessed <assessor>|all`, `:columns [<list>|all]` (`:cols`; alone, the checklist), `:rate <score> [note]`, `:view <name>|all` (`:v`), `:save [name]`,
 `:refresh [source]`, `:time [relative|absolute]`, `:follow`, `:help`. The
 filter and view commands also work from the management pages, and go to the
 feed.

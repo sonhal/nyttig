@@ -8,6 +8,7 @@ package columns
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 )
 
@@ -64,20 +65,65 @@ func Normalize(names []string) ([]string, error) {
 
 // Parse reads a comma-separated list such as "title, src". Names are trimmed
 // and case-insensitive, and the aliases are accepted. "" is every column.
+//
+// A list whose names all start with "-" excludes them: "-desc,-domain" is
+// every column but those two. Mixing shown and hidden names is an error, and
+// so is hiding every column. The result is always the shown columns, so an
+// exclusion is never stored as such.
 func Parse(s string) ([]string, error) {
 	if strings.TrimSpace(s) == "" {
 		return nil, nil
 	}
 	parts := strings.Split(s, ",")
 	names := make([]string, len(parts))
+	hidden := 0
 	for i, p := range parts {
 		n := strings.ToLower(strings.TrimSpace(p))
+		if strings.HasPrefix(n, "-") {
+			hidden++
+			n = strings.TrimSpace(n[1:])
+		}
 		if a, ok := aliases[n]; ok {
 			n = a
 		}
 		names[i] = n
 	}
-	return Normalize(names)
+	if hidden == 0 {
+		return Normalize(names)
+	}
+	if hidden != len(names) {
+		return nil, fmt.Errorf("columns: don't mix shown and hidden (-name) columns")
+	}
+	// Checked like a list of shown columns, then turned around.
+	if _, err := Normalize(names); err != nil {
+		return nil, err
+	}
+	var shown []string
+	for _, c := range All {
+		if !slices.Contains(names, c) {
+			shown = append(shown, c)
+		}
+	}
+	if len(shown) == 0 {
+		return nil, fmt.Errorf("columns: can't hide every column")
+	}
+	return Normalize(shown)
+}
+
+// Spell writes a selection the shorter way for people to read: the shown
+// columns ("source,title"), or the hidden ones when fewer ("-desc,-domain").
+// Parse reads both back; nil is "".
+func Spell(names []string) string {
+	if len(names) == 0 || 2*len(names) <= len(All) {
+		return Format(names)
+	}
+	var hidden []string
+	for _, c := range All {
+		if !slices.Contains(names, c) {
+			hidden = append(hidden, "-"+c)
+		}
+	}
+	return strings.Join(hidden, ",")
 }
 
 // Format joins a selection with commas; nil is "".

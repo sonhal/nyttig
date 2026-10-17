@@ -22,7 +22,7 @@
 // only known to the client, so both take the current sources and tags.
 // Tag rule patterns never come into this: the query only ever names things.
 
-import { COLUMN_NAMES, formatColumns, parseColumns } from './columns';
+import { columnCandidates, formatColumns, parseColumns, spellColumns } from './columns';
 import { defaultFilter, parseScore } from './filter';
 import { oneLine } from './sanitize';
 import { parseSince, SINCE_SUGGESTIONS } from './since';
@@ -73,7 +73,7 @@ export const QUERY_KEYS: readonly { usage: string; desc: string }[] = [
 	{ usage: 'sort:newest|oldest|score', desc: 'the sort order; score needs a score: term' },
 	{
 		usage: 'cols:<column>,...',
-		desc: 'show only these columns: date, source, tags, score, title, desc, domain (cols:title,source)'
+		desc: 'show only these columns: date, source, tags, score, title, desc, domain (cols:title,source); cols:-desc,-domain hides those'
 	},
 	{ usage: '<words>', desc: 'full-text search, matched as a phrase ("quoted" to stop a word being read as an operator)' }
 ];
@@ -388,7 +388,7 @@ export function format(
 	}
 	if (f.unassessed) parts.push('unassessed:' + named(assessors, f.unassessed));
 	if (f.sort !== defaultFilter.sort) parts.push('sort:' + f.sort);
-	if (f.columns.length) parts.push('cols:' + formatColumns(f.columns));
+	if (f.columns.length) parts.push('cols:' + spellColumns(f.columns));
 	return parts.join(' ');
 }
 
@@ -430,7 +430,7 @@ export function complete(
 	const typed = t.value.slice(0, Math.max(0, caret - t.valueStart - (t.quoted ? 1 : 0))).toLowerCase();
 
 	const key = t.key;
-	if (key === 'cols') return completeColumns(text, t, typed);
+	if (key === 'cols') return completeColumns(text, t, caret);
 	let entries: { label: string; color?: string }[];
 	switch (key) {
 		case 'tag':
@@ -468,18 +468,12 @@ export function complete(
 	return { start: t.start, end: t.end, candidates };
 }
 
-/** Column names for the part of a cols: value after its last comma. */
-function completeColumns(text: string, t: Token, typed: string): Completion | null {
-	const comma = typed.lastIndexOf(',');
-	const done = typed.slice(0, comma + 1);
-	const part = typed.slice(comma + 1).trim();
-	const used = new Set(done.split(',').map((x) => x.trim()));
-	const names = COLUMN_NAMES.filter((n) => !used.has(n));
-	const starts = names.filter((n) => n.startsWith(part));
-	const contains = names.filter((n) => !n.startsWith(part) && n.includes(part));
-	const candidates = [...starts, ...contains].map(
-		(n): Candidate => ({ label: n, insert: `${t.keyText ?? 'cols'}:${done.replace(/\s+/g, '')}${n}`, kind: 'cols' })
-	);
+/** Column names for the part of a cols: value after its last comma ("-" names after a "-"). */
+function completeColumns(text: string, t: Token, caret: number): Completion | null {
+	const typed = t.value.slice(0, Math.max(0, caret - t.valueStart - (t.quoted ? 1 : 0)));
+	const { offset, candidates: names } = columnCandidates(typed);
+	const done = typed.slice(0, offset).replace(/\s+/g, '');
+	const candidates = names.map((n): Candidate => ({ label: n, insert: `${t.keyText ?? 'cols'}:${done}${n}`, kind: 'cols' }));
 	if (candidates.length === 0) return null;
 	if (candidates.length === 1 && candidates[0]!.insert === text.slice(t.start, t.end)) return null;
 	return { start: t.start, end: t.end, candidates };

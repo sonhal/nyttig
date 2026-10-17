@@ -90,7 +90,8 @@ func queryWord(w string) string {
 
 // columnsUsage is the help text of -columns.
 const columnsUsage = "Show only these feed columns, in their usual order: " +
-	"date, source, tags, score, title, desc, domain (also time, src, tag, scores, description)"
+	"date, source, tags, score, title, desc, domain (also time, src, tag, scores, description); " +
+	"-desc,-domain shows every column but those"
 
 // formatViewFilter writes a view's filter the way the web `/` bar does:
 // words, src:, tag:, is:unviewed, since:, score:<assessor>[>=N],
@@ -137,7 +138,7 @@ func formatViewFilter(f *pb.ViewFilter, sources, tags, assessors map[int64]strin
 		parts = append(parts, "sort:"+f.Sort)
 	}
 	if len(f.Columns) > 0 {
-		parts = append(parts, "cols:"+columns.Format(f.Columns))
+		parts = append(parts, "cols:"+columns.Spell(f.Columns))
 	}
 	return strings.Join(parts, " ")
 }

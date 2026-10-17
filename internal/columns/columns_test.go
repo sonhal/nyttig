@@ -22,6 +22,15 @@ func TestParse(t *testing.T) {
 		{"title,bogus", "", "bogus"},
 		{",", "", "empty"},
 		{"title,", "", "empty"},
+		// Excluding: every column but these.
+		{"-desc,-domain", "date,source,tags,score,title", ""},
+		{"-DESCRIPTION, -src", "date,tags,score,title,domain", ""},
+		{"- desc", "date,source,tags,score,title,domain", ""},
+		{"-title,source", "", "mix"},
+		{"-date,-source,-tags,-score,-title,-desc,-domain", "", "every column"},
+		{"-bogus", "", "bogus"},
+		{"-title,-title", "", "twice"},
+		{"-", "", "empty"},
 	}
 	for _, tc := range cases {
 		got, err := Parse(tc.in)
@@ -37,6 +46,30 @@ func TestParse(t *testing.T) {
 		}
 		if Format(got) != tc.want {
 			t.Errorf("Parse(%q) = %q, want %q", tc.in, Format(got), tc.want)
+		}
+	}
+}
+
+// The same cases are in web/src/lib/columns.test.ts (spellColumns).
+func TestSpell(t *testing.T) {
+	for _, tc := range []struct{ in, want string }{
+		{"", ""},
+		{"title", "title"},
+		{"source,title,score", "source,score,title"},
+		{"date,source,tags,title", "-score,-desc,-domain"},
+		{"-desc,-domain", "-desc,-domain"},
+		{"-title", "-title"},
+	} {
+		names, err := Parse(tc.in)
+		if err != nil {
+			t.Fatalf("Parse(%q): %v", tc.in, err)
+		}
+		got := Spell(names)
+		if got != tc.want {
+			t.Errorf("Spell(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+		if back, err := Parse(got); err != nil || Format(back) != Format(names) {
+			t.Errorf("Parse(Spell(%q)) = %q, %v", tc.in, back, err)
 		}
 	}
 }

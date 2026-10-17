@@ -101,3 +101,61 @@ test('columns: a change of columns re-renders without reloading, and a view keep
 	await expect(page.getByTestId('view-modified')).toBeVisible();
 	await expect(row(page, RUST).locator('.date')).toHaveCount(0);
 });
+
+test('columns: the C checklist, :columns with hidden columns, and the phone sheet', async ({ page }) => {
+	await open(page);
+	if (isMobile(page)) {
+		// The sheet has a toggle per column; the last one shown can't go.
+		await page.getByTestId('open-filters').tap();
+		const date = page.getByTestId('sheet-col-date');
+		await expect(date).toHaveAttribute('aria-pressed', 'true');
+		await date.tap();
+		await expect(date).toHaveAttribute('aria-pressed', 'false');
+		await expect(page).toHaveURL(/cols=/);
+		await expect(row(page, RUST).locator('.date')).toHaveCount(0);
+		await page.getByTestId('sheet-col-date').tap();
+		await expect(page).not.toHaveURL(/cols=/);
+		return;
+	}
+
+	// C opens the checklist; Enter toggles the highlighted column and it stays open.
+	await page.keyboard.press('C');
+	const picker = page.getByTestId('picker');
+	await expect(picker.getByRole('option', { name: '[x] date' })).toBeVisible();
+	await page.keyboard.press('Enter');
+	await expect(picker.getByRole('option', { name: '[ ] date' })).toBeVisible();
+	await page.keyboard.press('ArrowDown');
+	await page.keyboard.press('Enter');
+	await expect(picker.getByRole('option', { name: '[ ] source' })).toBeVisible();
+	await expect(page).toHaveURL(/cols=tags%2Cscore%2Ctitle%2Cdesc%2Cdomain/);
+	await expect(row(page, RUST).locator('.date')).toHaveCount(0);
+	await expect(row(page, RUST)).not.toContainText('[ALP]');
+	// Typing filters the list; a click toggles too.
+	await page.getByTestId('picker-input').fill('dom');
+	await picker.getByRole('option', { name: '[x] domain' }).click();
+	await expect(row(page, RUST)).not.toContainText('lwn.net');
+	await page.keyboard.press('Escape');
+	await expect(picker).toHaveCount(0);
+	await expect(search(page)).toHaveValue('cols:-date,-source,-domain');
+
+	// :columns with hidden columns, and all.
+	await page.keyboard.press(':');
+	await page.keyboard.type('columns -domain');
+	await page.keyboard.press('Enter');
+	await expect(search(page)).toHaveValue('cols:-domain');
+	await expect(row(page, RUST)).toContainText('[ALP]');
+	await expect(row(page, RUST)).not.toContainText('lwn.net');
+	await page.keyboard.press(':');
+	await page.keyboard.type('cols all');
+	await page.keyboard.press('Enter');
+	await expect(page).not.toHaveURL(/cols=/);
+
+	// The last shown column can't be turned off.
+	await open(page, '/?cols=title');
+	await page.keyboard.press('C');
+	await page.getByTestId('picker-input').fill('title');
+	await page.keyboard.press('Enter');
+	await expect(page.getByText('one column has to show')).toBeVisible();
+	await expect(picker.getByRole('option', { name: '[x] title' })).toBeVisible();
+	await expect(page).toHaveURL(/cols=title/);
+});

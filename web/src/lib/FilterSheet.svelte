@@ -1,6 +1,8 @@
-<!-- Mobile filter sheet: native selects for source, tag, sort and unviewed. -->
+<!-- Mobile filter sheet: native selects for source, tag, sort and unviewed,
+	and a toggle button per column (the last shown column can't be turned off). -->
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { COLUMNS, shows, toggleColumn } from './columns';
 	import type { TimeMode } from './command';
 	import { oneLine } from './sanitize';
 	import { SINCE_PRESETS } from './since';
@@ -104,6 +106,20 @@
 			<option value="1">unviewed only</option>
 		</select>
 	</label>
+	<div class="cols" role="group" aria-label="columns">
+		<span>columns</span>
+		{#each COLUMNS as c (c.name)}
+			<button
+				type="button"
+				aria-pressed={shows(filter.columns, c.name)}
+				data-testid="sheet-col-{c.name}"
+				onclick={() => {
+					const next = toggleColumn(filter.columns, c.name);
+					if (next) set('columns', next);
+				}}>{c.label}</button
+			>
+		{/each}
+	</div>
 	<label>
 		<span>times</span>
 		<select value={timeMode} onchange={(e) => ontime(e.currentTarget.value === 'relative' ? 'relative' : 'absolute')}>
@@ -162,6 +178,27 @@
 	}
 	.done {
 		color: var(--accent);
+	}
+	.cols {
+		display: grid;
+		grid-template-columns: repeat(4, 1fr);
+		align-items: center;
+		gap: 8px;
+	}
+	.cols span {
+		grid-column: 1 / -1;
+	}
+	.cols button {
+		height: 44px;
+		font-size: 14px;
+		background: var(--bg);
+		color: var(--dim);
+		border: 1px solid var(--sel);
+		border-radius: 6px;
+	}
+	.cols button[aria-pressed='true'] {
+		color: var(--accent);
+		border-color: var(--accent);
 	}
 	.manage {
 		display: grid;

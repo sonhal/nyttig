@@ -1,6 +1,6 @@
 # Feed columns plan
 
-Status: **phases 1 and 2 implemented, not yet merged** (the daemon, nyttig-api, the CLI, and the web app's model and rendering); phase 3 (the web controls) planned.
+Status: **phases 1–3 implemented, not yet merged** (on `feat/feed-columns`).
 
 Today every feed row shows the same columns in a fixed order: unviewed dot,
 date, source, tags, score chips, title, description and domain. The feed
@@ -20,6 +20,7 @@ triage list.
 | Columns | `date`, `source`, `tags`, `score`, `title`, `desc`, `domain`. The unviewed dot and the selection highlight are not columns and always show |
 | Default | Empty means **all columns**, today's layout. Selecting every column is normalized to empty, so a view with all columns and one without the field compare equal, and old views and bookmarks are unchanged |
 | At least one | An empty selection can't be made: the picker refuses to clear the last column, and `cols:` with no names is a parse error |
+| Hiding columns | Added during phase 3 at the owner's request. In typed input (`cols:`, `:columns`, the CLI's `-columns`) a list whose names all start with `-` means every column but those: `cols:-desc,-domain`. It is turned into the shown list when parsed, so the wire, the URL and the database are unchanged. Mixing shown and hidden names, or hiding every column, is an error. The `/` bar and `list-views` write the shorter form (`Spell` / `spellColumns`) |
 | Spelling | Canonical names on the wire, in the database and in URLs. When parsing, clients also accept the aliases `time` (date), `src` (source), `tag` (tags), `scores` (score) and `description` (desc). The daemon accepts canonical names only |
 | Changing columns | `:columns <list>` (`:cols` too) with completion, a `C` key that opens a checklist picker, the `cols:` term in the `/` bar, and the view form on `/views` (it edits the filter as query text, so `cols:` comes with it) |
 | Stream | Changing only the columns **must not reconnect the stream** or reload the list; it re-renders the rows |
@@ -192,6 +193,23 @@ phase 2).
   and checks the rows and the URL's `cols=`.
 - Docs: README's web app keys and commands; AGENTS.md's web log-viewer
   paragraph (`C`, `:columns`, `cols:` in `query.ts`).
+
+**Phase 3 notes.** As planned, with these differences:
+
+- **Hiding columns** (see Decisions) was added to the parsers in Go and TS,
+  with new cases in the shared table and a `Spell` / `spellColumns` table
+  of its own. `columnCandidates` in `columns.ts` serves both completions and
+  keeps a leading `-`.
+- The checklist is the existing picker with `PickOption.checked` (kind
+  `column`), not a new component. Its keys are the picker's: arrows move,
+  Enter or a click toggles, typing filters, Esc closes. j/k and Space are
+  typed into its filter input, as in the other pickers.
+- On a phone the filter sheet has a toggle button per column
+  (`aria-pressed`) instead of a row that opens the picker: one tap per
+  column, and the buttons stay big enough to tap.
+- `:columns` alone off the feed says the picker is on the feed;
+  `:columns <list>` works there and goes to the feed, as other filter
+  commands do.
 
 ## Follow-ups (out of scope)
 

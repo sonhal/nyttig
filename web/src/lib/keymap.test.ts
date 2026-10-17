@@ -30,6 +30,7 @@ describe('keyAction in normal mode', () => {
 		['T', { type: 'pickTag' }],
 		['D', { type: 'toggleTime' }],
 		['v', { type: 'viewPicker' }],
+		['C', { type: 'pickColumns' }],
 		['0', { type: 'viewTab', n: 0 }],
 		['1', { type: 'viewTab', n: 1 }],
 		['9', { type: 'viewTab', n: 9 }],
@@ -347,5 +348,12 @@ describe('digestsKeyAction', () => {
 				}
 			}
 		}
+	});
+});
+
+describe('the column picker key', () => {
+	it('is listed in the help', () => {
+		const lines = feedHelp().flatMap((sec: HelpSection) => sec.rows.map((r) => `${r.keys} ${r.desc}`));
+		expect(lines.some((l) => l.startsWith('C ') && l.includes('columns'))).toBe(true);
 	});
 });
