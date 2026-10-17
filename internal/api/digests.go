@@ -10,7 +10,7 @@ import (
 	pb "github.com/sonhal/nyttig/internal/proto/nyttig/v1"
 )
 
-// Digest series and digests; see docs/digests-plan.md. A digest is a document
+// Digest series and digests. A digest is a document
 // an assessor wrote about one to many items, kept in a series. Like the other
 // management endpoints these only check the shape of a request; the daemon
 // validates values (service/validate.go). IDs are strings, periods are RFC

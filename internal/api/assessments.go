@@ -12,7 +12,7 @@ import (
 )
 
 // Assessors and assessments. An assessor is a program (or you) that scores
-// items; see docs/assessments-plan.md. Like the other management endpoints,
+// items. Like the other management endpoints,
 // these only check the shape of a request: the daemon validates values
 // (service/validate.go). Assessor and tag are ID strings, as everywhere in
 // this API; look them up with GET /api/assessors and GET /api/tags.

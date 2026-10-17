@@ -95,7 +95,10 @@ PRs are squash-merged, so the PR title becomes the commit on `main`, and
    and numbered phases that each fit one PR. It must stand on its own.
 3. Implement phase by phase with the tests the plan lists; record deviations
    in the plan and keep `Status:` true.
-4. A delegated brief can say "read `AGENTS.md` and the plan" plus what is
+4. The plan is working material, not documentation: delete it in the PR
+   that finishes the feature, so it never stays on `main`. Code and comments
+   must not link to it.
+5. A delegated brief can say "read `AGENTS.md` and the plan" plus what is
    specific to the task. The sub-agent runs the checks, commits and pushes.
 
 ## Invariants
