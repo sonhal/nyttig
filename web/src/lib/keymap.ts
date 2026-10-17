@@ -121,7 +121,7 @@ const NORMAL: FeedBinding[] = [
 	b('Filter', ['t'], { type: 'cycleTag' }, 'cycle the tag'),
 	b('Filter', ['S'], { type: 'pickSource' }, 'pick a source by name'),
 	b('Filter', ['T'], { type: 'pickTag' }, 'pick a tag by name'),
-	b('Filter', ['a'], { type: 'pickAssessor' }, 'pick an assessor by name (its scores are shown first)'),
+	b('Filter', ['a'], { type: 'pickAssessor' }, 'pick an assessor by name (its scores are shown first, and rows it scored above 0.5 glow amber, brighter the higher)'),
 	b('Filter', ['A'], { type: 'clearAssessor' }, 'clear the assessor (and the minimum score)'),
 	b('Filter', ['o'], { type: 'toggleSort' }, 'toggle newest/oldest first'),
 	b('Saved views', ['1'], { type: 'viewTab', n: 1 }, 'go to favorite view 1-9'),

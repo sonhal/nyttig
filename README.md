@@ -946,10 +946,12 @@ delete confirmation says how many views it affects.
 
 Each row shows one chip per assessor that scored the item, `[claude 0.9]` in
 the assessor's color (its highest score for the item, the selected assessor
-first). The expanded row lists every assessment: assessor, tag, score, age and
-the note. Notes and assessor names are untrusted, so they are shown as text
-only (markup in a note is read as text, like a feed description), never as
-HTML or Markdown. New scores arrive live; an item that starts matching the
+first). With an assessor selected, rows it scored above 0.5 glow amber (a
+gradient and a bar on the left, stronger the higher the score, in any sort
+order and also on read rows); the `●` is still the unviewed marker. The
+expanded row lists every assessment: assessor, tag, score, age and the note.
+Notes and assessor names are untrusted, so they are shown as text only (markup
+in a note is read as text, like a feed description), never as HTML or Markdown. New scores arrive live; an item that starts matching the
 filter is added in its sort position, and one that stops matching stays until
 the next reload. A view saves its assessor, minimum score, "not assessed by"
 and its sort, `score` included, so opening it restores the order. The
