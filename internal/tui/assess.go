@@ -3,10 +3,13 @@ package tui
 import (
 	"errors"
 	"fmt"
+	"math"
 	"regexp"
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/charmbracelet/lipgloss"
 
 	pb "github.com/sonhal/nyttig/internal/proto/nyttig/v1"
 )
@@ -73,6 +76,42 @@ func scoreOf(item *pb.Item, assessorID int64, scope map[int64]bool) (float64, bo
 		}
 	}
 	return best, found
+}
+
+// heatOf maps a score to the strength of its row's heat: 0 at 0.5 or less,
+// 1 at 1, linear between, clamped. No score (ok false) gives no heat.
+func heatOf(score float64, ok bool) float64 {
+	if !ok || math.IsNaN(score) {
+		return 0
+	}
+	return math.Min(math.Max((score-0.5)/0.5, 0), 1)
+}
+
+// heatStep returns the brightness step 0-3 of a heat above 0.
+func heatStep(heat float64) int {
+	switch {
+	case heat <= 0.25:
+		return 0
+	case heat <= 0.5:
+		return 1
+	case heat <= 0.75:
+		return 2
+	}
+	return 3
+}
+
+// heatBar is the one-cell gutter mark of a row's heat: "▌" in amber at one of
+// four steps, or a space without heat. On the selected row the bar carries the
+// selection background so the highlight has no gap.
+func heatBar(heat float64, selected bool) string {
+	if heat <= 0 {
+		return " "
+	}
+	st := lipgloss.NewStyle().Foreground(heatSteps[heatStep(heat)])
+	if selected {
+		st = st.Background(lipgloss.Color("#3A3D41"))
+	}
+	return st.Render("▌")
 }
 
 // scoreChip is one assessor's highest score for an item.

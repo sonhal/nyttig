@@ -37,7 +37,7 @@
 	import { markViewed, moveCursor, setFollow } from '$lib/reducer';
 	import { ensureMe } from '$lib/rate';
 	import { oneLine, safeLink } from '$lib/sanitize';
-	import { tagScope, type ScoreScope } from '$lib/scores';
+	import { heatOf, scoreOf, tagScope, type ScoreScope } from '$lib/scores';
 	import { FeedStream } from '$lib/stream.svelte';
 	import type { Filter, Item } from '$lib/types';
 	import { ViewTracker } from '$lib/viewed';
@@ -127,6 +127,11 @@
 	function scoreScope(f: Filter): ScoreScope | null {
 		return f.sort === 'score' && f.assessor ? { assessor: f.assessor, tags: tagScope(tags, f.tag) } : null;
 	}
+
+	/** The scores that give rows their heat: the selected assessor's, in any sort. */
+	const heatScope = $derived<ScoreScope | null>(
+		filter.assessor ? { assessor: filter.assessor, tags: tagScope(tags, filter.tag) } : null
+	);
 
 	let connected: Filter | null = null;
 	$effect(() => {
@@ -660,6 +665,7 @@
 				tags={tagMeta}
 				assessors={assessorMeta}
 				selectedAssessor={filter.assessor}
+				heat={heatScope ? heatOf(scoreOf(item, heatScope)) : 0}
 				onselect={onRowSelect}
 				{terms}
 				timeMode={prefs.timeMode}

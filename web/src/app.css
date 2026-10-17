@@ -14,6 +14,7 @@
 	--accent: #569cd6; /* domain, links */
 	--unviewed: #4ec9b0; /* ●, connected */
 	--error: #f44747; /* disconnected, fetch errors */
+	--heat-rgb: 232 163 61; /* score heat: amber, the glow of high-scored rows */
 
 	--font: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, 'Liberation Mono', 'DejaVu Sans Mono',
 		monospace;
