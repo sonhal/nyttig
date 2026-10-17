@@ -254,10 +254,9 @@ func loadAssessmentsByItemIDs(db *sql.DB, itemIDs []int64) (map[int64][]*Assessm
 }
 
 // assessmentScopeSQL returns the extra condition that keeps an assessment
-// (alias a) in scope for the filter's tag, and its argument. See the filter
-// semantics in docs/assessments-plan.md: with no tag every assessment is in
-// scope; with a tag, whole-item assessments and those on the tag's subtree
-// (or on the tag alone with TagExact) are.
+// (alias a) in scope for the filter's tag, and its argument. With no tag
+// every assessment is in scope; with a tag, whole-item assessments and those
+// on the tag's subtree (or on the tag alone with TagExact) are.
 func assessmentScopeSQL(f ItemFilter) (string, []any) {
 	if f.TagID <= 0 {
 		return "", nil

@@ -348,7 +348,7 @@ message Complete {}
 
 // ── Service definition ──────────────────────────────────────
 
-// ── Digests (docs/digests-plan.md) ──────────────────────────────────────────
+// ── Digests ─────────────────────────────────────────────────────────────────
 
 // A named, registered group of digests by one assessor.
 message DigestSeries {
