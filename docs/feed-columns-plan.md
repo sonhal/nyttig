@@ -1,6 +1,6 @@
 # Feed columns plan
 
-Status: **phase 1 implemented, not yet merged** (the daemon, nyttig-api and the CLI); phases 2 and 3 (the web app) planned.
+Status: **phases 1 and 2 implemented, not yet merged** (the daemon, nyttig-api, the CLI, and the web app's model and rendering); phase 3 (the web controls) planned.
 
 Today every feed row shows the same columns in a fixed order: unviewed dot,
 date, source, tags, score chips, title, description and domain. The feed
@@ -92,7 +92,8 @@ Cases (both test files): `""` → all; `title,source` → `source,title`;
 so); and `TestMigration8_RebuildKeepsSavedViews` migrates through 10, since
 `ListSavedViews` reads the new column. Until phase 2 the web app doesn't know
 `cols`: saving or editing a view's filter there (`:save`, the view form)
-sends a filter without it and so clears the view's columns.
+sends a filter without it and so clears the view's columns (fixed by
+phase 2).
 
 ## Phase 2: web model and rendering (`feat(web): choose the feed's columns`)
 
@@ -150,6 +151,23 @@ sends a filter without it and so clears the view's columns.
   switch tabs and back, and check that the columns come back and that
   changing only the columns marks the tab `*` without reloading the list
   (the rows' DOM nodes are kept, or the stream's request count is unchanged).
+
+**Phase 2 notes.** As planned, with these differences:
+
+- On mobile, with neither title nor description shown, the single line is
+  centred vertically in the 44px row (the cells' `align-content: center`),
+  not kept at the top. The row height is unchanged.
+- `columns.ts` also has `knownColumns` (what `viewToFilter` uses: unknown
+  names dropped, never an error) and the `COLUMN_NAMES` list for completion.
+- `cols:` with no names is an error ("needs column names") rather than
+  meaning every column, since it is almost always unfinished typing. Two
+  `cols:` terms that agree are accepted, like `since:`.
+- Completing a `cols:` value offers the names not yet in the list for the
+  part after the last comma; accepting one adds a space, as other
+  completions do.
+- The e2e test checks that changing only the columns sends no request to
+  `/api/stream` or `/api/items` (and fails if the stream effect goes back
+  to `sameFilter`; checked by hand).
 
 ## Phase 3: web controls (`feat(web): column picker and :columns`)
 

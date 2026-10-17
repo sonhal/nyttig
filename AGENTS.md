@@ -152,7 +152,7 @@ cmd/nyttig-api/main.go      nyttig-api entrypoint: flags, listen-address guard, 
 web/                        The SvelteKit app (pnpm); "pnpm build" writes a Node server to web/build/
 web/src/lib/                Pure modules (reducer, keymap, filter, query, command, highlight,
                             fuzzy, history, help, sanitize, markdown, viewed, forms, latest, meta, since,
-                            format, tagtree, views, scores, digests) with Vitest tests next to them, plus the
+                            format, tagtree, views, scores, digests, columns) with Vitest tests next to them, plus the
                             Svelte components (ViewTabs.svelte is the saved views' tab row above
                             the filter bar; PageTabs.svelte the page tabs of every page but
                             the feed); metadata.svelte.ts holds the sources, tags, saved views and
@@ -368,7 +368,14 @@ which phases are done and whether they are merged; keep it current.
   display order, the full set as nil; `Parse` adds the aliases for typed
   input); the service stores the normalized list. `update-view` in the CLI
   copies the stored filter field by field, so a new `ViewFilter` field must
-  be copied there too or any filter flag drops it.
+  be copied there too or any filter flag drops it. In the web app the
+  columns are `Filter.columns` (`columns.ts`, the same case table as the
+  Go package), `cols=` in the URL and `cols:` in `query.ts`. `apiParams`
+  drops them, and the feed's stream effect compares with `sameItems`, not
+  `sameFilter`, so a change of columns alone re-renders the rows without
+  reconnecting (`e2e/columns.spec.ts` counts the requests). `FeedRow`
+  takes `columns`; on mobile the description takes the title's line when
+  the title is hidden.
 - **Date window** (`since`, `docs/date-filter-plan.md`): a rolling
   duration (`24h`, `7d`, `2w`, `1mo`, `1y`; parsed by `internal/since` and
   `web/src/lib/since.ts`, which share a table of cases) and a general filter
@@ -520,7 +527,7 @@ which phases are done and whether they are merged; keep it current.
 - **Web log-viewer features** (phase 3). `keymap.ts` holds every mode's keys
   as binding tables; the key handler and the help overlay (`help.ts`) both
   read them, so add a key there and it shows in `?`. `query.ts` parses and
-  formats the `/` bar's syntax (`tag:` `src:` `is:unviewed` `sort:`) against
+  formats the `/` bar's syntax (`tag:` `src:` `is:unviewed` `sort:` `cols:`) against
   the current sources and tags; the URL stays separate parameters with IDs
   (`filter.ts`), and a `q` in the URL is always plain text. `command.ts` is the
   pure `:` command parser (names resolved to IDs, completion); `commandline.svelte.ts`

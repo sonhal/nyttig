@@ -3,12 +3,14 @@
 //   kernel panic tag:rust src:"Hacker News" is:unviewed since:7d sort:oldest
 //   tag:CVE since:1d score:claude>=0.7 sort:score
 //   tag:CVE since:1d unassessed:claude
+//   tag:rust cols:title,source
 //
 // "tag:", "src:", "is:unviewed", "since:7d" and "sort:newest|oldest|score" set
 // the filter, "score:<assessor>" picks the assessor whose scores to show first
 // (">=0.7" keeps only items it scored that high, and "sort:score" orders by
 // its scores, so it needs a "score:" term) and "unassessed:<assessor>" keeps
-// items it has not assessed. Every other word is free text (the FTS search, matched as a phrase). A
+// items it has not assessed. "cols:title,source" shows only those columns
+// (columns.ts); it changes how rows look, not which items match. Every other word is free text (the FTS search, matched as a phrase). A
 // name with spaces is quoted; inside quotes \" and \\ are escapes. A
 // quoted token is always free text or a literal name, so "tag:x" searches
 // for that text, and tag:"#1" is a tag called #1. An unquoted #<id> is an ID,
@@ -20,6 +22,7 @@
 // only known to the client, so both take the current sources and tags.
 // Tag rule patterns never come into this: the query only ever names things.
 
+import { COLUMN_NAMES, formatColumns, parseColumns } from './columns';
 import { defaultFilter, parseScore } from './filter';
 import { oneLine } from './sanitize';
 import { parseSince, SINCE_SUGGESTIONS } from './since';
@@ -42,7 +45,7 @@ export interface ParseResult {
 const ID_RE = /^[1-9][0-9]{0,18}$/;
 export const MAX_QUERY = 500;
 
-type Key = 'tag' | 'src' | 'is' | 'since' | 'sort' | 'score' | 'unassessed';
+type Key = 'tag' | 'src' | 'is' | 'since' | 'sort' | 'score' | 'unassessed' | 'cols';
 const KEY_ALIASES: Record<string, Key> = {
 	tag: 'tag',
 	src: 'src',
@@ -51,7 +54,9 @@ const KEY_ALIASES: Record<string, Key> = {
 	since: 'since',
 	sort: 'sort',
 	score: 'score',
-	unassessed: 'unassessed'
+	unassessed: 'unassessed',
+	cols: 'cols',
+	columns: 'cols'
 };
 
 /** The operators, for the help overlay. */
@@ -66,6 +71,10 @@ export const QUERY_KEYS: readonly { usage: string; desc: string }[] = [
 	{ usage: 'score:<assessor>[>=0.7]', desc: "show an assessor's scores first; with >= only items it scored at least that" },
 	{ usage: 'unassessed:<assessor>', desc: 'only items this assessor has not assessed (an assessor finds its work this way)' },
 	{ usage: 'sort:newest|oldest|score', desc: 'the sort order; score needs a score: term' },
+	{
+		usage: 'cols:<column>,...',
+		desc: 'show only these columns: date, source, tags, score, title, desc, domain (cols:title,source)'
+	},
 	{ usage: '<words>', desc: 'full-text search, matched as a phrase ("quoted" to stop a word being read as an operator)' }
 ];
 
@@ -212,6 +221,7 @@ export function parse(
 	let sortSet = false;
 	let sortToken: Token | undefined;
 	let sinceSet = false;
+	let colsSet = false;
 
 	for (const t of tokenize(text)) {
 		switch (t.key) {
@@ -284,6 +294,20 @@ export function parse(
 				else {
 					filter.since = t.value;
 					sinceSet = true;
+				}
+				break;
+			}
+			case 'cols': {
+				// "cols:" alone would mean every column, which is the default:
+				// almost certainly unfinished, so it is an error.
+				const r = t.value.trim()
+					? parseColumns(t.value)
+					: { ok: false as const, error: 'cols: needs column names (cols:title,source)' };
+				if (!r.ok) err(t, r.error);
+				else if (colsSet && formatColumns(filter.columns) !== formatColumns(r.columns)) err(t, 'cols given twice');
+				else {
+					filter.columns = r.columns;
+					colsSet = true;
 				}
 				break;
 			}
@@ -364,6 +388,7 @@ export function format(
 	}
 	if (f.unassessed) parts.push('unassessed:' + named(assessors, f.unassessed));
 	if (f.sort !== defaultFilter.sort) parts.push('sort:' + f.sort);
+	if (f.columns.length) parts.push('cols:' + formatColumns(f.columns));
 	return parts.join(' ');
 }
 
@@ -374,7 +399,7 @@ export interface Candidate {
 	label: string;
 	/** What replaces the token, e.g. `tag:"Hacker News"`. */
 	insert: string;
-	kind: 'tag' | 'src' | 'is' | 'since' | 'sort' | 'score' | 'unassessed';
+	kind: Key;
 	color?: string;
 }
 
@@ -405,6 +430,7 @@ export function complete(
 	const typed = t.value.slice(0, Math.max(0, caret - t.valueStart - (t.quoted ? 1 : 0))).toLowerCase();
 
 	const key = t.key;
+	if (key === 'cols') return completeColumns(text, t, typed);
 	let entries: { label: string; color?: string }[];
 	switch (key) {
 		case 'tag':
@@ -438,6 +464,23 @@ export function complete(
 		})
 	);
 	// Already complete: nothing to offer.
+	if (candidates.length === 1 && candidates[0]!.insert === text.slice(t.start, t.end)) return null;
+	return { start: t.start, end: t.end, candidates };
+}
+
+/** Column names for the part of a cols: value after its last comma. */
+function completeColumns(text: string, t: Token, typed: string): Completion | null {
+	const comma = typed.lastIndexOf(',');
+	const done = typed.slice(0, comma + 1);
+	const part = typed.slice(comma + 1).trim();
+	const used = new Set(done.split(',').map((x) => x.trim()));
+	const names = COLUMN_NAMES.filter((n) => !used.has(n));
+	const starts = names.filter((n) => n.startsWith(part));
+	const contains = names.filter((n) => !n.startsWith(part) && n.includes(part));
+	const candidates = [...starts, ...contains].map(
+		(n): Candidate => ({ label: n, insert: `${t.keyText ?? 'cols'}:${done.replace(/\s+/g, '')}${n}`, kind: 'cols' })
+	);
+	if (candidates.length === 0) return null;
 	if (candidates.length === 1 && candidates[0]!.insert === text.slice(t.start, t.end)) return null;
 	return { start: t.start, end: t.end, candidates };
 }

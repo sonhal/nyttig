@@ -883,6 +883,17 @@ always shows the current filter in this syntax. Matching words are
 highlighted in titles and descriptions (whole words, any case; FTS5
 tokenization is approximated).
 
+**Columns.** `cols:title,source` shows only those columns of the feed, for
+example `cols:date,title` or `cols:score,title`. The columns are `date`,
+`source`, `tags`, `score`, `title`, `desc` and `domain` (also `time`, `src`,
+`tag`, `scores`, `description`); they keep their usual order, and the
+unviewed dot always shows. Columns are part of the filter: they are in the
+URL (`cols=source,title`) and a saved view keeps them, so a changed column
+list marks the view's tab `*`. They only change how rows look, so changing
+them doesn't reload the feed. On a phone, with the title hidden, the
+description (if shown) takes the second line. Opening a row still shows
+everything.
+
 **Time window.** `since:7d` shows only items from the last seven days:
 `<n><unit>` with `n` from 1 to 9999 and the unit `h`, `d`, `w`, `mo` (calendar
 months) or `y` (calendar years), in lower case (`24h`, `7d`, `2w`, `1mo`,

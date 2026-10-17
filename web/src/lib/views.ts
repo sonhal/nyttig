@@ -6,6 +6,7 @@
 //
 // Everything here is pure: the views come in as arguments.
 
+import { knownColumns } from './columns';
 import { defaultFilter, filterToParams, sameFilter } from './filter';
 import { validSince } from './since';
 import type { Filter, SavedView, ViewFilter } from './types';
@@ -28,7 +29,10 @@ export function viewToFilter(v: SavedView): Filter {
 		since: validSince(f.since),
 		assessor: f.assessor ?? '',
 		minScore: f.assessor && typeof f.min_score === 'number' ? f.min_score : null,
-		unassessed: f.unassessed ?? ''
+		unassessed: f.unassessed ?? '',
+		// Unknown names are dropped, not refused: the daemon checked them, and
+		// a view saved by a newer client must still open.
+		columns: knownColumns(f.cols)
 	};
 }
 
@@ -45,6 +49,7 @@ export function filterToViewBody(f: Filter): ViewFilter {
 	// A minimum of 0 is a minimum, so it is kept.
 	if (f.assessor && f.minScore !== null) b.min_score = f.minScore;
 	if (f.unassessed) b.unassessed = f.unassessed;
+	if (f.columns.length) b.cols = [...f.columns];
 	return b;
 }
 

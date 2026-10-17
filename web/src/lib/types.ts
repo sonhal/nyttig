@@ -2,6 +2,8 @@
 // (UseProtoNames). protojson leaves out zero values, so every field is
 // optional, and int64 values (all IDs) are strings: treat them as opaque.
 
+import type { Column } from './columns';
+
 export interface Tag {
 	id?: string;
 	name?: string;
@@ -92,6 +94,8 @@ export interface Filter {
 	minScore: number | null;
 	/** Assessor ID, "" = none: only items this assessor has not assessed. */
 	unassessed: string;
+	/** The feed columns to show, in display order; [] = all. Display only: never sent to the API. */
+	columns: Column[];
 }
 
 export type RuleField = 'title' | 'description' | 'both';
@@ -131,6 +135,8 @@ export interface ViewFilter {
 	assessor?: string;
 	min_score?: number;
 	unassessed?: string;
+	/** The feed columns the view shows (columns.ts), in display order; absent = all. */
+	cols?: string[];
 }
 
 /** A saved view. Unlike the other types this is not protojson: see viewJSON in internal/api/manage.go. */

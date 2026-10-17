@@ -21,7 +21,7 @@
 	import StatusBar from '$lib/StatusBar.svelte';
 	import ViewTabs from '$lib/ViewTabs.svelte';
 	import VirtualList from '$lib/VirtualList.svelte';
-	import { cycleID, filterFromParams, filterQuery, nextSort, sameFilter, withAssessor } from '$lib/filter';
+	import { cycleID, filterFromParams, filterQuery, nextSort, sameFilter, sameItems, withAssessor } from '$lib/filter';
 	import CommandLine from '$lib/CommandLine.svelte';
 	import { CommandLine as CommandLineState, execute, type CommandHost } from '$lib/commandline.svelte';
 	import { feedSections } from '$lib/help';
@@ -133,11 +133,13 @@
 		filter.assessor ? { assessor: filter.assessor, tags: tagScope(tags, filter.tag) } : null
 	);
 
+	// Reconnects only when the items change: a change of columns alone just
+	// re-renders the rows.
 	let connected: Filter | null = null;
 	$effect(() => {
 		const f = filter;
 		untrack(() => {
-			if (connected && sameFilter(connected, f)) return;
+			if (connected && sameItems(connected, f)) return;
 			connected = f;
 			stream.connect(f, scoreScope(f));
 			void loadUnviewed();
@@ -666,6 +668,7 @@
 				assessors={assessorMeta}
 				selectedAssessor={filter.assessor}
 				heat={heatScope ? heatOf(scoreOf(item, heatScope)) : 0}
+				columns={filter.columns}
 				onselect={onRowSelect}
 				{terms}
 				timeMode={prefs.timeMode}

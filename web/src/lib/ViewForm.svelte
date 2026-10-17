@@ -2,7 +2,8 @@
 	Add or edit a saved view: a name, the filter as query text and a favorite
 	checkbox. The query is the "/" bar's syntax (query.ts), parsed with the
 	same parser, so the same names and errors apply; the rows of the views
-	page show the filter in this form too.
+	page show the filter in this form too. The columns a view shows are part
+	of it (cols:title,source).
 -->
 <script lang="ts">
 	import { onMount, untrack } from 'svelte';
@@ -75,7 +76,7 @@
 					type="text"
 					bind:value={f.query}
 					maxlength="500"
-					placeholder={'words  tag:<name>  src:<name>  is:unviewed  score:<assessor>>=0.7  sort:oldest'}
+					placeholder={'words  tag:<name>  src:<name>  is:unviewed  score:<assessor>>=0.7  sort:oldest  cols:title,source'}
 					autocomplete="off"
 					autocapitalize="off"
 					spellcheck="false"
