@@ -12,6 +12,7 @@ import (
 	"text/tabwriter"
 
 	"github.com/sonhal/nyttig/internal/client"
+	"github.com/sonhal/nyttig/internal/columns"
 	pb "github.com/sonhal/nyttig/internal/proto/nyttig/v1"
 	"github.com/sonhal/nyttig/internal/tui"
 )
@@ -80,16 +81,22 @@ func queryWord(w string) string {
 	}
 	if m := operatorPrefix.FindString(w); m != "" {
 		switch strings.ToLower(strings.TrimSuffix(m, ":")) {
-		case "tag", "src", "source", "is", "since", "sort", "score", "unassessed":
+		case "tag", "src", "source", "is", "since", "sort", "score", "unassessed", "cols", "columns":
 			return quoteQuery(w)
 		}
 	}
 	return w
 }
 
+// columnsUsage is the help text of -columns.
+const columnsUsage = "Show only these feed columns, in their usual order: " +
+	"date, source, tags, score, title, desc, domain (also time, src, tag, scores, description); " +
+	"-desc,-domain shows every column but those"
+
 // formatViewFilter writes a view's filter the way the web `/` bar does:
 // words, src:, tag:, is:unviewed, since:, score:<assessor>[>=N],
-// unassessed:<assessor> and sort: (the default sort is left out). A source,
+// unassessed:<assessor>, sort: (the default sort is left out) and cols:
+// (left out when every column shows). A source,
 // tag or assessor with no known name is written as #id.
 func formatViewFilter(f *pb.ViewFilter, sources, tags, assessors map[int64]string) string {
 	if f == nil {
@@ -129,6 +136,9 @@ func formatViewFilter(f *pb.ViewFilter, sources, tags, assessors map[int64]strin
 	}
 	if f.Sort != "" && f.Sort != "newest" {
 		parts = append(parts, "sort:"+f.Sort)
+	}
+	if len(f.Columns) > 0 {
+		parts = append(parts, "cols:"+columns.Spell(f.Columns))
 	}
 	return strings.Join(parts, " ")
 }
@@ -215,6 +225,7 @@ func addViewCmd() {
 		sort     string
 		unviewed bool
 		window   string
+		cols     string
 		favorite bool
 
 		assessor   string
@@ -230,6 +241,7 @@ func addViewCmd() {
 	flags.StringVar(&sort, "sort", "", "Sort order: newest (default), oldest or score (needs -assessor)")
 	flags.BoolVar(&unviewed, "unviewed", false, "Only items not yet viewed")
 	flags.StringVar(&window, "since", "", "Only items from the last 24h, 7d, 2w, 1mo or 1y")
+	flags.StringVar(&cols, "columns", "", columnsUsage)
 	flags.BoolVar(&favorite, "favorite", false, "Show the view as a tab in the web app")
 	flags.StringVar(&assessor, "assessor", "", "Whose scores -min-score and -sort score use (name or ID)")
 	flags.Float64Var(&minScore, "min-score", 0, "Only items this assessor scored at least this (0 to 1)")
@@ -238,7 +250,7 @@ func addViewCmd() {
 	args := os.Args[2:]
 	if len(args) == 0 || args[0] == "--help" {
 		_, _ = fmt.Fprintf(os.Stderr, "Usage: nyttig add-view -n <name> [-q <text>] [-source <name|id>] [-tag <name|id>] [-unviewed] [-since 7d] [-sort oldest|score] [-favorite]\n")
-		_, _ = fmt.Fprintf(os.Stderr, "                      [-assessor <name|id>] [-min-score <0-1>] [-unassessed-by <name|id>]\n\n")
+		_, _ = fmt.Fprintf(os.Stderr, "                      [-assessor <name|id>] [-min-score <0-1>] [-unassessed-by <name|id>] [-columns title,source]\n\n")
 		flags.PrintDefaults()
 		os.Exit(0)
 	}
@@ -248,13 +260,16 @@ func addViewCmd() {
 	if name == "" {
 		fail(fmt.Errorf("--name (-n) is required"))
 	}
+	shown, err := columns.Parse(cols)
+	if err != nil {
+		fail(err)
+	}
 
 	c := newClient()
 	defer func() { _ = c.Close() }()
 	ctx := context.Background()
 
-	f := &pb.ViewFilter{Search: query, Sort: sort, UnviewedOnly: unviewed, Since: window}
-	var err error
+	f := &pb.ViewFilter{Search: query, Sort: sort, UnviewedOnly: unviewed, Since: window, Columns: shown}
 	if source != "" {
 		if f.SourceId, err = resolveSourceID(ctx, c, source); err != nil {
 			fail(err)
@@ -303,6 +318,8 @@ func updateViewCmd() {
 		unviewed bool
 		window   string
 		noSince  bool
+		cols     string
+		noCols   bool
 		favorite bool
 
 		assessor     string
@@ -326,6 +343,8 @@ func updateViewCmd() {
 	flags.BoolVar(&unviewed, "unviewed", false, "Only items not yet viewed (-unviewed=false clears it)")
 	flags.StringVar(&window, "since", "", "Only items from the last 24h, 7d, 2w, 1mo or 1y")
 	flags.BoolVar(&noSince, "no-since", false, "Stop limiting the view to a time window")
+	flags.StringVar(&cols, "columns", "", columnsUsage)
+	flags.BoolVar(&noCols, "no-columns", false, "Show every column again")
 	flags.BoolVar(&favorite, "favorite", false, "Show the view as a tab (-favorite=false removes it)")
 	flags.StringVar(&assessor, "assessor", "", "Whose scores -min-score and -sort score use (name or ID)")
 	flags.BoolVar(&noAssessor, "no-assessor", false, "Stop using an assessor (also clears the minimum score; a score sort becomes newest)")
@@ -337,7 +356,7 @@ func updateViewCmd() {
 	if len(args) == 0 || args[0] == "--help" {
 		_, _ = fmt.Fprintf(os.Stderr, "Usage: nyttig update-view (-id <id> | -n <name>) [-rename <name>] [-q <text>] [-source <name|id> | -no-source]\n")
 		_, _ = fmt.Fprintf(os.Stderr, "                          [-tag <name|id> | -no-tag] [-sort newest|oldest|score] [-unviewed[=false]]\n")
-		_, _ = fmt.Fprintf(os.Stderr, "                          [-since <window> | -no-since] [-favorite[=false]]\n")
+		_, _ = fmt.Fprintf(os.Stderr, "                          [-since <window> | -no-since] [-columns <list> | -no-columns] [-favorite[=false]]\n")
 		_, _ = fmt.Fprintf(os.Stderr, "                          [-assessor <name|id> | -no-assessor] [-min-score <0-1> | -no-min-score] [-unassessed-by <name|id>]\n\n")
 		_, _ = fmt.Fprintf(os.Stderr, "Only the given flags are changed.\n\n")
 		flags.PrintDefaults()
@@ -358,6 +377,13 @@ func updateViewCmd() {
 	if set["since"] && noSince {
 		fail(fmt.Errorf("-since and -no-since cannot be used together"))
 	}
+	if set["columns"] && noCols {
+		fail(fmt.Errorf("-columns and -no-columns cannot be used together"))
+	}
+	shown, err := columns.Parse(cols)
+	if err != nil {
+		fail(err)
+	}
 
 	c := newClient()
 	defer func() { _ = c.Close() }()
@@ -372,7 +398,7 @@ func updateViewCmd() {
 		fail(fmt.Errorf("-min-score and -no-min-score cannot be used together"))
 	}
 	filterChange := set["q"] || set["query"] || set["source"] || set["tag"] || noSource || noTag || set["sort"] || set["unviewed"] || set["since"] || noSince ||
-		set["assessor"] || noAssessor || set["min-score"] || noMinScore || set["unassessed-by"]
+		set["columns"] || noCols || set["assessor"] || noAssessor || set["min-score"] || noMinScore || set["unassessed-by"]
 	var cur *pb.SavedView
 	if id == 0 || filterChange {
 		resp, err := c.ListSavedViews(ctx)
@@ -407,8 +433,8 @@ func updateViewCmd() {
 			f.Search, f.SourceId, f.TagId = cur.Filter.Search, cur.Filter.SourceId, cur.Filter.TagId
 			f.Sort, f.UnviewedOnly, f.Since = cur.Filter.Sort, cur.Filter.UnviewedOnly, cur.Filter.Since
 			f.AssessorId, f.MinScore, f.UnassessedBy = cur.Filter.AssessorId, cur.Filter.MinScore, cur.Filter.UnassessedBy
+			f.Columns = cur.Filter.Columns
 		}
-		var err error
 		if set["q"] || set["query"] {
 			f.Search = query
 		}
@@ -462,6 +488,12 @@ func updateViewCmd() {
 		}
 		if set["since"] {
 			f.Since = window
+		}
+		if noCols {
+			f.Columns = nil
+		}
+		if set["columns"] {
+			f.Columns = shown
 		}
 		req.Filter = f
 	}

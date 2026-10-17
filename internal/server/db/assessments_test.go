@@ -568,7 +568,9 @@ func TestMigration8_RebuildKeepsSavedViews(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	migrateTo(t, database, 8, 8)
+	// Through the later migrations too: ListSavedViews reads their columns
+	// (migration 10's columns read back as nil for these rows).
+	migrateTo(t, database, 8, 10)
 
 	views, err := ListSavedViews(database)
 	if err != nil {

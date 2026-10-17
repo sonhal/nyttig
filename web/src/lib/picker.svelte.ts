@@ -1,5 +1,6 @@
 // State of the S/T/v/a fuzzy picker: a list of sources, tags, saved views or assessors, filtered as you
-// type. Enter picks the highlighted entry, Esc closes.
+// type. Enter picks the highlighted entry, Esc closes. The C picker (columns)
+// is a checklist: its entries carry checked, Enter toggles one and it stays open.
 
 import { fuzzyFilter } from './fuzzy';
 
@@ -10,9 +11,11 @@ export interface PickOption {
 	color?: string;
 	/** Indentation level, for tags in a tree. */
 	depth?: number;
+	/** Checklist entries (the column picker): whether it is on. */
+	checked?: boolean;
 }
 
-export type PickKind = 'source' | 'tag' | 'view' | 'assessor';
+export type PickKind = 'source' | 'tag' | 'view' | 'assessor' | 'column';
 
 export class Picker {
 	kind: PickKind | null = $state(null);
@@ -36,6 +39,11 @@ export class Picker {
 
 	close(): void {
 		this.kind = null;
+	}
+
+	/** New options for the open picker (a checklist after a toggle); the filter text and highlight stay. */
+	setOptions(options: PickOption[]): void {
+		this.options = options;
 	}
 
 	/** Called when the filter text changes: the best match is highlighted again. */

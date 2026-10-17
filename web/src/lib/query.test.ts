@@ -363,3 +363,51 @@ describe('assessor terms', () => {
 		expect(at('score:cl')?.candidates[0]?.color).toBe('#D97757');
 	});
 });
+
+describe('cols:', () => {
+	it('parses a list in display order, with aliases', () => {
+		expect(ok('cols:title,source')).toEqual(f({ columns: ['source', 'title'] }));
+		expect(ok('columns:Time,TITLE tag:linux')).toEqual(f({ columns: ['date', 'title'], tag: '1' }));
+		expect(ok('cols:"title, src"')).toEqual(f({ columns: ['source', 'title'] }));
+		expect(ok('cols:title cols:title')).toEqual(f({ columns: ['title'] }));
+	});
+	it('refuses unknown names, an empty list and two lists', () => {
+		const err = (text: string) => parse(text, sources, tags).errors.map((e) => e.message);
+		expect(err('cols:title,author')[0]).toContain('author');
+		expect(err('cols:')[0]).toContain('needs column names');
+		expect(err('cols:title cols:date')[0]).toContain('twice');
+	});
+	it('is formatted last and round-trips', () => {
+		const filter = f({ q: 'go', tag: '2', sort: 'oldest', columns: ['date', 'title'] });
+		expect(format(filter, sources, tags)).toBe('go tag:Rust sort:oldest cols:date,title');
+		expect(ok(format(filter, sources, tags))).toEqual(filter);
+		expect(format(f({ q: 'cols:x' }), sources, tags)).toBe('"cols:x"');
+	});
+	it('completes the name after the last comma', () => {
+		const c = complete('cols:ti', 7, sources, tags);
+		expect(c?.candidates.map((x) => x.insert)).toEqual(['cols:title']);
+		const after = complete('cols:title,d', 12, sources, tags);
+		expect(after?.candidates.map((x) => x.insert)).toEqual(['cols:title,date', 'cols:title,desc', 'cols:title,domain']);
+		// Names already in the list are not offered again.
+		const all = complete('cols:title,', 11, sources, tags);
+		expect(all?.candidates.map((x) => x.label)).not.toContain('title');
+		expect(complete('cols:title', 10, sources, tags)).toBeNull();
+	});
+});
+
+describe('cols: hiding columns', () => {
+	it('reads -names as every column but those, and writes the shorter form', () => {
+		const hidden = f({ columns: ['date', 'source', 'tags', 'score', 'title'] });
+		expect(ok('cols:-desc,-domain')).toEqual(hidden);
+		expect(format(hidden, sources, tags)).toBe('cols:-desc,-domain');
+		expect(format(f({ columns: ['source', 'title'] }), sources, tags)).toBe('cols:source,title');
+	});
+	it('refuses a mixed list and hiding everything', () => {
+		const err = (text: string) => parse(text, sources, tags).errors.map((e) => e.message)[0];
+		expect(err('cols:-desc,title')).toContain('mix');
+		expect(err('cols:-date,-source,-tags,-score,-title,-desc,-domain')).toContain('every column');
+	});
+	it('completes after a minus', () => {
+		expect(complete('cols:-desc,-do', 14, sources, tags)?.candidates.map((x) => x.insert)).toEqual(['cols:-desc,-domain']);
+	});
+});

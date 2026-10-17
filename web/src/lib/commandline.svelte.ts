@@ -47,6 +47,8 @@ export interface CommandHost {
 	follow(): void;
 	/** Rates the selected item as the assessor "me" (the feed's command). */
 	rate(score: number, note: string): void;
+	/** Opens the column picker (":columns" alone; the feed's). */
+	pickColumns(): void;
 }
 
 /**
@@ -78,6 +80,10 @@ export function execute(cmd: Command, host: CommandHost): void {
 			return;
 		case 'rate':
 			host.rate(cmd.score, cmd.note);
+			return;
+		case 'columns':
+			if (cmd.columns === 'pick') host.pickColumns();
+			else host.setFilter({ ...host.filter(), columns: cmd.columns });
 			return;
 		case 'refresh':
 			host.refresh(cmd.source || undefined);
@@ -148,7 +154,8 @@ export function offFeedHost(flash: (msg: string) => void, refresh: (id?: string)
 		setFilter: (f) => void goto('/' + viewSearch(feedViewId(), f)),
 		activeView: feedViewId,
 		follow: () => void goPage('feed'),
-		rate: () => flash('error: :rate rates the selected item in the feed')
+		rate: () => flash('error: :rate rates the selected item in the feed'),
+		pickColumns: () => flash('error: the column picker is on the feed (C); here, use :columns <list>')
 	};
 }
 

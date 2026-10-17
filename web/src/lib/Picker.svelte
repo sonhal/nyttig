@@ -1,7 +1,8 @@
 <!--
 	The S/T picker: a filter input and a list of sources or tags. The feed's
 	global key handler turns Enter, Esc and the arrows into actions (mode
-	"picker"); typing goes to the input.
+	"picker"); typing goes to the input. Entries with checked (the column
+	picker) show [x] or [ ], and picking one toggles it.
 -->
 <script lang="ts">
 	import { onMount, tick } from 'svelte';
@@ -58,10 +59,13 @@
 				role="option"
 				aria-selected={i === picker.active}
 				class:active={i === picker.active}
+				aria-checked={m.item.checked}
 				onpointerdown={(e) => e.preventDefault()}
 				onclick={() => onpick(m.item.id)}
 			>
-				<span class="label" style:color={safeColor(m.item.color)} style:padding-left="{(m.item.depth ?? 0) * 2}ch"
+				{#if m.item.checked !== undefined}<span class="check">{m.item.checked ? '[x]' : '[ ]'}</span>{' '}{/if}<span
+					class="label"
+					style:color={safeColor(m.item.color)} style:padding-left="{(m.item.depth ?? 0) * 2}ch"
 					>{#each segmentsAt(oneLine(m.item.label), m.at) as s, j (j)}{#if s.match}<mark>{s.text}</mark
 							>{:else}{s.text}{/if}{/each}</span
 				>
@@ -133,6 +137,9 @@
 		background: var(--sel);
 	}
 	li.none {
+		color: var(--dim);
+	}
+	.check {
 		color: var(--dim);
 	}
 	.label {

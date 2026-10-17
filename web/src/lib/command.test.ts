@@ -365,3 +365,30 @@ describe('digest commands', () => {
 		expect(completeCommand('digests', dctx).candidates).toEqual(['digests']);
 	});
 });
+
+describe(':columns', () => {
+	it('sets, clears and hides columns', () => {
+		expect(cmd('columns title,source')).toEqual({ type: 'columns', columns: ['source', 'title'] });
+		expect(cmd('cols Time, SRC')).toEqual({ type: 'columns', columns: ['date', 'source'] });
+		expect(cmd('columns -desc,-domain')).toEqual({ type: 'columns', columns: ['date', 'source', 'tags', 'score', 'title'] });
+		expect(cmd('columns all')).toEqual({ type: 'columns', columns: [] });
+		expect(cmd('col')).toEqual({ type: 'columns', columns: 'pick' });
+	});
+	it('names the problem', () => {
+		expect(error('columns title,author')).toContain('columns: unknown column author');
+		expect(error('columns -title,date')).toContain('mix');
+		expect(error('columns title,title')).toContain('twice');
+	});
+	it('changes only the columns of the filter, and the picker is not a filter', () => {
+		const f = { ...defaultFilter, tag: '1' };
+		expect(applyToFilter(cmd('columns title'), f)).toEqual({ ...f, columns: ['title'] });
+		expect(applyToFilter(cmd('columns'), f)).toBeNull();
+	});
+	it('completes the name after the last comma', () => {
+		expect(completeCommand('columns ', ctx).candidates).toEqual(['date', 'source', 'tags', 'score', 'title', 'desc', 'domain', 'all']);
+		expect(completeCommand('columns ta', ctx)).toEqual({ from: 8, candidates: ['tags'] });
+		expect(completeCommand('columns al', ctx)).toEqual({ from: 8, candidates: ['all'] });
+		expect(completeCommand(':cols title,d', ctx)).toEqual({ from: 12, candidates: ['date', 'desc', 'domain'] });
+		expect(completeCommand('columns -desc,-do', ctx)).toEqual({ from: 14, candidates: ['-domain'] });
+	});
+});

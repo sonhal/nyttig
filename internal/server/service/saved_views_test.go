@@ -36,6 +36,12 @@ func TestValidateViewFilter(t *testing.T) {
 		{"since no unit", &pb.ViewFilter{Since: "7"}, "since"},
 		{"since upper case", &pb.ViewFilter{Since: "7D"}, "since"},
 		{"since too big", &pb.ViewFilter{Since: "10000d"}, "since"},
+		{"columns", &pb.ViewFilter{Columns: []string{"title", "source"}}, ""},
+		{"all columns", &pb.ViewFilter{Columns: []string{"date", "source", "tags", "score", "title", "desc", "domain"}}, ""},
+		{"unknown column", &pb.ViewFilter{Columns: []string{"title", "author"}}, "author"},
+		{"column twice", &pb.ViewFilter{Columns: []string{"title", "title"}}, "twice"},
+		{"empty column", &pb.ViewFilter{Columns: []string{""}}, "empty"},
+		{"column alias", &pb.ViewFilter{Columns: []string{"src"}}, "src"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -62,6 +68,7 @@ func TestAddSavedView_Validation(t *testing.T) {
 		"control name": {Name: "a\tb"},
 		"bad sort":     {Name: "v", Filter: &pb.ViewFilter{Sort: "x"}},
 		"long search":  {Name: "v", Filter: &pb.ViewFilter{Search: strings.Repeat("a", maxViewSearchLen+1)}},
+		"bad column":   {Name: "v", Filter: &pb.ViewFilter{Columns: []string{"author"}}},
 	} {
 		_, err := svc.AddSavedView(ctx, req)
 		if err == nil {
@@ -274,7 +281,7 @@ func TestSavedViews_SourceDeleteKeepsView(t *testing.T) {
 func TestSavedViewSurvivesWire(t *testing.T) {
 	in := &pb.SavedView{
 		Id: 7, Name: "sec", Favorite: true, Position: 3,
-		Filter: &pb.ViewFilter{Search: "q", SourceId: 4, TagId: 5, Sort: "oldest", UnviewedOnly: true},
+		Filter: &pb.ViewFilter{Search: "q", SourceId: 4, TagId: 5, Sort: "oldest", UnviewedOnly: true, Columns: []string{"date", "title"}},
 	}
 	raw, err := proto.Marshal(in)
 	if err != nil {
@@ -306,5 +313,49 @@ func TestSavedViewSurvivesWire(t *testing.T) {
 	_ = proto.Unmarshal(raw, got)
 	if got.Name != nil || got.Favorite != nil || got.Filter != nil {
 		t.Fatalf("unset fields appeared on the wire: %v", got)
+	}
+}
+
+// Columns are stored in display order, and the full set as none (all
+// columns), so the answer is what the clients compare against.
+func TestSavedViews_ColumnsNormalized(t *testing.T) {
+	svc, _ := newTestService(t)
+	ctx := context.Background()
+
+	v, err := svc.AddSavedView(ctx, &pb.AddSavedViewRequest{Name: "headlines",
+		Filter: &pb.ViewFilter{Columns: []string{"title", "source"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(v.Filter.Columns, ","); got != "source,title" {
+		t.Errorf("added columns = %q, want source,title", got)
+	}
+
+	all := []string{"domain", "desc", "title", "score", "tags", "source", "date"}
+	up, err := svc.UpdateSavedView(ctx, &pb.UpdateSavedViewRequest{Id: v.Id, Filter: &pb.ViewFilter{Columns: all}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(up.Filter.Columns) != 0 {
+		t.Errorf("every column stored as %q, want none", up.Filter.Columns)
+	}
+
+	// A rename keeps the columns; a filter without them clears them.
+	if _, err := svc.UpdateSavedView(ctx, &pb.UpdateSavedViewRequest{Id: v.Id, Filter: &pb.ViewFilter{Columns: []string{"score", "title"}}}); err != nil {
+		t.Fatal(err)
+	}
+	renamed, err := svc.UpdateSavedView(ctx, &pb.UpdateSavedViewRequest{Id: v.Id, Name: proto.String("triage")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(renamed.Filter.Columns, ","); got != "score,title" {
+		t.Errorf("after rename columns = %q, want score,title", got)
+	}
+	cleared, err := svc.UpdateSavedView(ctx, &pb.UpdateSavedViewRequest{Id: v.Id, Filter: &pb.ViewFilter{Search: "go"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cleared.Filter.Columns) != 0 {
+		t.Errorf("a filter without columns left %q", cleared.Filter.Columns)
 	}
 }

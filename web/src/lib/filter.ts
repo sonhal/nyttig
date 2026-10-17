@@ -1,3 +1,4 @@
+import { formatColumns, parseColumns } from './columns';
 import { validSince } from './since';
 import type { Filter, Sort } from './types';
 
@@ -10,7 +11,8 @@ export const defaultFilter: Filter = {
 	since: '',
 	assessor: '',
 	minScore: null,
-	unassessed: ''
+	unassessed: '',
+	columns: []
 };
 
 const ID_RE = /^[1-9][0-9]{0,18}$/;
@@ -18,7 +20,7 @@ const MAX_QUERY = 500;
 
 /**
  * Reads the filter from the page URL (?q=&source=&tag=&sort=&unviewed=1
- * &since=7d&assessor=&min_score=&unassessed=). Anything malformed falls back
+ * &since=7d&assessor=&min_score=&unassessed=&cols=). Anything malformed falls back
  * to the default, so a hand-edited or stale bookmark never produces a request
  * the API rejects: a minimum score or the score sort without an assessor is
  * dropped, like the daemon would refuse it.
@@ -31,6 +33,7 @@ export function filterFromParams(p: URLSearchParams): Filter {
 	const assessorParam = p.get('assessor') ?? '';
 	const assessor = ID_RE.test(assessorParam) ? assessorParam : '';
 	const unassessed = p.get('unassessed') ?? '';
+	const cols = parseColumns(p.get('cols') ?? '');
 	return {
 		q: (p.get('q') ?? '').slice(0, MAX_QUERY),
 		source: ID_RE.test(source) ? source : '',
@@ -40,7 +43,8 @@ export function filterFromParams(p: URLSearchParams): Filter {
 		since: validSince(p.get('since') ?? undefined),
 		assessor,
 		minScore: assessor ? parseScore(p.get('min_score')) : null,
-		unassessed: ID_RE.test(unassessed) ? unassessed : ''
+		unassessed: ID_RE.test(unassessed) ? unassessed : '',
+		columns: cols.ok ? cols.columns : []
 	};
 }
 
@@ -54,7 +58,8 @@ export function parseScore(s: string | null | undefined): number | null {
 
 /**
  * Encodes a filter as query parameters, leaving out defaults. The same
- * parameters are used by the page URL, /api/stream and /api/items.
+ * parameters are used by the page URL, /api/stream and /api/items (less the
+ * window and the columns: apiParams).
  */
 export function filterToParams(f: Filter): URLSearchParams {
 	const p = new URLSearchParams();
@@ -67,6 +72,7 @@ export function filterToParams(f: Filter): URLSearchParams {
 	if (f.assessor) p.set('assessor', f.assessor);
 	if (f.assessor && f.minScore !== null) p.set('min_score', String(f.minScore));
 	if (f.unassessed) p.set('unassessed', f.unassessed);
+	if (f.columns.length) p.set('cols', formatColumns(f.columns));
 	return p;
 }
 
@@ -75,11 +81,13 @@ export function filterToParams(f: Filter): URLSearchParams {
  * except that the window travels as an absolute cutoff, "after" in unix
  * seconds. A snapshot takes it once (sinceAfter) and sends the same value with
  * the stream and with every older page, so the window cannot slide between
- * them and make a page skip rows.
+ * them and make a page skip rows. The columns only change how rows look, so
+ * they are left out too.
  */
 export function apiParams(f: Filter, after?: number): URLSearchParams {
 	const p = filterToParams(f);
 	p.delete('since');
+	p.delete('cols');
 	if (after !== undefined) p.set('after', String(after));
 	return p;
 }
@@ -90,8 +98,17 @@ export function filterQuery(f: Filter): string {
 	return s ? '?' + s : '';
 }
 
+/** The whole filter, columns included: what a view saves and the URL holds. */
 export function sameFilter(a: Filter, b: Filter): boolean {
 	return filterQuery(a) === filterQuery(b);
+}
+
+/**
+ * Whether two filters select the same items: everything but the columns. A
+ * change of columns alone re-renders the rows, it does not reload them.
+ */
+export function sameItems(a: Filter, b: Filter): boolean {
+	return apiParams(a).toString() === apiParams(b).toString() && a.since === b.since;
 }
 
 /** The next value in a cycle of IDs where "" (all) comes first, like the TUI. */

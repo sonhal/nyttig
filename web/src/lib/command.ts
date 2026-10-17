@@ -4,7 +4,8 @@
 // filter. Assessments: ":score <assessor>|all [min]" and ":unassessed
 // <assessor>|all" filter, ":assessors" is the management page. Digests:
 // ":digests" is the reading page and ":digest <assessor>/<series>" opens one
-// series on it. Also ":refresh", ":time", ":follow" and ":help". A unique prefix is enough (":sor", ":un"); a few
+// series on it. Columns: ":columns <column>,...|all" (":cols"), alone the
+// column picker. Also ":refresh", ":time", ":follow" and ":help". A unique prefix is enough (":sor", ":un"); a few
 // short forms are fixed so they keep the meaning they had before the
 // longer commands existed (":s" sources, ":r" rules, ":f" feed, ":t" tags,
 // ":q" feed).
@@ -12,6 +13,7 @@
 // parseCommand is pure: names are resolved against the sources and tags it
 // is given, so the result carries IDs and the caller only has to act.
 
+import { columnCandidates, parseColumns, type Column } from './columns';
 import { parseScore, withAssessor } from './filter';
 import { parseRate } from './rate';
 import { findSeries, seriesNames } from './digests';
@@ -53,6 +55,8 @@ export type Command =
 	| { type: 'score'; id: string; min: number | null }
 	/** Only items this assessor has not assessed ("" is off). */
 	| { type: 'unassessed'; id: string }
+	/** The columns to show ([] is all), or 'pick' to open the column picker. */
+	| { type: 'columns'; columns: Column[] | 'pick' }
 	/** Rates the selected item yourself, as the assessor "me". */
 	| { type: 'rate'; score: number; note: string }
 	/** id "" is every source. */
@@ -98,6 +102,11 @@ export const COMMANDS: readonly Spec[] = [
 	{ name: 'save', args: '[name]', desc: 'save the filter into the active view, or as a new favorite view' },
 	{ name: 'score', args: '<assessor>|all [min]', desc: "show an assessor's scores, optionally only those of at least min" },
 	{ name: 'unassessed', args: '<assessor>|all', desc: 'only items this assessor has not assessed' },
+	{
+		name: 'columns',
+		args: '[<column>,...|all]',
+		desc: 'show only these columns (date, source, tags, score, title, desc, domain), or all; alone, the picker (:cols too)'
+	},
 	{ name: 'rate', args: '<score> [note]', desc: 'rate the selected item yourself (assessor "me", score 0 to 1)' },
 	{ name: 'refresh', args: '[source]', desc: 'fetch all sources now, or one' },
 	{ name: 'time', args: '[relative|absolute]', desc: 'how times are shown, or toggle it' },
@@ -120,6 +129,7 @@ const ALIASES: Record<string, string> = {
 	u: 'unviewed',
 	un: 'unviewed',
 	v: 'view',
+	cols: 'columns',
 	d: 'digests',
 	h: 'help',
 	'?': 'help'
@@ -243,6 +253,13 @@ export function parseCommand(input: string, ctx: CommandContext = { sources: [],
 			const id = findAssessor(assessors, name, false);
 			return id === undefined ? fail(`unknown assessor: ${name}`) : ok({ type: 'unassessed', id });
 		}
+		case 'columns': {
+			if (!arg) return ok({ type: 'columns', columns: 'pick' });
+			const list = unquote(arg);
+			if (ALL.has(list.toLowerCase())) return ok({ type: 'columns', columns: [] });
+			const r = parseColumns(list);
+			return r.ok ? ok({ type: 'columns', columns: r.columns }) : fail(r.error.replace(/^cols:/, 'columns:'));
+		}
 		case 'rate': {
 			const r = parseRate(arg);
 			return r.ok ? ok({ type: 'rate', score: r.score, note: r.note }) : fail(r.error);
@@ -272,6 +289,8 @@ export function applyToFilter(cmd: Command, f: Filter): Filter | null {
 			return { ...f, source: cmd.id };
 		case 'tag':
 			return { ...f, tag: cmd.id };
+		case 'columns':
+			return cmd.columns === 'pick' ? null : { ...f, columns: cmd.columns };
 	}
 	return null;
 }
@@ -306,6 +325,7 @@ export function completeCommand(input: string, ctx: CommandContext): CommandComp
 	if ('error' in r) return { from: input.length, candidates: [] };
 	const rest = text.slice(space);
 	const argStart = lead + space + (rest.length - rest.trimStart().length);
+	if (r.name === 'columns') return completeColumns(input, argStart);
 	const typed = unquote(input.slice(argStart));
 	const names = (xs: readonly { name?: string }[]) => xs.flatMap((x) => (x.name ? [x.name.replace(/\s+/g, ' ')] : []));
 	let list: readonly string[] = [];
@@ -340,6 +360,14 @@ export function completeCommand(input: string, ctx: CommandContext): CommandComp
 			break;
 	}
 	return { from: argStart, candidates: startsWith(list, typed) };
+}
+
+/** ":columns title,d": the column names for the part after the last comma (and "all" first). */
+function completeColumns(input: string, argStart: number): CommandCompletion {
+	const arg = input.slice(argStart);
+	const { offset, candidates } = columnCandidates(arg);
+	const all = !arg.includes(',') && 'all'.startsWith(arg.trim().toLowerCase()) ? ['all'] : [];
+	return { from: argStart + offset, candidates: [...candidates.filter((c) => c !== 'all'), ...all] };
 }
 
 /** The longest prefix all words share, ignoring case (the first word's spelling). */

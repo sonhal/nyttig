@@ -498,10 +498,10 @@ nyttig list-tag-rules
 nyttig remove-tag-rule -id <rule_id>
 nyttig list-views                        # name, ★ for favorites, and the filter written like the web query bar
 nyttig add-view        -n <name> [-q <text>] [-source <name|id>] [-tag <name|id>] [-unviewed] [-since <window>] [-sort newest|oldest|score] [-favorite]
-                       [-assessor <name|id>] [-min-score <0-1>] [-unassessed-by <name|id>]
+                       [-assessor <name|id>] [-min-score <0-1>] [-unassessed-by <name|id>] [-columns <list>]
 nyttig update-view     (-id <id> | -n <name>) [-rename <name>] [-q <text>] [-source <name|id> | -no-source]
                        [-tag <name|id> | -no-tag] [-sort newest|oldest|score] [-unviewed[=false]]
-                       [-since <window> | -no-since] [-favorite[=false]]
+                       [-since <window> | -no-since] [-columns <list> | -no-columns] [-favorite[=false]]
                        [-assessor <name|id> | -no-assessor] [-min-score <0-1> | -no-min-score] [-unassessed-by <name|id>]
 nyttig remove-view     (-id <id> | -n <name>)
 nyttig reorder-views   <id|name>...      # every view once, in the new order
@@ -540,7 +540,7 @@ child tags, unviewed only, a time window, sort order) stored in the daemon, so e
 shares them. `-favorite` marks a view for the tab bar of clients that have
 one. `update-view` changes only the flags you pass; any filter flag replaces
 the stored filter's matching part and keeps the rest, and `-no-source` /
-`-no-tag` / `-no-since` drop that part. Deleting a source or tag keeps the views that used
+`-no-tag` / `-no-since` / `-no-columns` drop that part. Deleting a source or tag keeps the views that used
 it and just stops filtering on it. Names are unique (case-insensitive), at
 most 64 characters, and there can be at most 100 views. `search -view NAME`
 runs a view's filter headless; flags passed explicitly (`-sort`, `-unviewed`,
@@ -554,6 +554,16 @@ could mean minutes or months. An item's date is its published date, or the
 time nyttigd fetched it when the feed gives none. A view stores the window as
 you typed it (`30d` stays `30d`), and `search -view NAME -since 1y` replaces
 the view's window.
+
+`-columns` chooses which feed columns a view shows, for example
+`-columns title,source` or `-columns date,title`. The columns are `date`,
+`source`, `tags`, `score`, `title`, `desc` and `domain` (also spelled
+`time`, `src`, `tag`, `scores` and `description`); they always appear in
+that order, and the unviewed marker always shows. `-columns -desc,-domain`
+shows every column but those. Without `-columns` a view
+shows every column. Columns only change how the feed looks: `search -view`
+returns the same items with or without them. `list-views` shows them as
+`cols:source,title`.
 
 Assessors score items from outside the daemon (see [Assessments](#assessments)).
 `assess` stores a score from 0 to 1, a note, or both, for the item as a whole
@@ -852,6 +862,7 @@ the keymap, so it is always current.
 | `=`                | Rate the selected item yourself (types `:rate ` for you, see [Rating items yourself](#rating-items-yourself)) |
 | `a`, `A`           | Pick an assessor by name (its scores are shown first, see [Assessments](#assessments)) / clear it |
 | `o`                | Toggle sort (newest / oldest)                     |
+| `C`                | Choose the columns: a checklist, `Enter` (or a click) toggles a column and it stays open, `Esc` closes |
 | `F`                | Follow: jump to the newest and stick to it         |
 | `D`                | Relative ("12m ago") or absolute times; remembered in the browser |
 | `r`, `R`           | Refresh all sources / the selected item's source  |
@@ -873,6 +884,22 @@ unknown name is an error under the bar instead of being ignored. The bar
 always shows the current filter in this syntax. Matching words are
 highlighted in titles and descriptions (whole words, any case; FTS5
 tokenization is approximated).
+
+**Columns.** `cols:title,source` shows only those columns of the feed, for
+example `cols:date,title` or `cols:score,title`. The columns are `date`,
+`source`, `tags`, `score`, `title`, `desc` and `domain` (also `time`, `src`,
+`tag`, `scores`, `description`); they keep their usual order, and the
+unviewed dot always shows. A list of `-` names hides those instead:
+`cols:-desc,-domain` is every column but the description and the domain
+(a list can't mix the two, and can't hide every column). The bar writes
+whichever form is shorter. `C` opens a checklist of the columns,
+`:columns <list>|all` (`:cols`) sets them, and on a phone the `⚙` sheet has
+a button per column. Columns are part of the filter: they are in the
+URL (`cols=source,title`) and a saved view keeps them, so a changed column
+list marks the view's tab `*`. They only change how rows look, so changing
+them doesn't reload the feed. On a phone, with the title hidden, the
+description (if shown) takes the second line. Opening a row still shows
+everything.
 
 **Time window.** `since:7d` shows only items from the last seven days:
 `<n><unit>` with `n` from 1 to 9999 and the unit `h`, `d`, `w`, `mo` (calendar
@@ -902,7 +929,7 @@ fresh snapshot (the newest 200), dropping the older pages.
 **Command line** (`:`; `Tab` completes, again to cycle; `↑`/`↓` history;
 a unique prefix is enough): `:feed` `:sources` `:tags` `:rules` `:views` (`:q` is
 the feed), `:assessors`, `:digests` (`:d`), `:digest <assessor>/<series>`, `:sort [newest|oldest|score]`, `:unviewed [on|off]`, `:src <name>|all`,
-`:tag <name>|all`, `:score <assessor>|all [min]`, `:unassessed <assessor>|all`, `:rate <score> [note]`, `:view <name>|all` (`:v`), `:save [name]`,
+`:tag <name>|all`, `:score <assessor>|all [min]`, `:unassessed <assessor>|all`, `:columns [<list>|all]` (`:cols`; alone, the checklist), `:rate <score> [note]`, `:view <name>|all` (`:v`), `:save [name]`,
 `:refresh [source]`, `:time [relative|absolute]`, `:follow`, `:help`. The
 filter and view commands also work from the management pages, and go to the
 feed.

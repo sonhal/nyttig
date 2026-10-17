@@ -23,6 +23,7 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"github.com/sonhal/nyttig/internal/columns"
 	pb "github.com/sonhal/nyttig/internal/proto/nyttig/v1"
 	"github.com/sonhal/nyttig/internal/server/db"
 	"github.com/sonhal/nyttig/internal/server/fetcher"
@@ -696,7 +697,7 @@ func (s *Service) checkViewRefs(f *pb.ViewFilter) error {
 // applyViewFilter copies a (validated) proto filter onto v; nil clears it.
 func applyViewFilter(v *db.SavedView, f *pb.ViewFilter) {
 	v.Search, v.SourceID, v.TagID, v.Sort, v.UnviewedOnly, v.Since = "", nil, nil, "newest", false, ""
-	v.AssessorID, v.MinScore, v.UnassessedBy = nil, nil, nil
+	v.AssessorID, v.MinScore, v.UnassessedBy, v.Columns = nil, nil, nil, nil
 	if f == nil {
 		return
 	}
@@ -726,10 +727,13 @@ func applyViewFilter(v *db.SavedView, f *pb.ViewFilter) {
 		id := f.UnassessedBy
 		v.UnassessedBy = &id
 	}
+	// Stored in display order, and the full set as nil (all columns), so
+	// views that show the same columns compare equal. Validated already.
+	v.Columns, _ = columns.Normalize(f.Columns)
 }
 
 func dbSavedViewToProto(v *db.SavedView) *pb.SavedView {
-	f := &pb.ViewFilter{Search: v.Search, Sort: v.Sort, UnviewedOnly: v.UnviewedOnly, Since: v.Since}
+	f := &pb.ViewFilter{Search: v.Search, Sort: v.Sort, UnviewedOnly: v.UnviewedOnly, Since: v.Since, Columns: v.Columns}
 	if v.SourceID != nil {
 		f.SourceId = *v.SourceID
 	}

@@ -206,3 +206,21 @@ describe('assessor fields of a view', () => {
 		expect(usageWarning('assessor', 1)).toBe('1 view filters on this assessor; it will stop filtering on it.');
 	});
 });
+
+describe('columns of a view', () => {
+	const heads: SavedView = { id: '9', name: 'heads', filter: { tag: '4', cols: ['source', 'title'] } };
+	it('reads and writes cols', () => {
+		expect(viewToFilter(heads).columns).toEqual(['source', 'title']);
+		expect(filterToViewBody(viewToFilter(heads))).toEqual({ tag: '4', cols: ['source', 'title'] });
+		expect(filterToViewBody(defaultFilter)).toEqual({});
+		expect(viewHref(heads)).toBe('/?view=9&tag=4&cols=source%2Ctitle');
+	});
+	it('drops column names it does not know', () => {
+		expect(viewToFilter({ filter: { cols: ['title', 'author'] } }).columns).toEqual(['title']);
+	});
+	it('marks the view modified when only the columns change', () => {
+		expect(isModified(heads, viewToFilter(heads))).toBe(false);
+		expect(isModified(heads, { ...viewToFilter(heads), columns: ['title'] })).toBe(true);
+		expect(isModified(heads, { ...viewToFilter(heads), columns: [] })).toBe(true);
+	});
+});

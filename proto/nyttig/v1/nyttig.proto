@@ -165,6 +165,10 @@ message ViewFilter {
     int64 assessor_id = 7;    // 0 = none; whose scores min_score and sort "score" use
     optional double min_score = 8;
     int64 unassessed_by = 9;  // 0 = none
+    // The feed columns to show: canonical names (date, source, tags, score,
+    // title, desc, domain) in display order; empty = all columns. Display
+    // only: the daemon stores it and never filters by it.
+    repeated string columns = 10;
 }
 
 message SavedView {

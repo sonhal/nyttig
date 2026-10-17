@@ -9,6 +9,7 @@ import {
 	nextSort,
 	parseScore,
 	sameFilter,
+	sameItems,
 	withAssessor
 } from './filter';
 
@@ -154,5 +155,34 @@ describe('assessor filters in the URL', () => {
 		// Another sort is kept, and so is the unassessed filter.
 		expect(withAssessor({ ...f, sort: 'oldest' }, '')).toMatchObject({ sort: 'oldest', unassessed: '4' });
 		expect(nextSort('score')).toBe('newest');
+	});
+});
+
+describe('columns', () => {
+	it('round-trips through the URL in display order', () => {
+		const f = filterFromParams(new URLSearchParams('cols=title,source&tag=3'));
+		expect(f.columns).toEqual(['source', 'title']);
+		expect(filterQuery(f)).toBe('?tag=3&cols=source%2Ctitle');
+		expect(filterFromParams(filterToParams(f))).toEqual(f);
+	});
+	it('falls back to every column on a bad value', () => {
+		expect(filterFromParams(new URLSearchParams('cols=title,bogus')).columns).toEqual([]);
+		expect(filterFromParams(new URLSearchParams('cols=')).columns).toEqual([]);
+		// Every column is the default, so it leaves the URL.
+		const all = filterFromParams(new URLSearchParams('cols=date,source,tags,score,title,desc,domain'));
+		expect(filterQuery(all)).toBe('');
+	});
+	it('never goes to the API', () => {
+		const f = { ...defaultFilter, tag: '3', columns: ['title' as const] };
+		expect(apiParams(f).toString()).toBe('tag=3');
+	});
+	it('makes a different filter but the same items', () => {
+		const a = { ...defaultFilter, tag: '3' };
+		const b = { ...a, columns: ['title' as const] };
+		expect(sameFilter(a, b)).toBe(false);
+		expect(sameItems(a, b)).toBe(true);
+		expect(sameItems(a, { ...a, tag: '4' })).toBe(false);
+		// The window is left out of apiParams, but it changes the items.
+		expect(sameItems(a, { ...a, since: '7d' })).toBe(false);
 	});
 });

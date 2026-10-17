@@ -5,9 +5,14 @@
 	line (.meta) never wraps, so a row can't grow a third line. Viewed
 	(read) rows are dimmed.
 
+	columns (columns.ts) picks which cells show, in this same order; [] shows
+	them all. The dot always shows. On mobile, with the title hidden, the
+	description (when shown) takes the second line instead.
+
 	All feed text is rendered as text; colors are validated before use.
 -->
 <script lang="ts">
+	import { shows, type Column } from './columns';
 	import type { TimeMode } from './command';
 	import { formatDate, formatRelative, formatTime } from './format';
 	import Highlight from './Highlight.svelte';
@@ -30,6 +35,8 @@
 		selectedAssessor?: string;
 		/** Score heat, 0 to 1: how strongly the row glows (see heatOf). */
 		heat?: number;
+		/** The columns to show (columns.ts); [] = all. */
+		columns?: Column[];
 		onselect: (index: number) => void;
 		/** The free-text words of the query, marked in the title and description. */
 		terms?: readonly string[];
@@ -48,12 +55,14 @@
 		assessors = new Map(),
 		selectedAssessor = '',
 		heat = 0,
+		columns = [],
 		onselect,
 		terms = [],
 		timeMode = 'absolute',
 		now = 0
 	}: Props = $props();
 
+	const show = (c: Column) => shows(columns, c);
 	const chips = $derived(scoreChips(item, selectedAssessor));
 	const title = $derived(oneLine(item.title) || '(untitled)');
 	const desc = $derived(htmlToText(item.description));
@@ -76,7 +85,8 @@
 	class:viewed={item.viewed}
 	class:hot={heat > 0}
 	style:--heat={heat > 0 ? heat : undefined}
-	class:nodesc={!desc}
+	class:nodesc={!desc || !show('desc')}
+	class:notitle={!show('title')}
 	role="row"
 	tabindex={-1}
 	id="row-{item.id}"
@@ -88,14 +98,16 @@
 	<div class="cells" role="gridcell">
 		<span class="meta">
 			<span class="dot" aria-label={item.viewed ? undefined : 'unviewed'}>{item.viewed ? '' : '●'}</span>
-			<span class="date full" class:fetched={fetchedOnly} title={dateTitle}>{dateFull}</span>
-			<span class="date short" class:fetched={fetchedOnly} title={dateTitle}>{dateShort}</span>
-			{#if source?.label}
+			{#if show('date')}
+				<span class="date full" class:fetched={fetchedOnly} title={dateTitle}>{dateFull}</span>
+				<span class="date short" class:fetched={fetchedOnly} title={dateTitle}>{dateShort}</span>
+			{/if}
+			{#if source?.label && show('source')}
 				<span class="chip src"
 					>[<span style:color={safeColor(source.color)}>{oneLine(source.label)}</span>]</span
 				>
 			{/if}
-			{#if item.tags?.length}
+			{#if item.tags?.length && show('tags')}
 				<span class="tags">
 					{#each item.tags as tag, i (tag.id ?? i)}
 						{@const cur = tag.id ? tags.get(tag.id) : undefined}
@@ -106,16 +118,16 @@
 					{/each}
 				</span>
 			{/if}
-			{#each chips as c (c.assessorId)}
+			{#each show('score') ? chips : [] as c (c.assessorId)}
 				{@const cur = assessors.get(c.assessorId)}
 				<span class="chip score" class:selected-assessor={c.assessorId === selectedAssessor} data-testid="score-chip"
 					>[<span style:color={cur?.color}>{oneLine(cur?.name || c.name)} {formatScore(c.score)}</span>]</span
 				>
 			{/each}
-			<span class="domain">{domain}</span>
+			{#if show('domain')}<span class="domain">{domain}</span>{/if}
 		</span>
-		<span class="title"><Highlight text={title} {terms} /></span>
-		{#if desc}<span class="desc"><Highlight text={desc} {terms} /></span>{/if}
+		{#if show('title')}<span class="title"><Highlight text={title} {terms} /></span>{/if}
+		{#if desc && show('desc')}<span class="desc"><Highlight text={desc} {terms} /></span>{/if}
 	</div>
 </div>
 
@@ -254,6 +266,13 @@
 			order: 10;
 			flex: 1 0 100%;
 			max-width: 100%;
+			padding-left: 2ch;
+		}
+		/* No title column: the description, when shown, is the second line. */
+		.notitle .desc {
+			display: inline;
+			order: 10;
+			flex: 1 0 100%;
 			padding-left: 2ch;
 		}
 	}
