@@ -135,6 +135,7 @@ buf.yaml, buf.gen.yaml      buf config for codegen; run `buf generate` from the 
 internal/proto/nyttig/v1/   GENERATED Go from the proto (do not hand-edit)
 internal/config/            TOML config loading + ~ expansion
 internal/since/             Parser for rolling windows (7d, 1mo): Parse + Cutoff, shared rules with web/src/lib/since.ts
+internal/columns/           The feed columns a filter can show (date, source, ...): Normalize, Parse, Format
 internal/client/            gRPC client wrapper + StreamSub helper used by the TUI
 internal/mtls/              Mutual-TLS credential loading shared by daemon and client
 internal/tui/               Bubble Tea Model, filter bar, table, status bar, view tracking;
@@ -350,13 +351,24 @@ which phases are done and whether they are merged; keep it current.
   (`views.ts`: `isModified`). The tabs are the favorites in position order,
   and only the first nine have a number key. **nyttig-api's view JSON is not
   protojson** (`viewJSON` in `internal/api/manage.go`): a view is
-  `{id, name, filter: {q, source, tag, since, sort, unviewed, assessor, min_score, unassessed}, favorite, position}`
+  `{id, name, filter: {q, source, tag, since, sort, unviewed, assessor, min_score, unassessed, cols}, favorite, position}`
   with string IDs, zero values left out and `filter` always present (the
   daemon spells out `sort: "newest"`). The filter keys are the web `Filter`
   type's and the feed URL's, in requests and responses alike, and a PATCH
   with `filter` replaces the whole filter. Lists and the reorder answer are
   `{"views": [...]}`. In the web app `command.ts`'s old `View` is now `Page`
   (the routes); "view" always means a saved view.
+- **Feed columns** (`docs/feed-columns-plan.md`). `ViewFilter.columns`
+  (`saved_views.columns`, migration 10; `cols` in nyttig-api's view JSON, an
+  array) is the feed columns a view shows: canonical names in display
+  order, empty = all. It is **display only**: it lives in the filter so it
+  is saved, compared and written back with it, but `SearchRequest`,
+  `StreamFilter`, the Hub and `ViewSearchRequest` never carry it. The rules
+  are `internal/columns` (`Normalize`: canonical names only, no duplicates,
+  display order, the full set as nil; `Parse` adds the aliases for typed
+  input); the service stores the normalized list. `update-view` in the CLI
+  copies the stored filter field by field, so a new `ViewFilter` field must
+  be copied there too or any filter flag drops it.
 - **Date window** (`since`, `docs/date-filter-plan.md`): a rolling
   duration (`24h`, `7d`, `2w`, `1mo`, `1y`; parsed by `internal/since` and
   `web/src/lib/since.ts`, which share a table of cases) and a general filter

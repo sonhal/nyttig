@@ -498,10 +498,10 @@ nyttig list-tag-rules
 nyttig remove-tag-rule -id <rule_id>
 nyttig list-views                        # name, ★ for favorites, and the filter written like the web query bar
 nyttig add-view        -n <name> [-q <text>] [-source <name|id>] [-tag <name|id>] [-unviewed] [-since <window>] [-sort newest|oldest|score] [-favorite]
-                       [-assessor <name|id>] [-min-score <0-1>] [-unassessed-by <name|id>]
+                       [-assessor <name|id>] [-min-score <0-1>] [-unassessed-by <name|id>] [-columns <list>]
 nyttig update-view     (-id <id> | -n <name>) [-rename <name>] [-q <text>] [-source <name|id> | -no-source]
                        [-tag <name|id> | -no-tag] [-sort newest|oldest|score] [-unviewed[=false]]
-                       [-since <window> | -no-since] [-favorite[=false]]
+                       [-since <window> | -no-since] [-columns <list> | -no-columns] [-favorite[=false]]
                        [-assessor <name|id> | -no-assessor] [-min-score <0-1> | -no-min-score] [-unassessed-by <name|id>]
 nyttig remove-view     (-id <id> | -n <name>)
 nyttig reorder-views   <id|name>...      # every view once, in the new order
@@ -540,7 +540,7 @@ child tags, unviewed only, a time window, sort order) stored in the daemon, so e
 shares them. `-favorite` marks a view for the tab bar of clients that have
 one. `update-view` changes only the flags you pass; any filter flag replaces
 the stored filter's matching part and keeps the rest, and `-no-source` /
-`-no-tag` / `-no-since` drop that part. Deleting a source or tag keeps the views that used
+`-no-tag` / `-no-since` / `-no-columns` drop that part. Deleting a source or tag keeps the views that used
 it and just stops filtering on it. Names are unique (case-insensitive), at
 most 64 characters, and there can be at most 100 views. `search -view NAME`
 runs a view's filter headless; flags passed explicitly (`-sort`, `-unviewed`,
@@ -554,6 +554,15 @@ could mean minutes or months. An item's date is its published date, or the
 time nyttigd fetched it when the feed gives none. A view stores the window as
 you typed it (`30d` stays `30d`), and `search -view NAME -since 1y` replaces
 the view's window.
+
+`-columns` chooses which feed columns a view shows, for example
+`-columns title,source` or `-columns date,title`. The columns are `date`,
+`source`, `tags`, `score`, `title`, `desc` and `domain` (also spelled
+`time`, `src`, `tag`, `scores` and `description`); they always appear in
+that order, and the unviewed marker always shows. Without `-columns` a view
+shows every column. Columns only change how the feed looks: `search -view`
+returns the same items with or without them. `list-views` shows them as
+`cols:source,title`.
 
 Assessors score items from outside the daemon (see [Assessments](#assessments)).
 `assess` stores a score from 0 to 1, a note, or both, for the item as a whole

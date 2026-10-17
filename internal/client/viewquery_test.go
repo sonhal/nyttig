@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	pb "github.com/sonhal/nyttig/internal/proto/nyttig/v1"
@@ -139,5 +140,24 @@ func TestViewSearchRequest(t *testing.T) {
 	if sf.Search != "q" || sf.TagId != 4 || sf.AssessorId != 3 || *sf.MinScore != 0.7 || sf.UnassessedBy != 3 ||
 		sf.After != abs || sf.Sort != "score" || !sf.UnviewedOnly || sf.SourceId != 2 {
 		t.Errorf("stream filter: %+v", sf)
+	}
+}
+
+// A view's columns are display only: the request a view resolves to is the
+// same with or without them, for `nyttig search -view` and nyttig-api's ?view=.
+func TestViewSearchRequestIgnoresColumns(t *testing.T) {
+	now := time.Date(2026, 9, 10, 12, 0, 0, 0, time.UTC)
+	f := &pb.ViewFilter{Search: "go", TagId: 3, Since: "7d"}
+	plain, err := ViewSearchRequest(&pb.SavedView{Id: 1, Filter: f}, Overrides{}, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	withCols := &pb.ViewFilter{Search: "go", TagId: 3, Since: "7d", Columns: []string{"title", "source"}}
+	got, err := ViewSearchRequest(&pb.SavedView{Id: 1, Filter: withCols}, Overrides{}, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !proto.Equal(got, plain) {
+		t.Errorf("with columns %v, without %v", got, plain)
 	}
 }

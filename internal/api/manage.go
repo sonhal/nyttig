@@ -203,6 +203,20 @@ func (b jsonBody) idList(field string) ([]int64, bool, error) {
 	return ids, true, nil
 }
 
+// strList returns an array of strings, or nil when it is absent. The values
+// are the daemon's to validate.
+func (b jsonBody) strList(field string) ([]string, error) {
+	v, ok := b[field]
+	if !ok {
+		return nil, nil
+	}
+	var xs []string
+	if err := json.Unmarshal(v, &xs); err != nil {
+		return nil, fmt.Errorf("%w: %s must be an array of strings", errBody, field)
+	}
+	return xs, nil
+}
+
 // object returns a nested JSON object member, read with the same strictness
 // as the body itself (only the allowed members, no duplicates, no nulls), and
 // whether the member is present.
@@ -532,7 +546,7 @@ func (a *handlers) testRule(w http.ResponseWriter, r *http.Request) {
 
 var (
 	viewFields   = []string{"name", "filter", "favorite"}
-	filterFields = []string{"q", "source", "tag", "since", "sort", "unviewed", "assessor", "min_score", "unassessed"}
+	filterFields = []string{"q", "source", "tag", "since", "sort", "unviewed", "assessor", "min_score", "unassessed", "cols"}
 )
 
 // viewJSON is a saved view as the browser sees it. Its filter uses the same
@@ -558,6 +572,9 @@ type filterJSON struct {
 	Assessor   string   `json:"assessor,omitempty"`
 	MinScore   *float64 `json:"min_score,omitempty"` // a pointer: 0 is a minimum
 	Unassessed string   `json:"unassessed,omitempty"`
+	// The feed columns the view shows (internal/columns), in display order;
+	// absent = all. Display only: nothing filters by it.
+	Cols []string `json:"cols,omitempty"`
 }
 
 func idString(id int64) string {
@@ -580,6 +597,7 @@ func toViewJSON(v *pb.SavedView) viewJSON {
 			Q: f.GetSearch(), Source: idString(f.GetSourceId()), Tag: idString(f.GetTagId()),
 			Since: f.GetSince(), Sort: f.GetSort(), Unviewed: f.GetUnviewedOnly(),
 			Assessor: idString(f.GetAssessorId()), MinScore: minScore, Unassessed: idString(f.GetUnassessedBy()),
+			Cols: f.GetColumns(),
 		},
 		Favorite: v.GetFavorite(),
 		Position: v.GetPosition(),
@@ -609,11 +627,12 @@ func viewFilter(b jsonBody) (*pb.ViewFilter, bool, error) {
 	minScore, err7 := o.float64Field("min_score")
 	unassessed, err8 := o.id("unassessed")
 	since, err9 := o.str("since")
-	if err := firstErr(err1, err2, err3, err4, err5, err6, err7, err8, err9); err != nil {
+	cols, err10 := o.strList("cols")
+	if err := firstErr(err1, err2, err3, err4, err5, err6, err7, err8, err9, err10); err != nil {
 		return nil, true, fmt.Errorf("%w: filter: %s", errBody, strings.TrimPrefix(err.Error(), errBody.Error()+": "))
 	}
 	return &pb.ViewFilter{Search: valueOr(q, ""), SourceId: src, TagId: tag, Sort: valueOr(sort, ""), UnviewedOnly: valueOr(unviewed, false), Since: valueOr(since, ""),
-		AssessorId: assessor, MinScore: minScore, UnassessedBy: unassessed}, true, nil
+		AssessorId: assessor, MinScore: minScore, UnassessedBy: unassessed, Columns: cols}, true, nil
 }
 
 func (a *handlers) listViews(w http.ResponseWriter, r *http.Request) {

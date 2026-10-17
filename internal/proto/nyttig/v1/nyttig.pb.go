@@ -1224,16 +1224,20 @@ func (x *ListTagsResponse) GetTags() []*Tag {
 // ViewFilter is the feed filter a saved view holds. Zero values mean "not
 // filtered": source_id/tag_id 0 = any, sort "" = newest.
 type ViewFilter struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Search        string                 `protobuf:"bytes,1,opt,name=search,proto3" json:"search,omitempty"`
-	SourceId      int64                  `protobuf:"varint,2,opt,name=source_id,json=sourceId,proto3" json:"source_id,omitempty"`
-	TagId         int64                  `protobuf:"varint,3,opt,name=tag_id,json=tagId,proto3" json:"tag_id,omitempty"`
-	Sort          string                 `protobuf:"bytes,4,opt,name=sort,proto3" json:"sort,omitempty"` // "newest" (default), "oldest" or "score"
-	UnviewedOnly  bool                   `protobuf:"varint,5,opt,name=unviewed_only,json=unviewedOnly,proto3" json:"unviewed_only,omitempty"`
-	Since         string                 `protobuf:"bytes,6,opt,name=since,proto3" json:"since,omitempty"`                              // rolling window: "24h", "7d", "2w", "1mo", "1y"; "" = no window
-	AssessorId    int64                  `protobuf:"varint,7,opt,name=assessor_id,json=assessorId,proto3" json:"assessor_id,omitempty"` // 0 = none; whose scores min_score and sort "score" use
-	MinScore      *float64               `protobuf:"fixed64,8,opt,name=min_score,json=minScore,proto3,oneof" json:"min_score,omitempty"`
-	UnassessedBy  int64                  `protobuf:"varint,9,opt,name=unassessed_by,json=unassessedBy,proto3" json:"unassessed_by,omitempty"` // 0 = none
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	Search       string                 `protobuf:"bytes,1,opt,name=search,proto3" json:"search,omitempty"`
+	SourceId     int64                  `protobuf:"varint,2,opt,name=source_id,json=sourceId,proto3" json:"source_id,omitempty"`
+	TagId        int64                  `protobuf:"varint,3,opt,name=tag_id,json=tagId,proto3" json:"tag_id,omitempty"`
+	Sort         string                 `protobuf:"bytes,4,opt,name=sort,proto3" json:"sort,omitempty"` // "newest" (default), "oldest" or "score"
+	UnviewedOnly bool                   `protobuf:"varint,5,opt,name=unviewed_only,json=unviewedOnly,proto3" json:"unviewed_only,omitempty"`
+	Since        string                 `protobuf:"bytes,6,opt,name=since,proto3" json:"since,omitempty"`                              // rolling window: "24h", "7d", "2w", "1mo", "1y"; "" = no window
+	AssessorId   int64                  `protobuf:"varint,7,opt,name=assessor_id,json=assessorId,proto3" json:"assessor_id,omitempty"` // 0 = none; whose scores min_score and sort "score" use
+	MinScore     *float64               `protobuf:"fixed64,8,opt,name=min_score,json=minScore,proto3,oneof" json:"min_score,omitempty"`
+	UnassessedBy int64                  `protobuf:"varint,9,opt,name=unassessed_by,json=unassessedBy,proto3" json:"unassessed_by,omitempty"` // 0 = none
+	// The feed columns to show: canonical names (date, source, tags, score,
+	// title, desc, domain) in display order; empty = all columns. Display
+	// only: the daemon stores it and never filters by it.
+	Columns       []string `protobuf:"bytes,10,rep,name=columns,proto3" json:"columns,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1329,6 +1333,13 @@ func (x *ViewFilter) GetUnassessedBy() int64 {
 		return x.UnassessedBy
 	}
 	return 0
+}
+
+func (x *ViewFilter) GetColumns() []string {
+	if x != nil {
+		return x.Columns
+	}
+	return nil
 }
 
 type SavedView struct {
@@ -4176,7 +4187,7 @@ const file_nyttig_v1_nyttig_proto_rawDesc = "" +
 	"\x10RemoveTagRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\x03R\x02id\"6\n" +
 	"\x10ListTagsResponse\x12\"\n" +
-	"\x04tags\x18\x01 \x03(\v2\x0e.nyttig.v1.TagR\x04tags\"\x9d\x02\n" +
+	"\x04tags\x18\x01 \x03(\v2\x0e.nyttig.v1.TagR\x04tags\"\xb7\x02\n" +
 	"\n" +
 	"ViewFilter\x12\x16\n" +
 	"\x06search\x18\x01 \x01(\tR\x06search\x12\x1b\n" +
@@ -4188,7 +4199,9 @@ const file_nyttig_v1_nyttig_proto_rawDesc = "" +
 	"\vassessor_id\x18\a \x01(\x03R\n" +
 	"assessorId\x12 \n" +
 	"\tmin_score\x18\b \x01(\x01H\x00R\bminScore\x88\x01\x01\x12#\n" +
-	"\runassessed_by\x18\t \x01(\x03R\funassessedByB\f\n" +
+	"\runassessed_by\x18\t \x01(\x03R\funassessedBy\x12\x18\n" +
+	"\acolumns\x18\n" +
+	" \x03(\tR\acolumnsB\f\n" +
 	"\n" +
 	"_min_score\"\x96\x01\n" +
 	"\tSavedView\x12\x0e\n" +

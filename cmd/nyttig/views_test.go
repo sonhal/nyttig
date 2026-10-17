@@ -37,6 +37,9 @@ func TestFormatViewFilter(t *testing.T) {
 		{"unknown assessor", &pb.ViewFilter{AssessorId: 9}, `score:#9`},
 		{"score words are quoted", &pb.ViewFilter{Search: "score:x unassessed:y"}, `"score:x" "unassessed:y"`},
 		{"other colon words stay", &pb.ViewFilter{Search: "http://x"}, `http://x`},
+		{"columns go last", &pb.ViewFilter{Sort: "oldest", Columns: []string{"source", "title"}}, `sort:oldest cols:source,title`},
+		{"columns alone", &pb.ViewFilter{Columns: []string{"score"}}, `cols:score`},
+		{"cols-looking words are quoted", &pb.ViewFilter{Search: "cols:title columns:x"}, `"cols:title" "columns:x"`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if got := formatViewFilter(tc.f, sources, tags, assessors); got != tc.want {

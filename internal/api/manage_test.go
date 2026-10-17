@@ -397,6 +397,13 @@ func TestViews(t *testing.T) {
 		!strings.Contains(rec.Body.String(), `"filter":{"tag":"3","since":"7d"}`) {
 		t.Errorf("add view with since: %d %s, %v", rec.Code, rec.Body, fc.lastReq)
 	}
+	// Columns are an array of names, in both directions; the daemon validates them.
+	rec = th.do("POST", "/api/views", `{"name":"heads","filter":{"cols":["title","source"]}}`, nil)
+	if rec.Code != http.StatusCreated ||
+		!proto.Equal(fc.lastReq, &pb.AddSavedViewRequest{Name: "heads", Filter: &pb.ViewFilter{Columns: []string{"title", "source"}}}) ||
+		!strings.Contains(rec.Body.String(), `"filter":{"cols":["title","source"]}`) {
+		t.Errorf("add view with cols: %d %s, %v", rec.Code, rec.Body, fc.lastReq)
+	}
 	// A minimal view: no filter, not a favorite.
 	if rec := th.do("POST", "/api/views", `{"name":"plain"}`, nil); rec.Code != http.StatusCreated ||
 		!proto.Equal(fc.lastReq, &pb.AddSavedViewRequest{Name: "plain"}) {
@@ -414,6 +421,8 @@ func TestViews(t *testing.T) {
 		{`{"filter":{}}`, &pb.UpdateSavedViewRequest{Id: 3, Filter: &pb.ViewFilter{}}},
 		{`{"filter":{"since":"7d","q":"x"}}`, &pb.UpdateSavedViewRequest{Id: 3, Filter: &pb.ViewFilter{Search: "x", Since: "7d"}}},
 		{`{"filter":{"since":""}}`, &pb.UpdateSavedViewRequest{Id: 3, Filter: &pb.ViewFilter{}}},
+		{`{"filter":{"cols":["date","title"]}}`, &pb.UpdateSavedViewRequest{Id: 3, Filter: &pb.ViewFilter{Columns: []string{"date", "title"}}}},
+		{`{"filter":{"cols":[]}}`, &pb.UpdateSavedViewRequest{Id: 3, Filter: &pb.ViewFilter{}}},
 		{`{"filter":{"tag":"7","q":""}}`, &pb.UpdateSavedViewRequest{Id: 3, Filter: &pb.ViewFilter{TagId: 7}}},
 		{`{"name":"n","favorite":true,"filter":{"sort":"oldest"}}`,
 			&pb.UpdateSavedViewRequest{Id: 3, Name: ptr("n"), Favorite: ptr(true), Filter: &pb.ViewFilter{Sort: "oldest"}}},
@@ -441,6 +450,10 @@ func TestViews(t *testing.T) {
 		{"POST", "/api/views", `{"filter":{"since":null}}`},
 		{"POST", "/api/views", `{"filter":{"since":"7d","since":"1y"}}`},
 		{"POST", "/api/views", `{"filter":{},"filter":{}}`},
+		{"POST", "/api/views", `{"filter":{"cols":"title"}}`},
+		{"POST", "/api/views", `{"filter":{"cols":[1]}}`},
+		{"POST", "/api/views", `{"filter":{"cols":null}}`},
+		{"POST", "/api/views", `{"filter":{"columns":["title"]}}`},
 		{"POST", "/api/views", `{"name":"x","position":1}`},
 		{"POST", "/api/views", `{"name":1}`},
 		{"POST", "/api/views", `{"favorite":"true"}`},

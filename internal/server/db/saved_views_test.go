@@ -198,3 +198,35 @@ func TestSavedViews_SortCheck(t *testing.T) {
 		t.Fatal("an unknown sort was accepted")
 	}
 }
+
+func TestSavedViews_Columns(t *testing.T) {
+	database := openTestDB(t)
+
+	id := addView(t, database, &SavedView{Name: "headlines", Columns: []string{"source", "title"}})
+	got, _ := GetSavedView(database, id)
+	if !reflect.DeepEqual(got.Columns, []string{"source", "title"}) {
+		t.Fatalf("Columns = %q, want [source title]", got.Columns)
+	}
+
+	// A view without columns (all of them) reads back as nil, as do the rows
+	// written before migration 10.
+	plain := addView(t, database, &SavedView{Name: "plain"})
+	if v, _ := GetSavedView(database, plain); v.Columns != nil {
+		t.Errorf("plain view Columns = %q, want nil", v.Columns)
+	}
+
+	got.Columns = []string{"date", "title", "score"}
+	if ok, err := UpdateSavedView(database, got); err != nil || !ok {
+		t.Fatalf("UpdateSavedView = %v, %v", ok, err)
+	}
+	if v, _ := GetSavedView(database, id); !reflect.DeepEqual(v.Columns, []string{"date", "title", "score"}) {
+		t.Errorf("after update Columns = %q", v.Columns)
+	}
+	got.Columns = nil
+	if _, err := UpdateSavedView(database, got); err != nil {
+		t.Fatal(err)
+	}
+	if v, _ := GetSavedView(database, id); v.Columns != nil {
+		t.Errorf("after clearing Columns = %q, want nil", v.Columns)
+	}
+}

@@ -1,6 +1,6 @@
 # Feed columns plan
 
-Status: **planned** (no phase implemented).
+Status: **phase 1 implemented, not yet merged** (the daemon, nyttig-api and the CLI); phases 2 and 3 (the web app) planned.
 
 Today every feed row shows the same columns in a fixed order: unviewed dot,
 date, source, tags, score chips, title, description and domain. The feed
@@ -85,6 +85,14 @@ Cases (both test files): `""` → all; `title,source` → `source,title`;
 - Docs: README's `add-view` / `update-view` flags and the saved views
   section; AGENTS.md's saved views paragraph (the filter keys and `cols`, and
   "display only"); the repository layout entry for `internal/columns`.
+
+**Phase 1 notes.** As planned. Two things found on the way: the CLI's
+`update-view` copies the stored filter field by field, so it copies
+`Columns` too (or `-since` alone would have dropped them; AGENTS.md now says
+so); and `TestMigration8_RebuildKeepsSavedViews` migrates through 10, since
+`ListSavedViews` reads the new column. Until phase 2 the web app doesn't know
+`cols`: saving or editing a view's filter there (`:save`, the view form)
+sends a filter without it and so clears the view's columns.
 
 ## Phase 2: web model and rendering (`feat(web): choose the feed's columns`)
 
