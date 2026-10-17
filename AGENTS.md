@@ -194,6 +194,7 @@ docs/docker-plan.md         Plan for the container images and compose setup: dec
 docs/digests-plan.md        Plan for digests (assessor-written summaries over many items, in series): decisions and phases
 docs/source-types-plan.md   Plan for RSS 1.0 / JSON Feed detection and the CISA KEV source type: decisions and phases
 docs/euvd-plan.md           Plan for the EUVD source type (EU Vulnerability Database, scores as assessments): decisions and phases
+docs/feed-columns-plan.md   Plan for choosing the feed's columns (in the filter and saved views): decisions and phases
 CLAUDE.md                   `@AGENTS.md`: makes Claude Code load this file
 ```
 
