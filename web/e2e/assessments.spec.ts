@@ -148,6 +148,23 @@ test('assessments: a score shows up live as a chip, and the detail lists it as t
 	await expect(row1.getByTestId('score-chip')).toHaveCount(0);
 });
 
+test('assessments: rows of the selected assessor glow by score, in any sort', async ({ page }) => {
+	const f = fx!;
+	await put(page, f.items[0]!, { assessor: f.assessorId, score: 0.2 });
+	await put(page, f.items[1]!, { assessor: f.assessorId, score: 0.9 });
+	const row = (n: number) => rows(page).filter({ has: page.locator('.title', { hasText: new RegExp(`^${f.title(n)}$`) }) });
+	// No assessor selected: scores give no heat.
+	await open(page, `/?source=${f.sourceId}`);
+	await expect(row(2).getByTestId('score-chip')).toBeVisible();
+	await expect(page.locator('.row.hot')).toHaveCount(0);
+	// Selected, chronological order: only the high score glows.
+	await open(page, `/?source=${f.sourceId}&assessor=${f.assessorId}`);
+	await expect(row(2)).toHaveClass(/\bhot\b/);
+	await expect(row(1)).not.toHaveClass(/\bhot\b/);
+	await expect(row(3)).not.toHaveClass(/\bhot\b/);
+	await expect(page.locator('.row.hot')).toHaveCount(1);
+});
+
 test('assessments: score: filters and sort:score orders, unassessed: lists the open work', async ({ page }) => {
 	const f = fx!;
 	await put(page, f.items[0]!, { assessor: f.assessorId, score: 0.2 });

@@ -28,6 +28,8 @@
 		assessors?: Map<string, AssessorDisplay>;
 		/** The assessor whose scores the feed uses: its chip comes first. */
 		selectedAssessor?: string;
+		/** Score heat, 0 to 1: how strongly the row glows (see heatOf). */
+		heat?: number;
 		onselect: (index: number) => void;
 		/** The free-text words of the query, marked in the title and description. */
 		terms?: readonly string[];
@@ -45,6 +47,7 @@
 		tags,
 		assessors = new Map(),
 		selectedAssessor = '',
+		heat = 0,
 		onselect,
 		terms = [],
 		timeMode = 'absolute',
@@ -71,6 +74,8 @@
 	class="row"
 	class:selected
 	class:viewed={item.viewed}
+	class:hot={heat > 0}
+	style:--heat={heat > 0 ? heat : undefined}
 	class:nodesc={!desc}
 	role="row"
 	tabindex={-1}
@@ -122,11 +127,18 @@
 		user-select: none;
 	}
 	.row.selected {
-		background: var(--sel);
+		background-color: var(--sel);
+	}
+	/* Score heat: a gradient image over the row's background color (selection
+	   and hover show beneath it) and a bar on the left. Not dimmed with
+	   viewed rows: only .cells is. */
+	.row.hot {
+		background-image: linear-gradient(90deg, rgb(var(--heat-rgb) / calc(0.08 + var(--heat) * 0.27)), transparent 75%);
+		box-shadow: inset 3px 0 0 rgb(var(--heat-rgb) / calc(0.35 + var(--heat) * 0.65));
 	}
 	@media (hover: hover) {
 		.row:not(.selected):hover {
-			background: #262628;
+			background-color: #262628;
 		}
 	}
 	/* Read rows are dimmed as a whole, colored chips included; the selected

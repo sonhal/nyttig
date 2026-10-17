@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatScore, inScope, scoreChips, scoreOf, tagScope } from './scores';
+import { formatScore, heatOf, inScope, scoreChips, scoreOf, tagScope } from './scores';
 import type { Assessment, Item, Tag } from './types';
 
 const a = (assessor: string, score: number | undefined, tag?: string, name = `as${assessor}`): Assessment => ({
@@ -25,6 +25,22 @@ describe('formatScore', () => {
 		expect(formatScore(1)).toBe('1');
 		expect(formatScore(0)).toBe('0');
 		expect(formatScore(0.3 + 0.6)).toBe('0.9');
+	});
+});
+
+describe('heatOf', () => {
+	it('is 0 up to a score of 0.5, then rises to 1', () => {
+		expect(heatOf(null)).toBe(0);
+		expect(heatOf(0)).toBe(0);
+		expect(heatOf(0.5)).toBe(0);
+		expect(heatOf(0.6)).toBeCloseTo(0.2);
+		expect(heatOf(0.75)).toBe(0.5);
+		expect(heatOf(1)).toBe(1);
+	});
+	it('clamps out-of-range input', () => {
+		expect(heatOf(-3)).toBe(0);
+		expect(heatOf(7)).toBe(1);
+		expect(heatOf(NaN)).toBe(0);
 	});
 });
 

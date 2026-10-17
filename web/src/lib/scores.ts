@@ -38,6 +38,16 @@ export function scoreOf(item: Item, s: ScoreScope): number | null {
 	return best;
 }
 
+/**
+ * How strongly a row glows for the selected assessor's score: 0 for 0.5 or
+ * less (and for no score), 0.5 at 0.75, 1 at 1. The same rule as the TUI's
+ * heatOf (docs/score-heat-plan.md).
+ */
+export function heatOf(score: number | null): number {
+	if (score === null || !Number.isFinite(score)) return 0;
+	return Math.min(1, Math.max(0, (score - 0.5) / 0.5));
+}
+
 /** A score for display: at most two decimals, no trailing zeros (0.9, 0.95, 1, 0). */
 export function formatScore(n: number): string {
 	return String(Number(n.toFixed(2)));
