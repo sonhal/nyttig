@@ -1,5 +1,5 @@
 -- Digests: documents an assessor writes about one to many items, kept as a
--- history in named series. See docs/digests-plan.md.
+-- history in named series.
 --
 -- The dates of digests are written by the db layer in Go (UTC, whole
 -- seconds), the same text shape as items.published, so that ordering by text

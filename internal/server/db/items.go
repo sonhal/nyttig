@@ -48,7 +48,7 @@ type ItemFilter struct {
 	Offset       int
 	UnviewedOnly bool
 
-	// Assessments (see docs/assessments-plan.md, "Filter semantics").
+	// Assessments.
 	// AssessorID selects whose scores MinScore and Sort "score" use and
 	// changes nothing on its own. An assessment is in scope when the filter
 	// has no tag, the assessment has no tag, or its tag is in TagID's subtree

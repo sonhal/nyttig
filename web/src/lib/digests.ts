@@ -1,8 +1,8 @@
-// Digests: documents an assessor wrote about many items, kept in series (see
-// docs/digests-plan.md). The pure parts of the digests page live here: the
-// URL (/digests?series=<id>&digest=<id>, the source of truth), grouping the
-// series by assessor, walking through a series' history, and the numbers the
-// delete confirmations quote. Titles, names and bodies are untrusted text:
+// Digests: documents an assessor wrote about many items, kept in series. The
+// pure parts of the digests page live here: the URL
+// (/digests?series=<id>&digest=<id>, the source of truth), grouping the series
+// by assessor, walking through a series' history, and the numbers the delete
+// confirmations quote. Titles, names and bodies are untrusted text:
 // nothing here builds markup.
 
 import { oneLine } from './sanitize';

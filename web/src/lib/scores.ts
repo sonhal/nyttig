@@ -3,9 +3,9 @@
 //
 // Scores of different assessors are never combined: a chip is one
 // assessor's, and the sort names one assessor. An assessment is in scope for
-// a tag filter like the daemon decides it (see the filter semantics in
-// docs/assessments-plan.md): when there is no tag filter, when it is for the
-// item as a whole (no tag), or when its tag is the filter tag or below it.
+// a tag filter like the daemon decides it: when there is no tag filter, when
+// it is for the item as a whole (no tag), or when its tag is the filter tag or
+// below it.
 
 import type { Assessment, Item } from './types';
 import { descendants } from './tagtree';
@@ -41,7 +41,7 @@ export function scoreOf(item: Item, s: ScoreScope): number | null {
 /**
  * How strongly a row glows for the selected assessor's score: 0 for 0.5 or
  * less (and for no score), 0.5 at 0.75, 1 at 1. The same rule as the TUI's
- * heatOf (docs/score-heat-plan.md).
+ * heatOf.
  */
 export function heatOf(score: number | null): number {
 	if (score === null || !Number.isFinite(score)) return 0;

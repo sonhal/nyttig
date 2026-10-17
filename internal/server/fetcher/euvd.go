@@ -17,7 +17,7 @@ import (
 )
 
 // TypeEUVD is the source type for a search of ENISA's EU Vulnerability
-// Database (docs/euvd-plan.md). The source URL is an /api/search URL with
+// Database. The source URL is an /api/search URL with
 // the user's filters; blank means EUVDDefaultURL.
 const TypeEUVD = "euvd"
 
