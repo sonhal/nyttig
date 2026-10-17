@@ -287,6 +287,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// ── Filter changes ──────────────────────────────────
 	case FilterChangedMsg:
+		m.table.SetScope(subtree(m.tags, msg.TagID))
 		if m.sub != nil {
 			m.sub.SendFilter(&pb.StreamFilter{
 				SourceId:   msg.SourceID,
@@ -308,6 +309,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.assessors = msg.assessors
 		m.filter.SetAssessors(msg.assessors)
 		m.table.SetAssessors(msg.assessors, m.filter.CurrentAssessorID())
+		m.table.SetScope(subtree(m.tags, m.filter.CurrentTagID()))
 		m.table.SetTagColors(msg.tagColors)
 		m.table.SetSourceMeta(msg.sourceMeta)
 		m.status.SetConnected(true)

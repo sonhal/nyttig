@@ -406,7 +406,7 @@ These are global flags accepted by every subcommand and the TUI.
 | `t`          | Cycle tag filter (all → specific tag → all), parents before their children. A parent's label shows how many tags it covers: `cyber security +2`. |
 | `o`          | Cycle the sort order (newest → oldest, and `score` once an assessor is selected). |
 | `=`          | Rate the selected item yourself: a prompt takes `<score> [note]` (`Enter` rates, `Esc` cancels), see [Rating items yourself](#rating-items-yourself). |
-| `a`          | Cycle the assessor whose scores are shown first and used by `m` and the `score` sort (none → each assessor → none); the bar shows `score: [claude]`. |
+| `a`          | Cycle the assessor whose scores are shown first and used by `m` and the `score` sort (none → each assessor → none); the bar shows `score: [claude]`. Rows it scored above 0.5 get a heat bar in the gutter. |
 | `m`          | With an assessor: cycle the minimum score (none → 0.5 → 0.7 → 0.9 → none). |
 | `i`          | Show or hide a line above the status bar with the selected item's assessments (assessor, tag, score, note). |
 | `r`          | Force refresh all sources immediately.                   |
@@ -458,7 +458,7 @@ printed, and the terminal only ever sees the styles nyttig adds itself.
 
 ### View tracking
 
-Items are automatically marked as viewed when you scroll past them in the TUI (K9s-style). A `●` prefix indicates an unviewed item; viewed items have no prefix. View state is debounced and sent to the daemon in ~3 second batches.
+Items are automatically marked as viewed when you scroll past them in the TUI (K9s-style). A `●` prefix indicates an unviewed item; viewed items have no dot. With an assessor selected, a `▌` bar left of the dot marks rows that scored above 0.5 (brighter amber as the score rises, and a bold title above 0.875), read or not. View state is debounced and sent to the daemon in ~3 second batches.
 
 ## TUI Layout
 
@@ -466,7 +466,7 @@ Items are automatically marked as viewed when you scroll past them in the TUI (K
 ┌─ Filter Bar ───────────────────────────────────────────────────────────────────┐
 │ / search...   src: [all ▼]   tag: [all ▼]   sort: [newest ▼]   [12 sources]    │
 ├─ News Table ───────────────────────────────────────────────────────────────────┤
-│ ●  10:32 [rust]       Announcing Rust 1.85.0                   blog.rust-lang.. │
+│▌●  10:32 [rust]       Announcing Rust 1.85.0                   blog.rust-lang.. │
 │ ●  10:15 [go]         Go 1.24 Release Notes                    go.dev/blog       │
 │     09:45 [db] [oss]  SQLite 3.47.0 Released                   sqlite.org        │
 │ ●  09:30 [linux]      The Linux Kernel Mailing List Anno..     lkml.org          │

@@ -25,6 +25,10 @@ var (
 			Bold(true).
 			Render("●")
 
+	// heatSteps are the amber brightness steps of the gutter heat bar, dark
+	// to bright (the third is the web app's #E8A33D).
+	heatSteps = [4]lipgloss.Color{"#6B4A1A", "#A06E24", "#E8A33D", "#FFC15E"}
+
 	rowSelected = lipgloss.NewStyle().
 			Background(lipgloss.Color("#3A3D41"))
 
@@ -78,6 +82,9 @@ type Table struct {
 	// chips; selectedAssessor's chip comes first.
 	assessors        map[int64]AssessorInfo
 	selectedAssessor int64
+	// scope is the filter tag's subtree (nil = no tag filter): only scores in
+	// scope give a row heat, as for the score sort.
+	scope map[int64]bool
 }
 
 // NewTable creates a Table with the given dimensions.
@@ -147,6 +154,12 @@ func (t *Table) SetAssessors(list []AssessorInfo, selected int64) {
 		t.assessors[a.ID] = a
 	}
 	t.selectedAssessor = selected
+}
+
+// SetScope sets the filter tag's subtree (nil = no tag filter) that bounds
+// which assessments give a row heat.
+func (t *Table) SetScope(scope map[int64]bool) {
+	t.scope = scope
 }
 
 // ApplyUpdate applies an item whose assessments changed. An item the table
@@ -290,17 +303,22 @@ func (t *Table) View() string {
 // renderRow renders a single item row. If selected, applies highlight styling.
 func (t *Table) renderRow(item *pb.Item, selected bool) string {
 	// Layout (columns):
-	//   viewed (2) | date (11) | tags (variable) | title + description (fill) | domain (right)
+	//   gutter (3: heat bar, viewed dot, space) | date (11) | tags (variable) | title + description (fill) | domain (right)
 	const (
 		margin   = 1
 		minTitle = 20
 		minDesc  = 12
 	)
 
-	// 1. Viewed indicator.
-	viewedCol := "  "
+	// 1. Gutter: heat bar, unviewed dot, space. The heat follows the selected
+	// assessor's score, whether or not the row is viewed.
+	heat := 0.0
+	if t.selectedAssessor != 0 {
+		heat = heatOf(scoreOf(item, t.selectedAssessor, t.scope))
+	}
+	viewedCol := heatBar(heat, selected) + "  "
 	if !item.Viewed {
-		viewedCol = unviewedDot + " "
+		viewedCol = heatBar(heat, selected) + unviewedDot + " "
 	}
 
 	// 2. Date: the published date, else the fetch time in italics (the
@@ -324,8 +342,8 @@ func (t *Table) renderRow(item *pb.Item, selected bool) string {
 	}
 
 	// 5. Title + description + domain.
-	// viewed(2) + space(1) + date(11) + space(1) + source(variable) + space(1) + tags(variable) + space(1) + ...
-	prefixLen := 2 + margin + dateColumnWidth + margin
+	// gutter(3) + date(11) + space(1) + source(variable) + space(1) + tags(variable) + space(1) + ...
+	prefixLen := 3 + margin + dateColumnWidth + margin
 	sourceLen := lipgloss.Width(sourceCol)
 	if sourceLen > 0 {
 		sourceLen += margin
@@ -367,6 +385,9 @@ func (t *Table) renderRow(item *pb.Item, selected bool) string {
 		titleCol = truncateEllipsis(title, avail)
 	}
 	titleLen := lipgloss.Width(titleCol)
+	if heat > 0.75 {
+		titleCol = lipgloss.NewStyle().Bold(true).Render(titleCol)
+	}
 
 	// Right-align domain by padding between the content and the domain.
 	used := prefixLen + sourceLen + tagsLen + titleLen
