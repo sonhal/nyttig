@@ -5,7 +5,8 @@
 // <assessor>|all" filter, ":assessors" is the management page. Digests:
 // ":digests" is the reading page and ":digest <assessor>/<series>" opens one
 // series on it. Columns: ":columns <column>,...|all" (":cols"), alone the
-// column picker. Also ":refresh", ":time", ":follow" and ":help". A unique prefix is enough (":sor", ":un"); a few
+// column picker. Also ":refresh", ":time", ":follow", ":version" and
+// ":help". A unique prefix is enough (":sor", ":un"); a few
 // short forms are fixed so they keep the meaning they had before the
 // longer commands existed (":s" sources, ":r" rules, ":f" feed, ":t" tags,
 // ":q" feed).
@@ -63,6 +64,7 @@ export type Command =
 	| { type: 'refresh'; source: string }
 	| { type: 'time'; mode: TimeMode | 'toggle' }
 	| { type: 'follow' }
+	| { type: 'version' }
 	| { type: 'help' };
 
 export interface CommandContext {
@@ -111,6 +113,7 @@ export const COMMANDS: readonly Spec[] = [
 	{ name: 'refresh', args: '[source]', desc: 'fetch all sources now, or one' },
 	{ name: 'time', args: '[relative|absolute]', desc: 'how times are shown, or toggle it' },
 	{ name: 'follow', desc: 'jump to the newest and follow' },
+	{ name: 'version', desc: 'the versions of the web app, nyttig-api and nyttigd' },
 	{ name: 'help', desc: 'the key list' }
 ];
 
@@ -197,6 +200,8 @@ export function parseCommand(input: string, ctx: CommandContext = { sources: [],
 			return arg ? fail('help takes no argument') : ok({ type: 'help' });
 		case 'follow':
 			return arg ? fail('follow takes no argument') : ok({ type: 'follow' });
+		case 'version':
+			return arg ? fail('version takes no argument') : ok({ type: 'version' });
 		case 'sort': {
 			if (!arg) return ok({ type: 'sort', sort: 'toggle' });
 			const s = oneOf(arg, ['newest', 'oldest', 'score'] as const);

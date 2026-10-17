@@ -378,6 +378,15 @@ test.describe('keyboard', () => {
 		await page.keyboard.press('r');
 		await expect(page.getByTestId('status')).toContainText('refreshing all sources');
 	});
+
+	test(':version shows the running versions', async ({ page }) => {
+		await open(page);
+		await page.keyboard.press(':');
+		await page.keyboard.type('version');
+		await page.keyboard.press('Enter');
+		await expect(page.getByTestId('status')).toContainText(/web \S+ · nyttig-api \S+ · nyttigd \S+/);
+		await expect(page.getByTestId('status')).not.toContainText('unreachable');
+	});
 });
 
 test.describe('mobile', () => {

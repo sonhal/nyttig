@@ -4,12 +4,23 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/sonhal/nyttig/internal/version"
 )
 
+// withVersion sets the build version for one test.
+func withVersion(t *testing.T, v string) {
+	t.Helper()
+	old := version.Version
+	t.Cleanup(func() { version.Version = old })
+	version.Version = v
+}
+
 func TestStatusBar_New(t *testing.T) {
+	withVersion(t, "v1.2.3")
 	sb := NewStatusBar()
-	if sb.Version != "0.1.0" {
-		t.Errorf("expected version 0.1.0, got %s", sb.Version)
+	if sb.Version != "v1.2.3" {
+		t.Errorf("expected version v1.2.3, got %s", sb.Version)
 	}
 	if sb.Connected {
 		t.Error("expected disconnected initially")
@@ -72,6 +83,7 @@ func TestStatusBar_SetSourceCount(t *testing.T) {
 }
 
 func TestStatusBar_View_Disconnected(t *testing.T) {
+	withVersion(t, "v1.2.3")
 	sb := NewStatusBar()
 	// Verify the rendered view contains expected elements.
 	view := sb.View(120)
@@ -92,8 +104,8 @@ func TestStatusBar_View_Disconnected(t *testing.T) {
 	if !strings.Contains(view, "0 sources") {
 		t.Error("expected '0 sources' in status bar")
 	}
-	if !strings.Contains(view, "nyttig 0.1.0") {
-		t.Error("expected 'nyttig 0.1.0' in status bar")
+	if !strings.Contains(view, "nyttig v1.2.3") {
+		t.Error("expected 'nyttig v1.2.3' in status bar")
 	}
 }
 
@@ -179,6 +191,7 @@ func TestStatusBar_View_WidthConstraint(t *testing.T) {
 }
 
 func TestStatusBar_View_RenderableContent(t *testing.T) {
+	withVersion(t, "v1.2.3")
 	sb := NewStatusBar()
 	sb.SetConnected(true)
 	sb.SetUnviewed(15)
@@ -189,7 +202,7 @@ func TestStatusBar_View_RenderableContent(t *testing.T) {
 		"connected",
 		"Unviewed: 15",
 		"3 sources",
-		"nyttig 0.1.0",
+		"nyttig v1.2.3",
 	}
 	for _, p := range expectedParts {
 		if !strings.Contains(view, p) {

@@ -136,12 +136,15 @@ describe('parseCommand: filter commands', () => {
 		expect(error('refresh nope')).toBe('unknown source: nope');
 	});
 
-	it('time, follow and help', () => {
+	it('time, follow, version and help', () => {
 		expect(cmd('time')).toEqual({ type: 'time', mode: 'toggle' });
 		expect(cmd('time relative')).toEqual({ type: 'time', mode: 'relative' });
 		expect(cmd('ti absolute')).toEqual({ type: 'time', mode: 'absolute' });
 		expect(error('time fast')).toBe('time: relative or absolute, not fast');
 		expect(cmd('follow')).toEqual({ type: 'follow' });
+		expect(cmd('version')).toEqual({ type: 'version' });
+		expect(cmd('ve')).toEqual({ type: 'version' });
+		expect(error('version x')).toBe('version takes no argument');
 		expect(cmd('help')).toEqual({ type: 'help' });
 		expect(cmd('h')).toEqual({ type: 'help' });
 		expect(cmd('?')).toEqual({ type: 'help' });

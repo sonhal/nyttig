@@ -17,6 +17,7 @@ import type {
 	TagRule,
 	ViewFilter
 } from './types';
+import type { Versions } from './version';
 
 export class ApiError extends Error {
 	constructor(
@@ -51,6 +52,10 @@ async function request<T>(method: string, path: string, body?: unknown, signal?:
 	}
 	if (res.status === 204) return undefined as T;
 	return (await res.json()) as T;
+}
+
+export function getVersions(): Promise<Versions> {
+	return request<Versions>('GET', '/api/version');
 }
 
 export async function listSources(): Promise<Source[]> {

@@ -11,6 +11,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	pb "github.com/sonhal/nyttig/internal/proto/nyttig/v1"
+	"github.com/sonhal/nyttig/internal/version"
 )
 
 // testHandler sends requests the way the app's own page would: to the
@@ -61,6 +62,27 @@ func TestHealth(t *testing.T) {
 	fc.err = errUnavailable
 	rec = th.do("GET", "/api/health", "", nil)
 	if rec.Code != http.StatusServiceUnavailable || decode(t, rec)["ok"] != false {
+		t.Fatalf("daemon down: %d %s", rec.Code, rec.Body)
+	}
+}
+
+func TestVersion(t *testing.T) {
+	old := version.Version
+	t.Cleanup(func() { version.Version = old })
+	version.Version = "v1.0.0"
+
+	fc := &fakeClient{}
+	th := newTestHandler(t, fc)
+	rec := th.do("GET", "/api/version", "", nil)
+	m := decode(t, rec)
+	if rec.Code != 200 || m["api"] != "v1.0.0" || m["daemon"] != "v1.2.3" || m["error"] != nil {
+		t.Fatalf("daemon up: %d %s", rec.Code, rec.Body)
+	}
+
+	fc.err = errUnavailable
+	rec = th.do("GET", "/api/version", "", nil)
+	m = decode(t, rec)
+	if rec.Code != 200 || m["api"] != "v1.0.0" || m["daemon"] != "" || m["error"] == nil {
 		t.Fatalf("daemon down: %d %s", rec.Code, rec.Body)
 	}
 }

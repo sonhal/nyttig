@@ -436,6 +436,11 @@ message ListDigestsRequest  {
 }
 message ListDigestsResponse { repeated Digest digests = 1; bool has_more = 2; }
 
+// ── Version ─────────────────────────────────────────────────
+message GetVersionResponse {
+    string version = 1;  // the daemon's build: a release tag, a Go pseudo-version, or "dev"
+}
+
 
 service Nyttig {
     // Source management
@@ -492,4 +497,7 @@ service Nyttig {
 
     // View tracking
     rpc MarkViewed(MarkViewedRequest) returns (google.protobuf.Empty);
+
+    // The daemon's version
+    rpc GetVersion(google.protobuf.Empty) returns (GetVersionResponse);
 }

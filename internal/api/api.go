@@ -20,6 +20,7 @@ import (
 
 	"github.com/sonhal/nyttig/internal/client"
 	pb "github.com/sonhal/nyttig/internal/proto/nyttig/v1"
+	"github.com/sonhal/nyttig/internal/version"
 )
 
 // ── Limits ────────────────────────────────────────────────────
@@ -330,6 +331,21 @@ func (a *handlers) health(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+// versions reports the builds of nyttig-api and the daemon. A daemon that does
+// not answer leaves "daemon" empty and says why in "error", so the API's own
+// version still shows.
+func (a *handlers) versions(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
+	defer cancel()
+	body := map[string]any{"api": version.String(), "daemon": ""}
+	if resp, err := a.client.GetVersion(ctx, &emptypb.Empty{}); err != nil {
+		body["error"] = status.Convert(err).Message()
+	} else {
+		body["daemon"] = resp.Version
+	}
+	writeJSON(w, http.StatusOK, body)
 }
 
 func (a *handlers) listSources(w http.ResponseWriter, r *http.Request) {

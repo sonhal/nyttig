@@ -11,7 +11,8 @@
 # is the guide. CI publishes them to ghcr.io/sonhal/<target> for v* tags.
 #
 # --build-arg VERSION=v0.5.0 stamps the version (nyttigd -version, the startup
-# logs). The build context has no .git, so without it the binaries say "dev".
+# logs, the web app's :version). The build context has no .git, so without it
+# every image says "dev".
 
 ARG GO_IMAGE=golang:1.26-trixie
 ARG NODE_IMAGE=node:22-trixie-slim
@@ -58,7 +59,8 @@ COPY web/package.json web/pnpm-lock.yaml web/pnpm-workspace.yaml ./
 RUN --mount=type=cache,target=/root/.local/share/pnpm/store \
     pnpm install --frozen-lockfile
 COPY web/ ./
-RUN pnpm build
+ARG VERSION=
+RUN VITE_NYTTIG_VERSION="$VERSION" pnpm build
 
 # ── nyttigd ──────────────────────────────────────────────────
 
