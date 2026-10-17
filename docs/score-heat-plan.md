@@ -1,6 +1,6 @@
 # Score heat plan
 
-Status: **planned** (phases 1 and 2 in progress on `feat/score-heat`).
+Status: **phases 1 and 2 implemented, not yet merged** (`feat/score-heat`).
 
 When an assessor is selected, and above all when the feed is sorted by score,
 it is hard to see at a glance which rows scored high: the only signal is the
@@ -71,4 +71,13 @@ background:
 
 ## Deviations
 
-None yet.
+- Web: the help overlay reads its text from `keymap.ts`, so the sentence on
+  the glow is in the `a` binding's description there, not in `Help.svelte`.
+- TUI: the tests are in a new `internal/tui/heat_test.go` rather than
+  `table_test.go`.
+- TUI: on the selected row the heat bar carries the selection background
+  itself, since the inner color resets would otherwise leave a gap in the
+  highlight.
+- TUI: the heat scope is set when the filter changes and when the metadata
+  loads; renaming or re-parenting tags elsewhere updates it on the next
+  filter change, as the score sort's scope does.
