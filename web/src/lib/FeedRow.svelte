@@ -14,6 +14,7 @@
 <script lang="ts">
 	import { shows, type Column } from './columns';
 	import type { TimeMode } from './command';
+	import { archiveBadge } from './archives';
 	import { formatDate, formatRelative, formatTime } from './format';
 	import Highlight from './Highlight.svelte';
 	import type { AssessorDisplay, SourceDisplay, TagDisplay } from './meta';
@@ -63,6 +64,7 @@
 	}: Props = $props();
 
 	const show = (c: Column) => shows(columns, c);
+	const badge = $derived(archiveBadge(item.archive));
 	const chips = $derived(scoreChips(item, selectedAssessor));
 	const title = $derived(oneLine(item.title) || '(untitled)');
 	const desc = $derived(htmlToText(item.description));
@@ -125,6 +127,16 @@
 				>
 			{/each}
 			{#if show('domain')}<span class="domain">{domain}</span>{/if}
+			{#if badge}
+				<span
+					class="badge {item.archive?.status}"
+					title={badge.label}
+					role="img"
+					aria-label={badge.label}
+					data-testid="archive-badge"
+					data-status={item.archive?.status}>{badge.glyph}</span
+				>
+			{/if}
 		</span>
 		{#if show('title')}<span class="title"><Highlight text={title} {terms} /></span>{/if}
 		{#if desc && show('desc')}<span class="desc"><Highlight text={desc} {terms} /></span>{/if}
@@ -224,6 +236,19 @@
 		overflow: hidden;
 		text-overflow: ellipsis;
 		color: var(--desc);
+	}
+	.badge {
+		flex: none;
+		order: 2;
+		color: var(--accent);
+	}
+	.badge.pending,
+	.badge.running,
+	.badge.partial {
+		color: var(--dim);
+	}
+	.badge.failed {
+		color: var(--error);
 	}
 	.domain {
 		flex: none;

@@ -4,6 +4,7 @@
 
 import { apiParams } from './filter';
 import type {
+	Archive,
 	Assessment,
 	Assessor,
 	Digest,
@@ -186,6 +187,34 @@ export function removeView(id: string): Promise<void> {
 /** Sets the display order; ids must list every view once. Answers with the views in the new order. */
 export async function reorderViews(ids: string[]): Promise<SavedView[]> {
 	return (await request<{ views?: SavedView[] }>('PUT', '/api/views/order', { ids })).views ?? [];
+}
+
+// ── Archives ──────────────────────────────────────────────────
+
+/** Queues an item for archiving (or archives it again). Answers with the archive. */
+export function archiveItem(itemId: string): Promise<Archive> {
+	return request<Archive>('POST', idPath('/api/items', itemId) + '/archive');
+}
+
+export interface ArchivePage {
+	archives: Archive[];
+	hasMore: boolean;
+}
+
+/** Archives newest first; status "" lists every status. */
+export async function listArchives(status = '', limit = 200, signal?: AbortSignal): Promise<ArchivePage> {
+	const p = new URLSearchParams({ limit: String(limit) });
+	if (status) p.set('status', status);
+	const r = await request<{ archives?: Archive[]; has_more?: boolean }>('GET', '/api/archives?' + p.toString(), undefined, signal);
+	return { archives: r.archives ?? [], hasMore: !!r.has_more };
+}
+
+export function getArchive(id: string, signal?: AbortSignal): Promise<Archive> {
+	return request<Archive>('GET', idPath('/api/archives', id), undefined, signal);
+}
+
+export function removeArchive(id: string): Promise<void> {
+	return request<void>('DELETE', idPath('/api/archives', id));
 }
 
 // ── Digests ───────────────────────────────────────────────────

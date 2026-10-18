@@ -172,7 +172,7 @@
 				return onaction(a);
 			default:
 				if (!toolTypes.has(a.type)) return;
-				if (a.type !== 'add' && !selected) return;
+				if (a.type !== 'add' && a.type !== 'filter' && !selected) return;
 				return onaction(a);
 		}
 	}
@@ -269,7 +269,7 @@
 		{#each tools as t (t.type)}
 			<button
 				type="button"
-				disabled={panel !== null || (t.type !== 'add' && !selected)}
+				disabled={panel !== null || (t.type !== 'add' && t.type !== 'filter' && !selected)}
 				onclick={() => onTool(t)}
 				data-testid="tool-{t.type}"><span class="k">{t.key}</span> {t.label}</button
 			>

@@ -5,7 +5,7 @@
 // <assessor>|all" filter, ":assessors" is the management page. Digests:
 // ":digests" is the reading page and ":digest <assessor>/<series>" opens one
 // series on it. Columns: ":columns <column>,...|all" (":cols"), alone the
-// column picker. Also ":refresh", ":time", ":follow" and ":help". A unique prefix is enough (":sor", ":un"); a few
+// column picker. ":archive" saves a copy of the selected item's article and ":archives" is the page of copies. Also ":refresh", ":time", ":follow" and ":help". A unique prefix is enough (":sor", ":un"); a few
 // short forms are fixed so they keep the meaning they had before the
 // longer commands existed (":s" sources, ":r" rules, ":f" feed, ":t" tags,
 // ":q" feed).
@@ -21,9 +21,9 @@ import { findAssessor, findSource, findTag } from './query';
 import type { Assessor, DigestSeries, Filter, SavedView, Sort, Source, Tag } from './types';
 import { findView } from './views';
 
-export type Page = 'feed' | 'sources' | 'tags' | 'rules' | 'views' | 'assessors' | 'digests';
+export type Page = 'feed' | 'sources' | 'tags' | 'rules' | 'views' | 'assessors' | 'digests' | 'archives';
 
-export const PAGES: readonly Page[] = ['feed', 'sources', 'tags', 'rules', 'views', 'assessors', 'digests'];
+export const PAGES: readonly Page[] = ['feed', 'sources', 'tags', 'rules', 'views', 'assessors', 'digests', 'archives'];
 
 /** The route of each page. */
 export const PAGE_PATHS: Record<Page, string> = {
@@ -33,7 +33,8 @@ export const PAGE_PATHS: Record<Page, string> = {
 	rules: '/rules',
 	views: '/views',
 	assessors: '/assessors',
-	digests: '/digests'
+	digests: '/digests',
+	archives: '/archives'
 };
 
 export type TimeMode = 'relative' | 'absolute';
@@ -63,6 +64,8 @@ export type Command =
 	| { type: 'refresh'; source: string }
 	| { type: 'time'; mode: TimeMode | 'toggle' }
 	| { type: 'follow' }
+	/** Archives the selected item. */
+	| { type: 'archive' }
 	| { type: 'help' };
 
 export interface CommandContext {
@@ -93,6 +96,8 @@ export const COMMANDS: readonly Spec[] = [
 	{ name: 'views', desc: 'manage saved views' },
 	{ name: 'assessors', desc: 'manage assessors' },
 	{ name: 'digests', desc: 'read digests (:d too)' },
+	{ name: 'archives', desc: 'saved article copies: download, retry, remove' },
+	{ name: 'archive', desc: 'save a copy of the selected item\'s article' },
 	{ name: 'digest', args: '<assessor>/<series>', desc: 'open a digest series' },
 	{ name: 'sort', args: '[newest|oldest|score]', desc: 'set the sort order (score needs an assessor), or toggle it' },
 	{ name: 'unviewed', args: '[on|off]', desc: 'show only unviewed items, or toggle it' },
@@ -177,6 +182,7 @@ export function parseCommand(input: string, ctx: CommandContext = { sources: [],
 		case 'views':
 		case 'assessors':
 		case 'digests':
+		case 'archives':
 			return arg ? fail(`${r.name} takes no argument`) : ok({ type: 'page', page: r.name });
 		case 'digest': {
 			if (!arg) return fail('digest: <assessor>/<series>');
@@ -195,6 +201,8 @@ export function parseCommand(input: string, ctx: CommandContext = { sources: [],
 			return ok({ type: 'save', name: unquote(arg).trim() });
 		case 'help':
 			return arg ? fail('help takes no argument') : ok({ type: 'help' });
+		case 'archive':
+			return arg ? fail('archive takes no argument') : ok({ type: 'archive' });
 		case 'follow':
 			return arg ? fail('follow takes no argument') : ok({ type: 'follow' });
 		case 'sort': {
