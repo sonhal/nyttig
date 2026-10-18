@@ -35,6 +35,10 @@ type Item struct {
 	// Assessments are every assessment of the item, ordered by assessor
 	// name. GetItem and ListItems fill it.
 	Assessments []*Assessment
+
+	// Archive is the item's archive, or nil when it was never archived.
+	// GetItem and ListItems fill it.
+	Archive *ArchiveRef
 }
 
 // ItemFilter defines criteria for listing items.
@@ -168,6 +172,12 @@ func GetItem(db *sql.DB, id int64) (*Item, error) {
 		return nil, err
 	}
 	item.Assessments = byItem[id]
+
+	refs, err := loadArchiveRefsByItemIDs(db, []int64{id})
+	if err != nil {
+		return nil, err
+	}
+	item.Archive = refs[id]
 
 	return item, nil
 }
@@ -316,9 +326,14 @@ func ListItems(db *sql.DB, filter ItemFilter) ([]*Item, int, error) {
 		if err != nil {
 			return nil, 0, err
 		}
+		archiveMap, err := loadArchiveRefsByItemIDs(db, itemIDs)
+		if err != nil {
+			return nil, 0, err
+		}
 		for _, item := range items {
 			item.Tags = tagMap[item.ID]
 			item.Assessments = assessMap[item.ID]
+			item.Archive = archiveMap[item.ID]
 		}
 	}
 

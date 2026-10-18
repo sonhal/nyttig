@@ -11,6 +11,7 @@ import (
 
 	"github.com/sonhal/nyttig/internal/columns"
 	pb "github.com/sonhal/nyttig/internal/proto/nyttig/v1"
+	"github.com/sonhal/nyttig/internal/server/db"
 	"github.com/sonhal/nyttig/internal/server/fetcher"
 	"github.com/sonhal/nyttig/internal/since"
 )
@@ -346,4 +347,33 @@ func validateDigestIDs(field string, ids []int64, max int) ([]int64, error) {
 		return nil, fmt.Errorf("%s: at most %d are allowed, got %d", field, max, len(out))
 	}
 	return out, nil
+}
+
+// validateArchiveLink checks the article link of an item about to be
+// archived: an absolute http(s) URL.
+func validateArchiveLink(link string) error {
+	if err := validateFeedURL(link); err != nil {
+		return fmt.Errorf("the item's link cannot be archived: %v", err)
+	}
+	return nil
+}
+
+// validateArchiveStatus accepts "" (every status) or an archive status.
+func validateArchiveStatus(status string) error {
+	switch status {
+	case "", db.ArchivePending, db.ArchiveRunning, db.ArchiveDone, db.ArchivePartial, db.ArchiveFailed:
+		return nil
+	}
+	return fmt.Errorf("status must be pending, running, done, partial or failed, got %q", status)
+}
+
+// validateArchivePage checks a ListArchives request's paging fields.
+func validateArchivePage(beforeID int64, limit int32) error {
+	if beforeID < 0 {
+		return fmt.Errorf("before_id must not be negative")
+	}
+	if limit < 0 || limit > 200 {
+		return fmt.Errorf("limit must be between 0 and 200, got %d", limit)
+	}
+	return nil
 }

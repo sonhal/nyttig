@@ -84,7 +84,10 @@ restart it to pick up changes.
 | `socket` | `/tmp/nyttig.sock` | Unix socket path or `host:port` |
 | `db_path` | `~/.local/share/nyttig/nyttig.db` | SQLite database path |
 | `log_level` | `info` | `debug`, `info`, `warn`, `error` |
-| `block_private_addresses` | `false` | Refuse to fetch from non-public addresses (see [Security](#security)) |
+| `block_private_addresses` | `false` | Refuse to fetch from non-public addresses (see [Security](#security)). Applies to archived pages too |
+| `archive_dir` | `archives/` next to `db_path` | Where archived articles are kept, one gzip file each. Back it up with the database |
+| `archive_workers` | `2` | Pages archived at once (1–16) |
+| `archive_max_bytes` | `52428800` | Most bytes of one archived page with its images and styles (50 MiB) |
 
 ### `[tls]`
 
@@ -168,6 +171,7 @@ changed in a client.
 | `--tls-cert`, `--tls-key`, `--tls-client-ca` | Enable mTLS (all three together) |
 | `--tls-listen` | Extra TCP address served with mTLS |
 | `--block-private-addresses` | As the config key |
+| `--archive-dir`, `--archive-workers`, `--archive-max-bytes` | As the config keys |
 
 **`nyttig`** (every subcommand and the TUI): `--socket`, and for mTLS
 `--tls-cert`, `--tls-key`, `--tls-ca`, `--tls-server-name`.

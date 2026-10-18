@@ -82,6 +82,11 @@ func setupDB(t *testing.T) *sql.DB {
 			note        TEXT,
 			updated_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 		);
+		CREATE TABLE archives (
+			id        INTEGER PRIMARY KEY AUTOINCREMENT,
+			item_id   INTEGER UNIQUE REFERENCES items(id) ON DELETE SET NULL,
+			status    TEXT NOT NULL DEFAULT 'pending'
+		);
 	`
 	if _, err := database.Exec(schema); err != nil {
 		t.Fatalf("create schema: %v", err)

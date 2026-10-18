@@ -1,6 +1,6 @@
 # Article archive plan
 
-Status: **planned, not started**.
+Status: **phase 2 (storage, worker, RPCs) implemented on `feat/archive-backend`; phase 1 (archiver) is built in parallel; phases 3–5 not started**.
 
 You see an interesting item and press a key: the daemon downloads the
 article behind its link and keeps a **self-contained copy** (one HTML file
@@ -198,6 +198,28 @@ A new package, `internal/server/archiver`, with no database access:
   from the feed shows the badge, the `/archives` page lists it, and the
   download has `Content-Disposition: attachment` and contains a `data:`
   image and no `<script>`.
+
+## Deviations
+
+Phase 2:
+
+- The file store and the workers are their own package,
+  `internal/server/archives` (`WriteFile`, `OpenFile`, `Reconcile`, `Worker`),
+  not code in `cmd/nyttigd/main.go`; main only wires it. The worker takes the
+  archive function as a field, so tests use a fake.
+- Archiving an item whose archive is `pending` or `running` returns it
+  unchanged instead of resetting it; only `done`, `partial` and `failed`
+  archives are queued again.
+- A re-archive that fails ends `failed`, but the old file stays on disk
+  (reconcile keeps files that have a row). `GetArchiveContent` serves only
+  `done` and `partial` archives (`FailedPrecondition` otherwise).
+- The archive RPCs return `Unavailable` when the service has no archive
+  directory (`Service.SetArchives` not called); the daemon always sets it.
+- `Service.PushItemUpdate(itemID)` is exported for the worker's finish callback.
+- The backup unit copies with `cp -a -T` and then `touch`es the copy, since
+  `cp -a` keeps the source's modification time and the 14-day `find` would
+  otherwise delete a fresh copy of a quiet directory. Each day's copy is a
+  full one.
 
 ## Later
 

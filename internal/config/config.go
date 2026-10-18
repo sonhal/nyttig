@@ -22,12 +22,19 @@ type Config struct {
 	// BlockPrivateAddresses stops feed fetches from connecting to loopback,
 	// private and link-local addresses. Turn it on when the daemon is
 	// managed through an internet-facing client such as nyttig-api.
-	BlockPrivateAddresses bool       `toml:"block_private_addresses"`
-	TLS                   TLS        `toml:"tls"`
-	Sources               []Source   `toml:"sources"`
-	Tags                  []Tag      `toml:"tags"`
-	TagRules              []TagRule  `toml:"tag_rules"`
-	Assessors             []Assessor `toml:"assessors"`
+	BlockPrivateAddresses bool `toml:"block_private_addresses"`
+
+	// Archives (saved copies of articles). Zero values mean the defaults:
+	// "archives/" next to db_path, 2 workers, 50 MiB per archive.
+	ArchiveDir      string `toml:"archive_dir"`
+	ArchiveWorkers  int    `toml:"archive_workers"`
+	ArchiveMaxBytes int64  `toml:"archive_max_bytes"`
+
+	TLS       TLS        `toml:"tls"`
+	Sources   []Source   `toml:"sources"`
+	Tags      []Tag      `toml:"tags"`
+	TagRules  []TagRule  `toml:"tag_rules"`
+	Assessors []Assessor `toml:"assessors"`
 }
 
 // TLS configures mutual-TLS for the daemon's gRPC listener. When set, the

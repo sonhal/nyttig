@@ -1,9 +1,13 @@
-# Daily online backup of the nyttigd database, run by nyttigd-backup.timer.
-# SQLite's .backup is consistent while nyttigd writes; never `cp` a live WAL
-# database. Copies land in /var/lib/nyttig/backups and are kept for 14 days.
+# Daily online backup of the nyttigd database and the archived articles, run
+# by nyttigd-backup.timer. SQLite's .backup is consistent while nyttigd
+# writes; never `cp` a live WAL database. The archive files are written once
+# and renamed into place, so copying the directory is safe. Copies land in
+# /var/lib/nyttig/backups (nyttig-DATE.db and archives-DATE/) and are kept for
+# 14 days. The touch gives the archives copy today's date; cp -a keeps the
+# source's.
 
 [Unit]
-Description=Back up the nyttigd database
+Description=Back up the nyttigd database and archives
 After=nyttigd.service
 
 [Service]
@@ -13,4 +17,4 @@ Group=nyttig
 StateDirectory=nyttig nyttig/backups
 StateDirectoryMode=0700
 UMask=0077
-ExecStart=/bin/sh -c 'sqlite3 /var/lib/nyttig/nyttig.db ".timeout 30000" ".backup /var/lib/nyttig/backups/nyttig-$$(date +%%F).db" && find /var/lib/nyttig/backups -name "nyttig-*.db" -mtime +14 -delete'
+ExecStart=/bin/sh -c 'sqlite3 /var/lib/nyttig/nyttig.db ".timeout 30000" ".backup /var/lib/nyttig/backups/nyttig-$$(date +%%F).db" && cp -a -T /var/lib/nyttig/archives /var/lib/nyttig/backups/archives-$$(date +%%F) && touch /var/lib/nyttig/backups/archives-$$(date +%%F) && find /var/lib/nyttig/backups -name "nyttig-*.db" -mtime +14 -delete && find /var/lib/nyttig/backups -maxdepth 1 -type d -name "archives-*" -mtime +14 -exec rm -rf {} +'

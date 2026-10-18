@@ -54,6 +54,11 @@ const (
 	Nyttig_RemoveDigest_FullMethodName        = "/nyttig.v1.Nyttig/RemoveDigest"
 	Nyttig_GetDigest_FullMethodName           = "/nyttig.v1.Nyttig/GetDigest"
 	Nyttig_ListDigests_FullMethodName         = "/nyttig.v1.Nyttig/ListDigests"
+	Nyttig_ArchiveItem_FullMethodName         = "/nyttig.v1.Nyttig/ArchiveItem"
+	Nyttig_ListArchives_FullMethodName        = "/nyttig.v1.Nyttig/ListArchives"
+	Nyttig_GetArchive_FullMethodName          = "/nyttig.v1.Nyttig/GetArchive"
+	Nyttig_GetArchiveContent_FullMethodName   = "/nyttig.v1.Nyttig/GetArchiveContent"
+	Nyttig_RemoveArchive_FullMethodName       = "/nyttig.v1.Nyttig/RemoveArchive"
 	Nyttig_StreamItems_FullMethodName         = "/nyttig.v1.Nyttig/StreamItems"
 	Nyttig_Search_FullMethodName              = "/nyttig.v1.Nyttig/Search"
 	Nyttig_MarkViewed_FullMethodName          = "/nyttig.v1.Nyttig/MarkViewed"
@@ -103,6 +108,12 @@ type NyttigClient interface {
 	RemoveDigest(ctx context.Context, in *RemoveDigestRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	GetDigest(ctx context.Context, in *GetDigestRequest, opts ...grpc.CallOption) (*Digest, error)
 	ListDigests(ctx context.Context, in *ListDigestsRequest, opts ...grpc.CallOption) (*ListDigestsResponse, error)
+	// Archives: self-contained copies of the articles behind items
+	ArchiveItem(ctx context.Context, in *ArchiveItemRequest, opts ...grpc.CallOption) (*Archive, error)
+	ListArchives(ctx context.Context, in *ListArchivesRequest, opts ...grpc.CallOption) (*ListArchivesResponse, error)
+	GetArchive(ctx context.Context, in *GetArchiveRequest, opts ...grpc.CallOption) (*Archive, error)
+	GetArchiveContent(ctx context.Context, in *GetArchiveContentRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[ArchiveContentChunk], error)
+	RemoveArchive(ctx context.Context, in *RemoveArchiveRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// Core feed stream (bidirectional)
 	StreamItems(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[ClientMessage, ServerMessage], error)
 	// Full-text search
@@ -459,9 +470,68 @@ func (c *nyttigClient) ListDigests(ctx context.Context, in *ListDigestsRequest, 
 	return out, nil
 }
 
+func (c *nyttigClient) ArchiveItem(ctx context.Context, in *ArchiveItemRequest, opts ...grpc.CallOption) (*Archive, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(Archive)
+	err := c.cc.Invoke(ctx, Nyttig_ArchiveItem_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nyttigClient) ListArchives(ctx context.Context, in *ListArchivesRequest, opts ...grpc.CallOption) (*ListArchivesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListArchivesResponse)
+	err := c.cc.Invoke(ctx, Nyttig_ListArchives_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nyttigClient) GetArchive(ctx context.Context, in *GetArchiveRequest, opts ...grpc.CallOption) (*Archive, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(Archive)
+	err := c.cc.Invoke(ctx, Nyttig_GetArchive_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nyttigClient) GetArchiveContent(ctx context.Context, in *GetArchiveContentRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[ArchiveContentChunk], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &Nyttig_ServiceDesc.Streams[0], Nyttig_GetArchiveContent_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[GetArchiveContentRequest, ArchiveContentChunk]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type Nyttig_GetArchiveContentClient = grpc.ServerStreamingClient[ArchiveContentChunk]
+
+func (c *nyttigClient) RemoveArchive(ctx context.Context, in *RemoveArchiveRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(emptypb.Empty)
+	err := c.cc.Invoke(ctx, Nyttig_RemoveArchive_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *nyttigClient) StreamItems(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[ClientMessage, ServerMessage], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &Nyttig_ServiceDesc.Streams[0], Nyttig_StreamItems_FullMethodName, cOpts...)
+	stream, err := c.cc.NewStream(ctx, &Nyttig_ServiceDesc.Streams[1], Nyttig_StreamItems_FullMethodName, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -536,6 +606,12 @@ type NyttigServer interface {
 	RemoveDigest(context.Context, *RemoveDigestRequest) (*emptypb.Empty, error)
 	GetDigest(context.Context, *GetDigestRequest) (*Digest, error)
 	ListDigests(context.Context, *ListDigestsRequest) (*ListDigestsResponse, error)
+	// Archives: self-contained copies of the articles behind items
+	ArchiveItem(context.Context, *ArchiveItemRequest) (*Archive, error)
+	ListArchives(context.Context, *ListArchivesRequest) (*ListArchivesResponse, error)
+	GetArchive(context.Context, *GetArchiveRequest) (*Archive, error)
+	GetArchiveContent(*GetArchiveContentRequest, grpc.ServerStreamingServer[ArchiveContentChunk]) error
+	RemoveArchive(context.Context, *RemoveArchiveRequest) (*emptypb.Empty, error)
 	// Core feed stream (bidirectional)
 	StreamItems(grpc.BidiStreamingServer[ClientMessage, ServerMessage]) error
 	// Full-text search
@@ -653,6 +729,21 @@ func (UnimplementedNyttigServer) GetDigest(context.Context, *GetDigestRequest) (
 }
 func (UnimplementedNyttigServer) ListDigests(context.Context, *ListDigestsRequest) (*ListDigestsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListDigests not implemented")
+}
+func (UnimplementedNyttigServer) ArchiveItem(context.Context, *ArchiveItemRequest) (*Archive, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ArchiveItem not implemented")
+}
+func (UnimplementedNyttigServer) ListArchives(context.Context, *ListArchivesRequest) (*ListArchivesResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListArchives not implemented")
+}
+func (UnimplementedNyttigServer) GetArchive(context.Context, *GetArchiveRequest) (*Archive, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetArchive not implemented")
+}
+func (UnimplementedNyttigServer) GetArchiveContent(*GetArchiveContentRequest, grpc.ServerStreamingServer[ArchiveContentChunk]) error {
+	return status.Errorf(codes.Unimplemented, "method GetArchiveContent not implemented")
+}
+func (UnimplementedNyttigServer) RemoveArchive(context.Context, *RemoveArchiveRequest) (*emptypb.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RemoveArchive not implemented")
 }
 func (UnimplementedNyttigServer) StreamItems(grpc.BidiStreamingServer[ClientMessage, ServerMessage]) error {
 	return status.Errorf(codes.Unimplemented, "method StreamItems not implemented")
@@ -1296,6 +1387,89 @@ func _Nyttig_ListDigests_Handler(srv interface{}, ctx context.Context, dec func(
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Nyttig_ArchiveItem_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ArchiveItemRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NyttigServer).ArchiveItem(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Nyttig_ArchiveItem_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NyttigServer).ArchiveItem(ctx, req.(*ArchiveItemRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Nyttig_ListArchives_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListArchivesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NyttigServer).ListArchives(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Nyttig_ListArchives_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NyttigServer).ListArchives(ctx, req.(*ListArchivesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Nyttig_GetArchive_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetArchiveRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NyttigServer).GetArchive(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Nyttig_GetArchive_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NyttigServer).GetArchive(ctx, req.(*GetArchiveRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Nyttig_GetArchiveContent_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(GetArchiveContentRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(NyttigServer).GetArchiveContent(m, &grpc.GenericServerStream[GetArchiveContentRequest, ArchiveContentChunk]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type Nyttig_GetArchiveContentServer = grpc.ServerStreamingServer[ArchiveContentChunk]
+
+func _Nyttig_RemoveArchive_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RemoveArchiveRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NyttigServer).RemoveArchive(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Nyttig_RemoveArchive_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NyttigServer).RemoveArchive(ctx, req.(*RemoveArchiveRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _Nyttig_StreamItems_Handler(srv interface{}, stream grpc.ServerStream) error {
 	return srv.(NyttigServer).StreamItems(&grpc.GenericServerStream[ClientMessage, ServerMessage]{ServerStream: stream})
 }
@@ -1483,6 +1657,22 @@ var Nyttig_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _Nyttig_ListDigests_Handler,
 		},
 		{
+			MethodName: "ArchiveItem",
+			Handler:    _Nyttig_ArchiveItem_Handler,
+		},
+		{
+			MethodName: "ListArchives",
+			Handler:    _Nyttig_ListArchives_Handler,
+		},
+		{
+			MethodName: "GetArchive",
+			Handler:    _Nyttig_GetArchive_Handler,
+		},
+		{
+			MethodName: "RemoveArchive",
+			Handler:    _Nyttig_RemoveArchive_Handler,
+		},
+		{
 			MethodName: "Search",
 			Handler:    _Nyttig_Search_Handler,
 		},
@@ -1492,6 +1682,11 @@ var Nyttig_ServiceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams: []grpc.StreamDesc{
+		{
+			StreamName:    "GetArchiveContent",
+			Handler:       _Nyttig_GetArchiveContent_Handler,
+			ServerStreams: true,
+		},
 		{
 			StreamName:    "StreamItems",
 			Handler:       _Nyttig_StreamItems_Handler,

@@ -9,6 +9,14 @@ log_level = "info"
 # variables are ignored while it is on.
 # block_private_addresses = true
 
+# Archives: copies of articles that you save from a client. They are files in
+# archive_dir (default: "archives" next to db_path), so back that directory up
+# with the database. archive_workers is how many pages are saved at once, and
+# archive_max_bytes caps one saved page with its images and styles.
+# archive_dir = "~/.local/share/nyttig/archives"
+# archive_workers = 2
+# archive_max_bytes = 52428800
+
 # Mutual TLS. Uncomment to expose nyttigd over a TCP port securely: the daemon
 # presents `cert`/`key` and only accepts clients holding a certificate signed
 # by `client_ca`. Set `listen` to serve mTLS on a TCP port while local

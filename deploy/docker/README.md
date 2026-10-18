@@ -68,7 +68,8 @@ the public manifest and icons.
   include the other containers, the host and cloud metadata endpoints.
   Turn it off only to follow feeds on your own network.
 - **Data**: the named volume `nyttig-data` holds the SQLite database
-  (`/var/lib/nyttig/nyttig.db`). The containers run as non-root users
+  (`/var/lib/nyttig/nyttig.db`) and the archived articles
+  (`/var/lib/nyttig/archives/`). The containers run as non-root users
   (nyttigd as uid 10001), so if you bind-mount a host directory there
   instead, `chown 10001:10001` it first.
 
@@ -176,6 +177,16 @@ docker compose exec nyttigd rm /var/lib/nyttig/backup.db
 
 Run that from cron for daily copies. To restore, stop nyttigd, copy the file
 into the volume as `nyttig.db` (owned by 10001), and start it again.
+
+Archived articles are files in the same volume. Copy the directory too:
+
+```bash
+docker compose cp nyttigd:/var/lib/nyttig/archives ./archives-$(date +%F)
+```
+
+Restore the archives from the same day as the database: an archive whose file
+is missing is marked failed at the next start, and a file without a database
+row is deleted.
 
 ## Upgrading
 

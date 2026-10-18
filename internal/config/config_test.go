@@ -32,6 +32,21 @@ func TestLoad_BlockPrivateAddresses(t *testing.T) {
 	}
 }
 
+func TestLoad_Archives(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	data := "archive_dir = \"/var/lib/nyttig/archives\"\narchive_workers = 3\narchive_max_bytes = 1048576\n"
+	if err := os.WriteFile(path, []byte(data), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.ArchiveDir != "/var/lib/nyttig/archives" || cfg.ArchiveWorkers != 3 || cfg.ArchiveMaxBytes != 1<<20 {
+		t.Errorf("archive settings = %q, %d, %d", cfg.ArchiveDir, cfg.ArchiveWorkers, cfg.ArchiveMaxBytes)
+	}
+}
+
 func TestLoad_TLSListen(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.toml")
 	data := "[tls]\ncert = \"s.pem\"\nkey = \"s.key\"\nclient_ca = \"ca.pem\"\nlisten = \":9090\"\n"

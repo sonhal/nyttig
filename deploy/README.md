@@ -249,8 +249,12 @@ to apply config changes.
 ## Backups and restore
 
 `nyttigd-backup.timer` writes `/var/lib/nyttig/backups/nyttig-YYYY-MM-DD.db`
-daily and keeps 14 days. These copies are on the same disk, so copy them
-somewhere else too (e.g. `restic`, or `rsync` to your workstation).
+daily and keeps 14 days. Archived articles are state too: they live in
+`/var/lib/nyttig/archives/` (the `archive_dir` setting), and the same job
+copies that directory to `backups/archives-YYYY-MM-DD/`, also for 14 days.
+Each day's copy is a full one, so allow for 14 times the size of `archives/`
+on the disk. These copies are on the same disk, so copy them somewhere else
+too (e.g. `restic`, or `rsync` to your workstation).
 
 To restore:
 
@@ -260,3 +264,9 @@ sudo rm -f /var/lib/nyttig/nyttig.db-wal /var/lib/nyttig/nyttig.db-shm
 sudo install -o nyttig -g nyttig -m 0600 nyttig-YYYY-MM-DD.db /var/lib/nyttig/nyttig.db
 sudo systemctl start nyttigd nyttig-api
 ```
+
+To restore archived articles, stop nyttigd and copy a `backups/archives-YYYY-MM-DD/`
+directory over `/var/lib/nyttig/archives/` (owned by `nyttig`). A saved archive
+whose file is missing is marked failed at the next start, and a file without
+a database row is deleted, so restore the database and the archives from the
+same day.
