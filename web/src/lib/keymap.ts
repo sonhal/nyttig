@@ -57,6 +57,8 @@ export type Action =
 	| { type: 'follow' }
 	| { type: 'refreshAll' }
 	| { type: 'refreshSource' }
+	/** b: save a copy of the selected item's article. */
+	| { type: 'archive' }
 	| { type: 'open' }
 	| { type: 'toggleExpand' }
 	| { type: 'close' }
@@ -141,6 +143,7 @@ const NORMAL: FeedBinding[] = [
 	b('Feed', ['F'], { type: 'follow' }, 'follow: jump to the newest and stick to it'),
 	b('Feed', ['r'], { type: 'refreshAll' }, 'refresh all sources'),
 	b('Feed', ['R'], { type: 'refreshSource' }, "refresh the selected item's source"),
+	b('Feed', ['b'], { type: 'archive' }, 'archive the selected item: save a copy of its article (retries a failed one)'),
 	b('Feed', ['Enter'], { type: 'open' }, 'open the link in a new tab'),
 	b('Feed', [' ', 'l'], { type: 'toggleExpand' }, 'expand or collapse the row'),
 	b('Feed', ['='], { type: 'rate' }, 'rate the selected item yourself (types :rate for you)'),
@@ -230,8 +233,11 @@ export type ManageAction =
 	/** Views: move the selected view one place up or down the list. */
 	| { type: 'moveUp' }
 	| { type: 'moveDown' }
-	/** Fetch the selected source now. */
+	/** Fetch the selected source now; retry the selected archive. */
 	| { type: 'refresh' }
+	/** Archives: download the selected copy; cycle the status filter. */
+	| { type: 'download' }
+	| { type: 'filter' }
 	/** Leave the view for the feed. */
 	| { type: 'feed' }
 	/** Close the form or confirmation. */
@@ -242,7 +248,7 @@ export type ManageAction =
 
 /** A toolbar button in a management view; each is also a key. */
 export interface Tool {
-	type: 'add' | 'edit' | 'delete' | 'toggle' | 'refresh' | 'moveUp' | 'moveDown';
+	type: 'add' | 'edit' | 'delete' | 'toggle' | 'refresh' | 'moveUp' | 'moveDown' | 'download' | 'filter';
 	label: string;
 	/** The key shown in the legend. */
 	key: string;
@@ -263,7 +269,9 @@ const MANAGE: ManageBinding[] = [
 	b('Edit', [' '], { type: 'toggle' }, 'enable or disable the selected source, or favorite a view', { tool: 'toggle' }),
 	b('Edit', ['K'], { type: 'moveUp' }, 'move the selected view up', { tool: 'moveUp' }),
 	b('Edit', ['J'], { type: 'moveDown' }, 'move the selected view down', { tool: 'moveDown' }),
-	b('Edit', ['r'], { type: 'refresh' }, 'refresh the selected source now', { tool: 'refresh' }),
+	b('Edit', ['r'], { type: 'refresh' }, 'refresh the selected source now, or retry the selected archive', { tool: 'refresh' }),
+	b('Archives', ['o'], { type: 'download' }, 'download the selected archive', { tool: 'download' }),
+	b('Archives', ['f'], { type: 'filter' }, 'cycle the status filter', { tool: 'filter' }),
 	b('General', ['q'], { type: 'feed' }, 'back to the feed'),
 	b('General', [':'], { type: 'openCommand' }, 'command line'),
 	b('General', ['?'], { type: 'openHelp' }, 'this help')

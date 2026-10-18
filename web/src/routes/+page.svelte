@@ -40,7 +40,8 @@
 	import { oneLine, safeLink } from '$lib/sanitize';
 	import { heatOf, scoreOf, tagScope, type ScoreScope } from '$lib/scores';
 	import { FeedStream } from '$lib/stream.svelte';
-	import type { Filter, Item } from '$lib/types';
+	import type { Archive, Filter, Item } from '$lib/types';
+	import { inFlight } from '$lib/archives';
 	import { ViewTracker } from '$lib/viewed';
 	import { activeView, favorites, isModified, viewForKey, viewHref, viewSearch } from '$lib/views';
 
@@ -101,6 +102,27 @@
 	const feed = $derived(stream.state);
 	const items = $derived(feed.items);
 	const cursor = $derived(feed.cursor);
+	const expandedArchive = $derived(items.find((it) => it.id === expandedId)?.archive);
+	/** The expanded item's archive in full, for its error, note and download. */
+	let archiveDetail: Archive | null = $state.raw(null);
+	$effect(() => {
+		const id = expandedArchive?.id;
+		void expandedArchive?.status;
+		if (!id) {
+			archiveDetail = null;
+			return;
+		}
+		let stale = false;
+		api
+			.getArchive(id)
+			.then((a) => {
+				if (!stale) archiveDetail = a;
+			})
+			.catch(() => {
+				if (!stale) archiveDetail = null;
+			});
+		return () => (stale = true);
+	});
 	const expandedIndex = $derived(expandedId === null ? -1 : items.findIndex((it) => it.id === expandedId));
 	const srcMeta = $derived(sourceDisplays(sources));
 	const tagMeta = $derived(tagDisplays(tags));
@@ -438,8 +460,27 @@
 		activeView: () => openView?.id ?? '',
 		follow,
 		rate: (score, note) => void rate(score, note),
+		archive: () => void archiveSelected(),
 		pickColumns: () => openPicker('column')
 	};
+
+	/** b, :archive: queues the selected item's article; the row's badge follows through item_update. */
+	async function archiveSelected() {
+		const it = items[cursor];
+		if (!it) {
+			flash('error: no item selected');
+			return;
+		}
+		const st = it.archive?.status;
+		if (inFlight(st)) return flash('already archiving');
+		if (st === 'done' || st === 'partial') return flash('already archived; :archives to download it or save it again');
+		try {
+			await api.archiveItem(it.id);
+			flash(`archiving ${oneLine(it.title) || 'the item'}`);
+		} catch (e) {
+			flash('error: ' + (e instanceof Error ? e.message : String(e)));
+		}
+	}
 
 	/** :rate: scores the selected item as the assessor "me", which is created the first time. */
 	async function rate(score: number, note: string) {
@@ -537,6 +578,8 @@
 				const id = items[cursor]?.source_id;
 				return id ? void refresh(id) : undefined;
 			}
+			case 'archive':
+				return void archiveSelected();
 			case 'open':
 				return openLink();
 			case 'toggleExpand':
@@ -709,6 +752,8 @@
 				assessors={assessorMeta}
 				tagNames={tagMeta}
 				{now}
+				onarchive={() => void archiveSelected()}
+				archive={archiveDetail?.id === item.archive?.id ? archiveDetail : null}
 			/>
 		{/snippet}
 		{#snippet footer()}

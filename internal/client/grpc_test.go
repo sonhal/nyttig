@@ -41,6 +41,8 @@ type testServer struct {
 	// answers, as if another client had created it first.
 	seriesRace *pb.DigestSeries
 
+	archiveContent []byte // what GetArchiveContent streams
+
 	// StreamItems control
 	streamMu sync.Mutex
 	streams  []pb.Nyttig_StreamItemsServer

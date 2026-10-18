@@ -37,6 +37,13 @@ message Item {
     repeated Tag tags  = 11;
     bool   viewed      = 12;
     repeated Assessment assessments = 13;  // every assessor's, by assessor name
+    ArchiveInfo archive = 14;              // unset = never archived
+}
+
+// ArchiveInfo is what an item row needs to know about its archive.
+message ArchiveInfo {
+    int64  id     = 1;
+    string status = 2;  // pending, running, done, partial or failed
 }
 
 message Tag {
@@ -436,6 +443,43 @@ message ListDigestsRequest  {
 }
 message ListDigestsResponse { repeated Digest digests = 1; bool has_more = 2; }
 
+// Archive is a self-contained copy of the article behind an item, kept on
+// the daemon's disk. It outlives its item: link, title and source_name are
+// copies, and item_id is 0 once the item is gone.
+message Archive {
+    int64  id             = 1;
+    int64  item_id        = 2;
+    string link           = 3;
+    string title          = 4;   // untrusted text
+    string source_name    = 5;
+    string status         = 6;   // pending, running, done, partial or failed
+    string error          = 7;   // why it failed; untrusted text
+    string note           = 8;   // warning on a saved page, such as "little text"
+    string final_url      = 9;   // after redirects
+    string content_type   = 10;  // "text/html; charset=utf-8" or "application/pdf"
+    int32  http_status    = 11;
+    int64  size           = 12;  // bytes stored (compressed)
+    int64  original_size  = 13;  // bytes of the page itself
+    int32  missing_assets = 14;  // images, styles or fonts that could not be saved
+    google.protobuf.Timestamp requested_at = 15;
+    google.protobuf.Timestamp started_at   = 16;
+    google.protobuf.Timestamp finished_at  = 17;
+}
+
+message ArchiveItemRequest   { int64 item_id = 1; }
+message GetArchiveRequest    { int64 id = 1; }
+message RemoveArchiveRequest { int64 id = 1; }
+message ListArchivesRequest  {
+    string status    = 1;  // "" = every status
+    int64  before_id = 2;  // cursor; 0 = from the newest
+    int32  limit     = 3;  // 0 = 50, at most 200
+}
+message ListArchivesResponse { repeated Archive archives = 1; bool has_more = 2; }
+message GetArchiveContentRequest { int64 id = 1; }
+// ArchiveContentChunk is up to 1 MiB of the uncompressed file. The content
+// type is in the Archive (GetArchive).
+message ArchiveContentChunk { bytes data = 1; }
+
 // ── Version ─────────────────────────────────────────────────
 message GetVersionResponse {
     string version = 1;  // the daemon's build: a release tag, a Go pseudo-version, or "dev"
@@ -488,6 +532,13 @@ service Nyttig {
     rpc RemoveDigest(RemoveDigestRequest) returns (google.protobuf.Empty);
     rpc GetDigest(GetDigestRequest) returns (Digest);
     rpc ListDigests(ListDigestsRequest) returns (ListDigestsResponse);
+
+    // Archives: self-contained copies of the articles behind items
+    rpc ArchiveItem(ArchiveItemRequest) returns (Archive);
+    rpc ListArchives(ListArchivesRequest) returns (ListArchivesResponse);
+    rpc GetArchive(GetArchiveRequest) returns (Archive);
+    rpc GetArchiveContent(GetArchiveContentRequest) returns (stream ArchiveContentChunk);
+    rpc RemoveArchive(RemoveArchiveRequest) returns (google.protobuf.Empty);
 
     // Core feed stream (bidirectional)
     rpc StreamItems(stream ClientMessage) returns (stream ServerMessage);

@@ -29,6 +29,45 @@ export interface Item {
 	viewed?: boolean;
 	/** Every assessor's assessment of the item, by assessor name. */
 	assessments?: Assessment[];
+	/** Absent when the item was never archived. */
+	archive?: ArchiveInfo;
+}
+
+/** What a feed row knows about its archive. */
+export interface ArchiveInfo {
+	id?: string;
+	/** pending, running, done, partial or failed. */
+	status?: string;
+}
+
+/**
+ * A saved copy of the page behind an item's link. title, error, note and
+ * the links are untrusted text: render them as text only.
+ */
+export interface Archive {
+	id?: string;
+	/** Absent once the item or its source is gone. */
+	item_id?: string;
+	link?: string;
+	title?: string;
+	source_name?: string;
+	status?: string;
+	/** Why it failed. */
+	error?: string;
+	/** A warning on a saved page, such as "little text". */
+	note?: string;
+	final_url?: string;
+	/** "text/html; charset=utf-8" or "application/pdf". */
+	content_type?: string;
+	http_status?: number;
+	/** Bytes stored; above 0 a copy can be downloaded, even after a failed re-archive. */
+	size?: string;
+	original_size?: string;
+	missing_assets?: number;
+	/** RFC 3339 timestamps. */
+	requested_at?: string;
+	started_at?: string;
+	finished_at?: string;
 }
 
 /** A system (a model, a CVE reader, you) that scores items. */

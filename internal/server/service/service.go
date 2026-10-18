@@ -56,6 +56,8 @@ type Service struct {
 	onSourceRemoved SourceRemoveFunc
 	onSourceUpdated SourceLifecycleFunc
 	profiles        ProfileResolver
+	archiveDir      string
+	archiveWake     func()
 
 	// tagGraph is a snapshot of the tag tree for itemMatchesFilter, rebuilt
 	// after every tag change (ReloadTagGraph).
@@ -1430,6 +1432,9 @@ func ItemToProto(item *db.Item) *pb.Item {
 	}
 	for _, a := range item.Assessments {
 		p.Assessments = append(p.Assessments, dbAssessmentToProto(a))
+	}
+	if item.Archive != nil {
+		p.Archive = &pb.ArchiveInfo{Id: item.Archive.ID, Status: item.Archive.Status}
 	}
 	return p
 }

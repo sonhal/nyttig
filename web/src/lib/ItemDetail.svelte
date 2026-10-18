@@ -3,12 +3,13 @@
 	Kibana, then the description as plain text and an explicit link.
 -->
 <script lang="ts">
+	import { canDownload, fileHref } from './archives';
 	import Highlight from './Highlight.svelte';
 	import { formatRelative } from './format';
 	import type { AssessorDisplay, SourceDisplay, TagDisplay } from './meta';
 	import { htmlToText, oneLine, safeLink } from './sanitize';
 	import { formatScore } from './scores';
-	import type { Item } from './types';
+	import type { Archive, Item } from './types';
 
 	interface Props {
 		item: Item;
@@ -19,9 +20,13 @@
 		tagNames?: Map<string, TagDisplay>;
 		/** The current time, for the age of an assessment. */
 		now?: number;
+		/** The item's archive in full (the row only has its status); its error and note are untrusted. */
+		archive?: Archive | null;
+		/** Archives the item; the button is for touch screens, which have no b key. */
+		onarchive?: () => void;
 	}
 
-	let { item, source, terms = [], assessors = new Map(), tagNames = new Map(), now = 0 }: Props = $props();
+	let { item, source, terms = [], assessors = new Map(), tagNames = new Map(), now = 0, archive = null, onarchive }: Props = $props();
 
 	const assessments = $derived(item.assessments ?? []);
 
@@ -55,6 +60,23 @@
 				>open ↗</a
 			>
 			<span class="link"><span class="k">link=</span>{link}</span>
+		</div>
+	{/if}
+	{#if item.archive || onarchive}
+		<div class="kv" data-testid="archive-detail">
+			{#if item.archive}
+				<span><span class="k">archive=</span>{item.archive.status ?? '-'}</span>
+				{#if archive?.error}<span class="err"><span class="k">error=</span>{oneLine(archive.error)}</span>{/if}
+				{#if archive?.note}<span><span class="k">note=</span>{oneLine(archive.note)}</span>{/if}
+			{/if}
+			{#if onarchive && (!item.archive || item.archive.status === 'failed')}
+				<button type="button" class="open" onclick={onarchive} data-testid="archive-button"
+					>{item.archive ? 'retry archive' : 'archive'}</button
+				>
+			{/if}
+			{#if archive && canDownload(archive)}
+				<a class="open" href={fileHref(archive.id)} download data-testid="archive-download">download ↓</a>
+			{/if}
 		</div>
 	{/if}
 	{#if assessments.length}
@@ -95,6 +117,17 @@
 	}
 	.open {
 		white-space: nowrap;
+	}
+	button.open {
+		padding: 0;
+		border: none;
+		background: none;
+		font: inherit;
+		color: var(--accent);
+		cursor: pointer;
+	}
+	.err {
+		color: var(--error);
 	}
 	.assessments {
 		margin: 4px 0 0;

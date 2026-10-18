@@ -84,7 +84,10 @@ restart it to pick up changes.
 | `socket` | `/tmp/nyttig.sock` | Unix socket path or `host:port` |
 | `db_path` | `~/.local/share/nyttig/nyttig.db` | SQLite database path |
 | `log_level` | `info` | `debug`, `info`, `warn`, `error` |
-| `block_private_addresses` | `false` | Refuse to fetch from non-public addresses (see [Security](#security)) |
+| `block_private_addresses` | `false` | Refuse to fetch from non-public addresses (see [Security](#security)). Applies to archived pages too |
+| `archive_dir` | `archives/` next to `db_path` | Where archived articles are kept, one gzip file each. Back it up with the database |
+| `archive_workers` | `2` | Pages archived at once (1–16) |
+| `archive_max_bytes` | `52428800` | Most bytes of one archived page with its images and styles (50 MiB) |
 
 ### `[tls]`
 
@@ -168,6 +171,7 @@ changed in a client.
 | `--tls-cert`, `--tls-key`, `--tls-client-ca` | Enable mTLS (all three together) |
 | `--tls-listen` | Extra TCP address served with mTLS |
 | `--block-private-addresses` | As the config key |
+| `--archive-dir`, `--archive-workers`, `--archive-max-bytes` | As the config keys |
 
 **`nyttig`** (every subcommand and the TUI): `--socket`, and for mTLS
 `--tls-cert`, `--tls-key`, `--tls-ca`, `--tls-server-name`.
@@ -191,7 +195,8 @@ changed in a client.
 | `o` | Cycle sort (newest, oldest, score) |
 | `a`, `m` | Cycle assessor / minimum score (0.5, 0.7, 0.9) |
 | `=` | Rate the selected item (`<score> [note]`) |
-| `i` | Show the selected item's assessments |
+| `i` | Show the selected item's assessments and the error or note of its archive |
+| `b`, `B` | Archive the selected item (retries a failed one); `B` archives a saved one again |
 | `j`/`k`, `g`/`G`, `Ctrl+d`/`Ctrl+u` | Move, top/bottom, half page |
 | `Enter` | Open the link in the browser |
 | `r` | Refresh all sources |
@@ -199,7 +204,9 @@ changed in a client.
 | `q` | Quit |
 
 Rows are marked viewed as you scroll past them; `●` marks unviewed rows. With
-an assessor selected, rows it scored above 0.5 get an amber bar.
+an assessor selected, rows it scored above 0.5 get an amber bar. A row's
+archive shows after its date: `⤓` saved, `⤓·` saved with missing parts, `…`
+queued or running, `✗` failed. Download copies with `nyttig get-archive`.
 
 ## CLI
 
@@ -239,6 +246,10 @@ nyttig add-digest      <series> -title <text> -start <time> -end <time> (-body <
 nyttig update-digest   <digest-id> [same flags as add-digest]
 nyttig remove-digest   <digest-id>
 nyttig search          [-view <name|id>] [filter flags] [-l limit] [-offset N] [-exact] [query...]
+nyttig archive         <item-id> [-wait]
+nyttig list-archives   [-status pending|running|done|partial|failed] [-limit N] [-before <archive-id>]
+nyttig get-archive     <archive-id> [-o <path>|-] [-f]
+nyttig remove-archive  <archive-id>
 nyttig refresh         [-id <source_id>]
 ```
 
@@ -256,6 +267,10 @@ views `-columns <list>`.
 - `search -view NAME` runs a saved view; other flags override its fields.
 - `<series>` is `<assessor>/<name>` or an ID. Digest times are RFC 3339 or
   `YYYY-MM-DD` (UTC).
+- `archive` saves a self-contained copy of the article behind an item's link;
+  `-wait` blocks until it finishes and exits 1 if it failed. `get-archive`
+  writes `<title>.html` (or `.pdf`) to the current directory, refuses to
+  overwrite without `-f`, and `-o -` writes to stdout.
 - Tag rules apply to items fetched after the rule is added. Try a pattern
   with `test-tag-rule` first.
 
@@ -317,8 +332,8 @@ pnpm --dir web install && pnpm --dir web dev     # http://localhost:5173
 
 **Common keys:** `j`/`k` move, `/` query bar, `s`/`t` cycle source/tag,
 `S`/`T`/`v`/`a` pick a source/tag/view/assessor by name, `1`-`9` favorite
-views, `0` unfiltered, `C` columns, `F` follow newest, `=` rate, `Enter` open,
-`Space` expand, `:` command line.
+views, `0` unfiltered, `C` columns, `F` follow newest, `=` rate, `b` archive,
+`Enter` open, `Space` expand, `:` command line.
 
 **Query bar:** `kernel tag:rust src:"Hacker News" is:unviewed since:7d sort:oldest`.
 Also `score:claude>=0.7`, `unassessed:claude`, `sort:score` (needs a `score:`
@@ -326,7 +341,7 @@ term) and `cols:title,source`. Other words are the full-text search. The
 filter is kept in the URL, so it can be bookmarked.
 
 **Commands:** `:sources`, `:tags`, `:rules`, `:views`, `:assessors`,
-`:digests`, `:save [name]` (save the filter into the open view, or as a new
+`:digests`, `:archives`, `:archive`, `:save [name]` (save the filter into the open view, or as a new
 one), `:view <name>`, `:rate <score> [note]`, `:refresh`, `:help`.
 
 ## Remote access with mutual TLS
@@ -436,6 +451,25 @@ In a body, `[#123]` links to item 123 when it is one of the digest's items.
 Digests are untrusted text, and injection compounds: a poisoned daily is read
 by every digest built from it, so treat earlier digests like feed text in the
 assessor's prompt.
+
+### Archives
+
+`b` (or `:archive`, or the button on a touch screen) saves a copy of the
+selected item's article; the row shows `…` while it is queued, `⤓` when saved
+(`⤓~` when some images or styles are missing) and `✗` when it failed. The
+expanded row has the error or note and a download link. `:archives` lists the
+copies by status, with download (`o`), retry (`r`) and remove (`x`).
+
+| Route | Does |
+|---|---|
+| `POST /api/items/{id}/archive` | Queue an item (or archive it again); answers `202` with the archive |
+| `GET /api/archives?status=&before=<id>&limit=` | A page of archives, newest first |
+| `GET`, `DELETE /api/archives/{id}` | Read or remove one |
+| `GET /api/archives/{id}/file` | Download the copy |
+
+An archive is untrusted HTML. The file is served only as an attachment
+(`application/octet-stream`, `nosniff`, `Content-Security-Policy: sandbox`,
+`no-store`), never as a page of the app.
 
 ## License
 

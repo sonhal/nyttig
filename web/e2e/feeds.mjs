@@ -114,6 +114,35 @@ ${items}
 </channel></rss>`;
 }
 
+// GET /articles/<name>.xml has two items for the archive tests: "<name>
+// article" links to a page on this server with a stylesheet, an image and a
+// script (/article/<name>.html), and "<name> gone" to a 404.
+function articlesFeed(name) {
+	const item = (n, title, path) => `<item>
+<title>${esc(title)}</title>
+<link>${FEEDS_URL}${path}</link>
+<guid>${esc(name)}-article-${n}</guid>
+<pubDate>${hoursAgo(n)}</pubDate>
+<description>An article to archive.</description>
+</item>`;
+	return `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"><channel><title>${esc(name)}</title><link>${FEEDS_URL}</link><description>articles</description>
+${item(1, `${name} article`, `/article/${name}.html`)}
+${item(2, `${name} gone`, `/article-gone/${name}.html`)}
+</channel></rss>`;
+}
+
+function articlePage(name) {
+	const text = 'This paragraph is the body of the article, long enough that the archiver does not take the page for a consent wall. '.repeat(6);
+	return `<!doctype html><html><head><title>${esc(name)} article</title>
+<link rel="stylesheet" href="${esc(name)}.css"><script>document.title = 'ran'</script></head>
+<body onload="document.title = 'ran'"><h1>${esc(name)} article</h1><p>${text}</p>
+<img src="${esc(name)}.png" alt="figure"><a href="javascript:void(0)">script link</a></body></html>`;
+}
+
+// A 1x1 transparent PNG.
+const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64');
+
 // GET /dated/<name>.xml has four items with titles "<name> hour" (1.5 h old), "<name> 2
 // days", "<name> 10 days" and "<name> 60 days", published that long ago, for
 // the date window tests (since:7d shows the first two, since:1mo three).
@@ -254,6 +283,22 @@ export function startFeedServer() {
 		if (dated) {
 			res.writeHead(200, { 'Content-Type': 'application/rss+xml' });
 			res.end(datedFeed(dated[1]));
+			return;
+		}
+		const articles = url.pathname.match(/^\/articles\/([\w-]+)\.xml$/);
+		if (articles) {
+			res.writeHead(200, { 'Content-Type': 'application/rss+xml' });
+			res.end(articlesFeed(articles[1]));
+			return;
+		}
+		const article = url.pathname.match(/^\/article\/([\w-]+)\.(html|css|png)$/);
+		if (article) {
+			const [, name, ext] = article;
+			const types = { html: 'text/html; charset=utf-8', css: 'text/css', png: 'image/png' };
+			res.writeHead(200, { 'Content-Type': types[ext] });
+			if (ext === 'html') res.end(articlePage(name));
+			else if (ext === 'css') res.end(`body { background: url("${name}.png"); }`);
+			else res.end(PNG);
 			return;
 		}
 		const big = url.pathname.match(/^\/bulk\/([\w-]+)\.xml$/);

@@ -50,6 +50,8 @@ type fakeClient struct {
 	// putResult is what PutAssessment returns; it defaults to an echo.
 	putResult *pb.Assessment
 
+	archive archiveFake
+
 	// stream is returned by StreamItems; streamErr fails the call instead.
 	stream    *fakeStream
 	streamErr error

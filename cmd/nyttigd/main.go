@@ -29,6 +29,8 @@ import (
 	"github.com/sonhal/nyttig/internal/config"
 	"github.com/sonhal/nyttig/internal/mtls"
 	pb "github.com/sonhal/nyttig/internal/proto/nyttig/v1"
+	"github.com/sonhal/nyttig/internal/server/archiver"
+	"github.com/sonhal/nyttig/internal/server/archives"
 	"github.com/sonhal/nyttig/internal/server/db"
 	"github.com/sonhal/nyttig/internal/server/fetcher"
 	"github.com/sonhal/nyttig/internal/server/scheduler"
@@ -48,6 +50,9 @@ func main() {
 		tlsClientCA = flag.String("tls-client-ca", "", "CA bundle (PEM) used to verify client certificates")
 		tlsListen   = flag.String("tls-listen", "", "Extra TCP address (e.g. :9090) to serve with mTLS while -socket stays a plaintext Unix socket")
 		blockPriv   = flag.Bool("block-private-addresses", false, "Refuse to fetch feeds from loopback, private or link-local addresses (SSRF protection)")
+		archiveDir  = flag.String("archive-dir", "", "Directory for archived articles (default: archives/ next to the database)")
+		archiveWork = flag.Int("archive-workers", 0, "Articles archived at once (default 2)")
+		archiveMax  = flag.Int64("archive-max-bytes", 0, "Most bytes of one archived page with its assets (default 50 MiB)")
 		showVersion = flag.Bool("version", false, "Print the version and exit")
 	)
 	flag.Parse()
@@ -92,6 +97,15 @@ func main() {
 		}
 		if cfg.TLS.Listen != "" && !setFlags["tls-listen"] {
 			*tlsListen = cfg.TLS.Listen
+		}
+		if cfg.ArchiveDir != "" && !setFlags["archive-dir"] {
+			*archiveDir = cfg.ArchiveDir
+		}
+		if cfg.ArchiveWorkers != 0 && !setFlags["archive-workers"] {
+			*archiveWork = cfg.ArchiveWorkers
+		}
+		if cfg.ArchiveMaxBytes != 0 && !setFlags["archive-max-bytes"] {
+			*archiveMax = cfg.ArchiveMaxBytes
 		}
 		if cfg.BlockPrivateAddresses && !setFlags["block-private-addresses"] {
 			*blockPriv = true
@@ -147,6 +161,20 @@ func main() {
 	}
 	logger.Info("database opened", "dsn", dsn, "sqlite_version", sqliteVersion)
 
+	archivePath, archiveWorkers, archiveLimits, err := archiveSettings(dsn, *archiveDir, *archiveWork, *archiveMax)
+	if err != nil {
+		logger.Error("invalid archive settings", "error", err)
+		os.Exit(1)
+	}
+	if err := ensureArchiveDir(archivePath); err != nil {
+		logger.Error("cannot create archive directory", "dir", archivePath, "error", err)
+		os.Exit(1)
+	}
+	if err := archives.Reconcile(database, archivePath, logger); err != nil {
+		logger.Error("cannot reconcile archives", "dir", archivePath, "error", err)
+		os.Exit(1)
+	}
+
 	// ── Seed from config ─────────────────────────────────────────────────
 	// Idempotently insert sources/tags/tag_rules declared in the config file.
 	// Existing rows (matched by URL / name / rule tuple) are left untouched.
@@ -179,6 +207,27 @@ func main() {
 	// Adding a Bluesky source looks the account up through the same client,
 	// so the address restrictions apply to it too.
 	svc.SetProfileResolver(fetcher.NewBlueskyResolver(httpClient))
+
+	// Archive workers take pending archives from the database. They share the
+	// feed client, so the address restrictions apply to every page and asset.
+	archiveWorker := &archives.Worker{
+		DB:         database,
+		Dir:        archivePath,
+		Client:     httpClient,
+		Archive:    archiver.Archive,
+		Limits:     archiveLimits,
+		Workers:    archiveWorkers,
+		Logger:     logger,
+		OnFinished: svc.PushItemUpdate,
+	}
+	svc.SetArchives(archivePath, archiveWorker.Wake)
+	archiveCtx, stopArchives := context.WithCancel(context.Background())
+	archivesStopped := make(chan struct{})
+	go func() {
+		archiveWorker.Run(archiveCtx)
+		close(archivesStopped)
+	}()
+	logger.Info("archiving enabled", "dir", archivePath, "workers", archiveWorkers)
 
 	// fetchFn is the callback the scheduler invokes for each source fetch.
 	fetchFn := func(ctx context.Context, s scheduler.Source) error {
@@ -308,6 +357,11 @@ func main() {
 	// Stop the scheduler (cancels all source goroutines).
 	sched.Stop()
 	logger.Info("scheduler stopped")
+
+	// Stop the archive workers; an archive that was running is queued again
+	// on the next start.
+	stopArchives()
+	<-archivesStopped
 
 	// End the StreamItems streams first. GracefulStop waits for running RPCs
 	// and a stream lasts until its client leaves, so with a TUI or browser
