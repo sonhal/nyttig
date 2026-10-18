@@ -1,6 +1,6 @@
 # Article archive plan
 
-Status: **planned, not started**.
+Status: **phase 1 (the archiver) done; phases 2-5 not started**.
 
 You see an interesting item and press a key: the daemon downloads the
 article behind its link and keeps a **self-contained copy** (one HTML file
@@ -198,6 +198,26 @@ A new package, `internal/server/archiver`, with no database access:
   from the feed shows the badge, the `/archives` page lists it, and the
   download has `Content-Disposition: attachment` and contains a `data:`
   image and no `<script>`.
+
+## Deviations
+
+Phase 1:
+
+- A PDF is limited by `MaxTotalBytes`, not `MaxPageBytes`, which stays the
+  limit for HTML.
+- `MaxTotalBytes` counts the page, stylesheets as fetched, and images and
+  fonts at their stored (base64) size.
+- Fields of `Limits` that are zero or negative take their defaults.
+- A deadline that expires while assets load returns the page with the rest
+  counted in `MissingAssets`; it fails the archive only while the page itself
+  loads. A canceled parent context fails with "canceled".
+- `@import`s inside an imported sheet are dropped and count as missing.
+- Besides the listed elements, `<link>` other than a non-alternate
+  stylesheet, `<applet>` and comments are removed, `data:text/html` URLs are
+  dropped like `javascript:`, and an honoured `<base href>` resolves relative
+  URLs before `<base>` is removed.
+- `html.Parse` already refuses nesting past 512 elements; that becomes the
+  error "page markup is nested too deeply".
 
 ## Later
 
