@@ -1,6 +1,6 @@
 # Article archive plan
 
-Status: **phases 1-4 merged on `feat/article-archive`; phase 5 (web) in progress**.
+Status: **phases 1-5 implemented on `feat/article-archive`, not yet merged to main**.
 
 You see an interesting item and press a key: the daemon downloads the
 article behind its link and keeps a **self-contained copy** (one HTML file
@@ -267,10 +267,9 @@ Phase 5:
 - Management tools `download` (`o`) and `filter` (`f`); `r` is retry.
 - The `/archives` page lists the newest 200 and polls every 3 s while any
   archive is pending or running.
-- The e2e test covers the failed path (the stub archiver fails): the badge,
-  the error in the row, the page and removal. The feed server's
-  `/article/<name>.html` and the download check (`data:` image, no
-  `<script>`, `Content-Disposition: attachment`) wait for the real archiver.
+- The feed server serves a test source per project at `/articles/<name>.xml`
+  (an article at `/article/<name>.html` with a stylesheet, an image and a
+  script, and a 404), so the e2e test archives through the real archiver.
 
 ## Later
 
