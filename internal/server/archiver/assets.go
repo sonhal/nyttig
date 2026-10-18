@@ -34,6 +34,8 @@ type asset struct {
 	body  []byte
 	ctype string // media type without parameters
 	ok    bool
+	cost  int64 // bytes one inlined use adds to the output
+	used  bool  // the first use is paid for when the asset is fetched
 }
 
 // assets fetches subresources under the job's limits and counts the ones it
@@ -75,12 +77,25 @@ func (a *assets) get(u string) *asset {
 	return nil
 }
 
-// dataURI returns the asset as a data: URI, or "" when it is missing.
+// dataURI returns the asset as a data: URI for one more use, or "" when it is
+// missing. Each use after the first is charged to the budget again, and a use
+// that does not fit is left out and counted as missing.
 func (a *assets) dataURI(u string) string {
 	e := a.get(u)
 	if e == nil {
 		return ""
 	}
+	a.mu.Lock()
+	if e.used {
+		if a.total+e.cost > a.lim.MaxTotalBytes {
+			a.missing++
+			a.mu.Unlock()
+			return ""
+		}
+		a.total += e.cost
+	}
+	e.used = true
+	a.mu.Unlock()
 	return "data:" + e.ctype + ";base64," + base64.StdEncoding.EncodeToString(e.body)
 }
 
@@ -135,7 +150,7 @@ func (a *assets) fetchOne(ctx context.Context, r assetReq) {
 	}
 	a.total += cost
 	e := a.cache[r.url]
-	e.body, e.ctype, e.ok = body, ctype, true
+	e.body, e.ctype, e.cost, e.ok = body, ctype, cost, true
 }
 
 var errAssetRejected = errors.New("asset rejected")

@@ -205,8 +205,8 @@ Phase 1:
 
 - A PDF is limited by `MaxTotalBytes`, not `MaxPageBytes`, which stays the
   limit for HTML.
-- `MaxTotalBytes` counts the page, stylesheets as fetched, and images and
-  fonts at their stored (base64) size.
+- `MaxTotalBytes` bounds the output: it counts the page, stylesheets as fetched, and images and
+  fonts at their stored (base64) size, once per inlined use. A use that no longer fits is left out and counted in `MissingAssets`.
 - Fields of `Limits` that are zero or negative take their defaults.
 - A deadline that expires while assets load returns the page with the rest
   counted in `MissingAssets`; it fails the archive only while the page itself

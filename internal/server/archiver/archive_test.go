@@ -544,6 +544,31 @@ func TestArchive_Limits(t *testing.T) {
 			t.Error("first image missing")
 		}
 	})
+	t.Run("repeated asset", func(t *testing.T) {
+		const uses = 20
+		src := `<p>` + longText + `</p>` + strings.Repeat(`<img src="/big.gif">`, uses) + `<style>p{background:url(/big.gif)}</style>`
+		srv, _ := site(t, map[string]route{
+			"/p.html":  htmlRoute(src),
+			"/big.gif": {ctype: "image/gif", body: big},
+		})
+		cost := int64(base64.StdEncoding.EncodedLen(len(big)))
+		lim := DefaultLimits()
+		lim.MaxTotalBytes = int64(len(src)) + 3*cost + 10 // three uses fit
+		res, err := archive(t, srv, "/p.html", lim)
+		if err != nil {
+			t.Fatal(err)
+		}
+		uri := base64.StdEncoding.EncodeToString(big)
+		if n := strings.Count(string(res.Body), uri); n != 3 {
+			t.Errorf("inlined uses = %d, want 3", n)
+		}
+		if res.MissingAssets != uses+1-3 {
+			t.Errorf("MissingAssets = %d, want %d", res.MissingAssets, uses+1-3)
+		}
+		if n := strings.Count(string(res.Body), `<img src="/big.gif"`); n != 0 {
+			t.Errorf("%d imgs kept a network src", n)
+		}
+	})
 	t.Run("asset count", func(t *testing.T) {
 		srv, _ := site(t, routes)
 		lim := DefaultLimits()
