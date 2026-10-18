@@ -195,7 +195,8 @@ changed in a client.
 | `o` | Cycle sort (newest, oldest, score) |
 | `a`, `m` | Cycle assessor / minimum score (0.5, 0.7, 0.9) |
 | `=` | Rate the selected item (`<score> [note]`) |
-| `i` | Show the selected item's assessments |
+| `i` | Show the selected item's assessments and the error or note of its archive |
+| `b`, `B` | Archive the selected item (retries a failed one); `B` archives a saved one again |
 | `j`/`k`, `g`/`G`, `Ctrl+d`/`Ctrl+u` | Move, top/bottom, half page |
 | `Enter` | Open the link in the browser |
 | `r` | Refresh all sources |
@@ -203,7 +204,9 @@ changed in a client.
 | `q` | Quit |
 
 Rows are marked viewed as you scroll past them; `●` marks unviewed rows. With
-an assessor selected, rows it scored above 0.5 get an amber bar.
+an assessor selected, rows it scored above 0.5 get an amber bar. A row's
+archive shows after its date: `⤓` saved, `⤓·` saved with missing parts, `…`
+queued or running, `✗` failed. Download copies with `nyttig get-archive`.
 
 ## CLI
 

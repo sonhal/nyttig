@@ -78,6 +78,12 @@ type Model struct {
 	// digests is the digests screen (the D key) while it is open; the feed
 	// underneath keeps its stream, filter and selection.
 	digests *digestsScreen
+
+	// archive queues an item's archive; the client's ArchiveItem unless a
+	// test replaces it. archiveDetails holds the metadata fetched for the
+	// detail line, by archive ID.
+	archive        func(ctx context.Context, itemID int64) (*pb.Archive, error)
+	archiveDetails map[int64]*pb.Archive
 }
 
 // rateDoneMsg is the result of rating an item.
@@ -88,13 +94,18 @@ type rateDoneMsg struct {
 
 // NewModel creates the root TUI model with a connected gRPC client.
 func NewModel(cl *client.Client) Model {
-	return Model{
-		client:        cl,
-		table:         NewTable(),
-		filter:        NewFilterBar(),
-		status:        NewStatusBar(),
-		pendingViewed: make(map[int64]bool),
+	m := Model{
+		client:         cl,
+		table:          NewTable(),
+		filter:         NewFilterBar(),
+		status:         NewStatusBar(),
+		pendingViewed:  make(map[int64]bool),
+		archiveDetails: make(map[int64]*pb.Archive),
 	}
+	if cl != nil {
+		m.archive = cl.ArchiveItem
+	}
+	return m
 }
 
 // ── Init ───────────────────────────────────────────────────────
@@ -203,6 +214,19 @@ func startViewTicker() tea.Cmd {
 
 // Update processes incoming messages (keypress, stream data, timers).
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	next, cmd := m.update(msg)
+	// The archive's error or note shows on the detail line once the
+	// selection or its archive has changed.
+	switch nm := next.(type) {
+	case Model:
+		return nm, tea.Batch(cmd, nm.fetchArchiveDetail())
+	case *Model:
+		return nm, tea.Batch(cmd, nm.fetchArchiveDetail())
+	}
+	return next, cmd
+}
+
+func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 
 	// ── Window size ────────────────────────────────────
@@ -277,6 +301,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.note = "rated " + formatScore(msg.score)
 		}
 		m.layout()
+		return m, nil
+
+	case archiveDoneMsg:
+		if msg.err != nil {
+			m.note = "archive failed: " + SanitizeLine(msg.err.Error())
+		} else {
+			m.note = "archive queued"
+		}
+		m.layout()
+		return m, nil
+
+	case archiveDetailMsg:
+		if msg.err == nil && msg.archive != nil {
+			m.archiveDetails[msg.archive.Id] = msg.archive
+		}
 		return m, nil
 
 	case StreamErrorMsg:
@@ -412,6 +451,12 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		m.layout()
 		return m, nil
+
+	case "b":
+		return m.archiveItem(false)
+
+	case "B":
+		return m.archiveItem(true)
 
 	case "D":
 		colors := make(map[int64]string, len(m.assessors))
@@ -562,14 +607,21 @@ func (m *Model) itemOrder() itemOrder {
 // has none: "claude [CVE] 0.9: note | cvss 0.98".
 func (m *Model) infoLine() string {
 	item := m.table.SelectedItem()
-	if item == nil || len(item.Assessments) == 0 {
+	var parts []string
+	if item != nil && len(item.Assessments) > 0 {
+		names := make(map[int64]string, len(m.tags))
+		for _, t := range m.tags {
+			names[t.ID] = t.Name
+		}
+		parts = assessmentLines(item, names)
+	}
+	if line := m.archiveLine(item); line != "" {
+		parts = append(parts, line)
+	}
+	if len(parts) == 0 {
 		return filterLabelStyle.Render("no assessments")
 	}
-	names := make(map[int64]string, len(m.tags))
-	for _, t := range m.tags {
-		names[t.ID] = t.Name
-	}
-	return truncateEllipsis(strings.Join(assessmentLines(item, names), " | "), m.width)
+	return truncateEllipsis(strings.Join(parts, " | "), m.width)
 }
 
 // broadcastFilterChange takes a FilterChangedMsg and broadcasts it

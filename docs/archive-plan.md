@@ -1,6 +1,6 @@
 # Article archive plan
 
-Status: **phase 2 (storage, worker, RPCs) implemented on `feat/archive-backend`; phase 1 (archiver) is built in parallel; phases 3–5 not started**.
+Status: **phase 2 (storage, worker, RPCs) implemented on `feat/archive-backend`; phases 3 (CLI) and 4 (TUI) implemented on `feat/archive-cli-tui`; phase 1 (archiver) is built in parallel; phase 5 not started**.
 
 You see an interesting item and press a key: the daemon downloads the
 article behind its link and keeps a **self-contained copy** (one HTML file
@@ -220,6 +220,18 @@ Phase 2:
   `cp -a` keeps the source's modification time and the 14-day `find` would
   otherwise delete a fresh copy of a quiet directory. Each day's copy is a
   full one.
+
+Phases 3 and 4:
+
+- `list-archives` also takes `-before <archive-id>` for paging, like
+  `list-digests`.
+- `get-archive` needs `size > 0` (a copy exists, even after a failed
+  re-archive) and removes a partly written file when the download fails.
+- The archive chip sits after the date, not in the gutter. The error or note
+  is not in `Item.archive`, so the TUI fetches `GetArchive` once per archive
+  status for the selected item and shows it on the `i` line.
+- `b` on a `pending` or `running` archive says so instead of calling the
+  daemon.
 
 ## Later
 
