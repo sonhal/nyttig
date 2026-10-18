@@ -21,6 +21,7 @@ import { metadata } from './metadata.svelte';
 import { prefs } from './prefs.svelte';
 import { oneLine } from './sanitize';
 import type { Filter } from './types';
+import { versionLine } from './version';
 import { filterToViewBody, viewHref, viewSearch } from './views';
 
 /** The URL of a page; the feed keeps the filter it had last. */
@@ -80,6 +81,9 @@ export function execute(cmd: Command, host: CommandHost): void {
 		case 'follow':
 			host.follow();
 			return;
+		case 'version':
+			void showVersions(host);
+			return;
 		case 'rate':
 			host.rate(cmd.score, cmd.note);
 			return;
@@ -107,6 +111,14 @@ export function execute(cmd: Command, host: CommandHost): void {
 			const f = applyToFilter(cmd, host.filter());
 			if (f) host.setFilter(f);
 		}
+	}
+}
+
+async function showVersions(host: CommandHost): Promise<void> {
+	try {
+		host.flash(versionLine(await api.getVersions()));
+	} catch (e) {
+		host.flash('error: ' + (e instanceof Error ? e.message : String(e)));
 	}
 }
 

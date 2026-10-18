@@ -4631,6 +4631,51 @@ func (x *ArchiveContentChunk) GetData() []byte {
 	return nil
 }
 
+// ── Version ─────────────────────────────────────────────────
+type GetVersionResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Version       string                 `protobuf:"bytes,1,opt,name=version,proto3" json:"version,omitempty"` // the daemon's build: a release tag, a Go pseudo-version, or "dev"
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetVersionResponse) Reset() {
+	*x = GetVersionResponse{}
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[68]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetVersionResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetVersionResponse) ProtoMessage() {}
+
+func (x *GetVersionResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_nyttig_v1_nyttig_proto_msgTypes[68]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetVersionResponse.ProtoReflect.Descriptor instead.
+func (*GetVersionResponse) Descriptor() ([]byte, []int) {
+	return file_nyttig_v1_nyttig_proto_rawDescGZIP(), []int{68}
+}
+
+func (x *GetVersionResponse) GetVersion() string {
+	if x != nil {
+		return x.Version
+	}
+	return ""
+}
+
 var File_nyttig_v1_nyttig_proto protoreflect.FileDescriptor
 
 const file_nyttig_v1_nyttig_proto_rawDesc = "" +
@@ -5039,7 +5084,9 @@ const file_nyttig_v1_nyttig_proto_rawDesc = "" +
 	"\x18GetArchiveContentRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\x03R\x02id\")\n" +
 	"\x13ArchiveContentChunk\x12\x12\n" +
-	"\x04data\x18\x01 \x01(\fR\x04data2\x87\x18\n" +
+	"\x04data\x18\x01 \x01(\fR\x04data\".\n" +
+	"\x12GetVersionResponse\x12\x18\n" +
+	"\aversion\x18\x01 \x01(\tR\aversion2\xcc\x18\n" +
 	"\x06Nyttig\x12;\n" +
 	"\tAddSource\x12\x1b.nyttig.v1.AddSourceRequest\x1a\x11.nyttig.v1.Source\x12F\n" +
 	"\fRemoveSource\x12\x1e.nyttig.v1.RemoveSourceRequest\x1a\x16.google.protobuf.Empty\x12A\n" +
@@ -5085,7 +5132,9 @@ const file_nyttig_v1_nyttig_proto_rawDesc = "" +
 	"\vStreamItems\x12\x18.nyttig.v1.ClientMessage\x1a\x18.nyttig.v1.ServerMessage(\x010\x01\x12=\n" +
 	"\x06Search\x12\x18.nyttig.v1.SearchRequest\x1a\x19.nyttig.v1.SearchResponse\x12B\n" +
 	"\n" +
-	"MarkViewed\x12\x1c.nyttig.v1.MarkViewedRequest\x1a\x16.google.protobuf.EmptyB3Z1github.com/sonhal/nyttig/internal/proto/nyttig/v1b\x06proto3"
+	"MarkViewed\x12\x1c.nyttig.v1.MarkViewedRequest\x1a\x16.google.protobuf.Empty\x12C\n" +
+	"\n" +
+	"GetVersion\x12\x16.google.protobuf.Empty\x1a\x1d.nyttig.v1.GetVersionResponseB3Z1github.com/sonhal/nyttig/internal/proto/nyttig/v1b\x06proto3"
 
 var (
 	file_nyttig_v1_nyttig_proto_rawDescOnce sync.Once
@@ -5099,7 +5148,7 @@ func file_nyttig_v1_nyttig_proto_rawDescGZIP() []byte {
 	return file_nyttig_v1_nyttig_proto_rawDescData
 }
 
-var file_nyttig_v1_nyttig_proto_msgTypes = make([]protoimpl.MessageInfo, 68)
+var file_nyttig_v1_nyttig_proto_msgTypes = make([]protoimpl.MessageInfo, 69)
 var file_nyttig_v1_nyttig_proto_goTypes = []any{
 	(*Source)(nil),                     // 0: nyttig.v1.Source
 	(*Item)(nil),                       // 1: nyttig.v1.Item
@@ -5169,19 +5218,20 @@ var file_nyttig_v1_nyttig_proto_goTypes = []any{
 	(*ListArchivesResponse)(nil),       // 65: nyttig.v1.ListArchivesResponse
 	(*GetArchiveContentRequest)(nil),   // 66: nyttig.v1.GetArchiveContentRequest
 	(*ArchiveContentChunk)(nil),        // 67: nyttig.v1.ArchiveContentChunk
-	(*timestamppb.Timestamp)(nil),      // 68: google.protobuf.Timestamp
-	(*emptypb.Empty)(nil),              // 69: google.protobuf.Empty
+	(*GetVersionResponse)(nil),         // 68: nyttig.v1.GetVersionResponse
+	(*timestamppb.Timestamp)(nil),      // 69: google.protobuf.Timestamp
+	(*emptypb.Empty)(nil),              // 70: google.protobuf.Empty
 }
 var file_nyttig_v1_nyttig_proto_depIdxs = []int32{
-	68, // 0: nyttig.v1.Source.created_at:type_name -> google.protobuf.Timestamp
-	68, // 1: nyttig.v1.Source.last_fetch:type_name -> google.protobuf.Timestamp
-	68, // 2: nyttig.v1.Item.published:type_name -> google.protobuf.Timestamp
-	68, // 3: nyttig.v1.Item.fetched_at:type_name -> google.protobuf.Timestamp
+	69, // 0: nyttig.v1.Source.created_at:type_name -> google.protobuf.Timestamp
+	69, // 1: nyttig.v1.Source.last_fetch:type_name -> google.protobuf.Timestamp
+	69, // 2: nyttig.v1.Item.published:type_name -> google.protobuf.Timestamp
+	69, // 3: nyttig.v1.Item.fetched_at:type_name -> google.protobuf.Timestamp
 	3,  // 4: nyttig.v1.Item.tags:type_name -> nyttig.v1.Tag
 	5,  // 5: nyttig.v1.Item.assessments:type_name -> nyttig.v1.Assessment
 	2,  // 6: nyttig.v1.Item.archive:type_name -> nyttig.v1.ArchiveInfo
-	68, // 7: nyttig.v1.Assessor.created_at:type_name -> google.protobuf.Timestamp
-	68, // 8: nyttig.v1.Assessment.updated_at:type_name -> google.protobuf.Timestamp
+	69, // 7: nyttig.v1.Assessor.created_at:type_name -> google.protobuf.Timestamp
+	69, // 8: nyttig.v1.Assessment.updated_at:type_name -> google.protobuf.Timestamp
 	0,  // 9: nyttig.v1.ListSourcesResponse.sources:type_name -> nyttig.v1.Source
 	13, // 10: nyttig.v1.UpdateTagRequest.parents:type_name -> nyttig.v1.TagParents
 	3,  // 11: nyttig.v1.ListTagsResponse.tags:type_name -> nyttig.v1.Tag
@@ -5192,58 +5242,58 @@ var file_nyttig_v1_nyttig_proto_depIdxs = []int32{
 	4,  // 16: nyttig.v1.ListAssessorsResponse.assessors:type_name -> nyttig.v1.Assessor
 	6,  // 17: nyttig.v1.ListTagRulesResponse.rules:type_name -> nyttig.v1.TagRule
 	1,  // 18: nyttig.v1.TestTagRuleResponse.items:type_name -> nyttig.v1.Item
-	68, // 19: nyttig.v1.SearchRequest.after:type_name -> google.protobuf.Timestamp
+	69, // 19: nyttig.v1.SearchRequest.after:type_name -> google.protobuf.Timestamp
 	1,  // 20: nyttig.v1.SearchResponse.items:type_name -> nyttig.v1.Item
 	39, // 21: nyttig.v1.ClientMessage.filter:type_name -> nyttig.v1.StreamFilter
-	68, // 22: nyttig.v1.StreamFilter.after:type_name -> google.protobuf.Timestamp
+	69, // 22: nyttig.v1.StreamFilter.after:type_name -> google.protobuf.Timestamp
 	1,  // 23: nyttig.v1.ServerMessage.item:type_name -> nyttig.v1.Item
 	41, // 24: nyttig.v1.ServerMessage.reset:type_name -> nyttig.v1.Reset
 	42, // 25: nyttig.v1.ServerMessage.complete:type_name -> nyttig.v1.Complete
 	1,  // 26: nyttig.v1.ServerMessage.item_update:type_name -> nyttig.v1.Item
-	68, // 27: nyttig.v1.DigestSeries.created_at:type_name -> google.protobuf.Timestamp
-	68, // 28: nyttig.v1.DigestSeries.latest_period_end:type_name -> google.protobuf.Timestamp
-	68, // 29: nyttig.v1.DigestItem.published:type_name -> google.protobuf.Timestamp
-	68, // 30: nyttig.v1.DigestRef.period_end:type_name -> google.protobuf.Timestamp
-	68, // 31: nyttig.v1.Digest.period_start:type_name -> google.protobuf.Timestamp
-	68, // 32: nyttig.v1.Digest.period_end:type_name -> google.protobuf.Timestamp
-	68, // 33: nyttig.v1.Digest.created_at:type_name -> google.protobuf.Timestamp
-	68, // 34: nyttig.v1.Digest.updated_at:type_name -> google.protobuf.Timestamp
+	69, // 27: nyttig.v1.DigestSeries.created_at:type_name -> google.protobuf.Timestamp
+	69, // 28: nyttig.v1.DigestSeries.latest_period_end:type_name -> google.protobuf.Timestamp
+	69, // 29: nyttig.v1.DigestItem.published:type_name -> google.protobuf.Timestamp
+	69, // 30: nyttig.v1.DigestRef.period_end:type_name -> google.protobuf.Timestamp
+	69, // 31: nyttig.v1.Digest.period_start:type_name -> google.protobuf.Timestamp
+	69, // 32: nyttig.v1.Digest.period_end:type_name -> google.protobuf.Timestamp
+	69, // 33: nyttig.v1.Digest.created_at:type_name -> google.protobuf.Timestamp
+	69, // 34: nyttig.v1.Digest.updated_at:type_name -> google.protobuf.Timestamp
 	44, // 35: nyttig.v1.Digest.items:type_name -> nyttig.v1.DigestItem
 	45, // 36: nyttig.v1.Digest.inputs:type_name -> nyttig.v1.DigestRef
 	43, // 37: nyttig.v1.ListDigestSeriesResponse.series:type_name -> nyttig.v1.DigestSeries
-	68, // 38: nyttig.v1.AddDigestRequest.period_start:type_name -> google.protobuf.Timestamp
-	68, // 39: nyttig.v1.AddDigestRequest.period_end:type_name -> google.protobuf.Timestamp
-	68, // 40: nyttig.v1.UpdateDigestRequest.period_start:type_name -> google.protobuf.Timestamp
-	68, // 41: nyttig.v1.UpdateDigestRequest.period_end:type_name -> google.protobuf.Timestamp
+	69, // 38: nyttig.v1.AddDigestRequest.period_start:type_name -> google.protobuf.Timestamp
+	69, // 39: nyttig.v1.AddDigestRequest.period_end:type_name -> google.protobuf.Timestamp
+	69, // 40: nyttig.v1.UpdateDigestRequest.period_start:type_name -> google.protobuf.Timestamp
+	69, // 41: nyttig.v1.UpdateDigestRequest.period_end:type_name -> google.protobuf.Timestamp
 	53, // 42: nyttig.v1.UpdateDigestRequest.item_ids:type_name -> nyttig.v1.IDList
 	53, // 43: nyttig.v1.UpdateDigestRequest.input_ids:type_name -> nyttig.v1.IDList
 	46, // 44: nyttig.v1.ListDigestsResponse.digests:type_name -> nyttig.v1.Digest
-	68, // 45: nyttig.v1.Archive.requested_at:type_name -> google.protobuf.Timestamp
-	68, // 46: nyttig.v1.Archive.started_at:type_name -> google.protobuf.Timestamp
-	68, // 47: nyttig.v1.Archive.finished_at:type_name -> google.protobuf.Timestamp
+	69, // 45: nyttig.v1.Archive.requested_at:type_name -> google.protobuf.Timestamp
+	69, // 46: nyttig.v1.Archive.started_at:type_name -> google.protobuf.Timestamp
+	69, // 47: nyttig.v1.Archive.finished_at:type_name -> google.protobuf.Timestamp
 	60, // 48: nyttig.v1.ListArchivesResponse.archives:type_name -> nyttig.v1.Archive
 	7,  // 49: nyttig.v1.Nyttig.AddSource:input_type -> nyttig.v1.AddSourceRequest
 	8,  // 50: nyttig.v1.Nyttig.RemoveSource:input_type -> nyttig.v1.RemoveSourceRequest
 	9,  // 51: nyttig.v1.Nyttig.UpdateSource:input_type -> nyttig.v1.UpdateSourceRequest
-	69, // 52: nyttig.v1.Nyttig.ListSources:input_type -> google.protobuf.Empty
+	70, // 52: nyttig.v1.Nyttig.ListSources:input_type -> google.protobuf.Empty
 	11, // 53: nyttig.v1.Nyttig.RefreshSource:input_type -> nyttig.v1.RefreshSourceRequest
 	12, // 54: nyttig.v1.Nyttig.AddTag:input_type -> nyttig.v1.AddTagRequest
 	14, // 55: nyttig.v1.Nyttig.UpdateTag:input_type -> nyttig.v1.UpdateTagRequest
 	15, // 56: nyttig.v1.Nyttig.RemoveTag:input_type -> nyttig.v1.RemoveTagRequest
-	69, // 57: nyttig.v1.Nyttig.ListTags:input_type -> google.protobuf.Empty
+	70, // 57: nyttig.v1.Nyttig.ListTags:input_type -> google.protobuf.Empty
 	30, // 58: nyttig.v1.Nyttig.AddTagRule:input_type -> nyttig.v1.AddTagRuleRequest
 	31, // 59: nyttig.v1.Nyttig.RemoveTagRule:input_type -> nyttig.v1.RemoveTagRuleRequest
-	69, // 60: nyttig.v1.Nyttig.ListTagRules:input_type -> google.protobuf.Empty
+	70, // 60: nyttig.v1.Nyttig.ListTagRules:input_type -> google.protobuf.Empty
 	33, // 61: nyttig.v1.Nyttig.TestTagRule:input_type -> nyttig.v1.TestTagRuleRequest
 	19, // 62: nyttig.v1.Nyttig.AddSavedView:input_type -> nyttig.v1.AddSavedViewRequest
 	20, // 63: nyttig.v1.Nyttig.UpdateSavedView:input_type -> nyttig.v1.UpdateSavedViewRequest
 	21, // 64: nyttig.v1.Nyttig.RemoveSavedView:input_type -> nyttig.v1.RemoveSavedViewRequest
-	69, // 65: nyttig.v1.Nyttig.ListSavedViews:input_type -> google.protobuf.Empty
+	70, // 65: nyttig.v1.Nyttig.ListSavedViews:input_type -> google.protobuf.Empty
 	22, // 66: nyttig.v1.Nyttig.ReorderSavedViews:input_type -> nyttig.v1.ReorderSavedViewsRequest
 	24, // 67: nyttig.v1.Nyttig.AddAssessor:input_type -> nyttig.v1.AddAssessorRequest
 	25, // 68: nyttig.v1.Nyttig.UpdateAssessor:input_type -> nyttig.v1.UpdateAssessorRequest
 	26, // 69: nyttig.v1.Nyttig.RemoveAssessor:input_type -> nyttig.v1.RemoveAssessorRequest
-	69, // 70: nyttig.v1.Nyttig.ListAssessors:input_type -> google.protobuf.Empty
+	70, // 70: nyttig.v1.Nyttig.ListAssessors:input_type -> google.protobuf.Empty
 	28, // 71: nyttig.v1.Nyttig.PutAssessment:input_type -> nyttig.v1.PutAssessmentRequest
 	29, // 72: nyttig.v1.Nyttig.RemoveAssessment:input_type -> nyttig.v1.RemoveAssessmentRequest
 	47, // 73: nyttig.v1.Nyttig.AddDigestSeries:input_type -> nyttig.v1.AddDigestSeriesRequest
@@ -5264,50 +5314,52 @@ var file_nyttig_v1_nyttig_proto_depIdxs = []int32{
 	38, // 88: nyttig.v1.Nyttig.StreamItems:input_type -> nyttig.v1.ClientMessage
 	35, // 89: nyttig.v1.Nyttig.Search:input_type -> nyttig.v1.SearchRequest
 	37, // 90: nyttig.v1.Nyttig.MarkViewed:input_type -> nyttig.v1.MarkViewedRequest
-	0,  // 91: nyttig.v1.Nyttig.AddSource:output_type -> nyttig.v1.Source
-	69, // 92: nyttig.v1.Nyttig.RemoveSource:output_type -> google.protobuf.Empty
-	0,  // 93: nyttig.v1.Nyttig.UpdateSource:output_type -> nyttig.v1.Source
-	10, // 94: nyttig.v1.Nyttig.ListSources:output_type -> nyttig.v1.ListSourcesResponse
-	69, // 95: nyttig.v1.Nyttig.RefreshSource:output_type -> google.protobuf.Empty
-	3,  // 96: nyttig.v1.Nyttig.AddTag:output_type -> nyttig.v1.Tag
-	3,  // 97: nyttig.v1.Nyttig.UpdateTag:output_type -> nyttig.v1.Tag
-	69, // 98: nyttig.v1.Nyttig.RemoveTag:output_type -> google.protobuf.Empty
-	16, // 99: nyttig.v1.Nyttig.ListTags:output_type -> nyttig.v1.ListTagsResponse
-	6,  // 100: nyttig.v1.Nyttig.AddTagRule:output_type -> nyttig.v1.TagRule
-	69, // 101: nyttig.v1.Nyttig.RemoveTagRule:output_type -> google.protobuf.Empty
-	32, // 102: nyttig.v1.Nyttig.ListTagRules:output_type -> nyttig.v1.ListTagRulesResponse
-	34, // 103: nyttig.v1.Nyttig.TestTagRule:output_type -> nyttig.v1.TestTagRuleResponse
-	18, // 104: nyttig.v1.Nyttig.AddSavedView:output_type -> nyttig.v1.SavedView
-	18, // 105: nyttig.v1.Nyttig.UpdateSavedView:output_type -> nyttig.v1.SavedView
-	69, // 106: nyttig.v1.Nyttig.RemoveSavedView:output_type -> google.protobuf.Empty
-	23, // 107: nyttig.v1.Nyttig.ListSavedViews:output_type -> nyttig.v1.ListSavedViewsResponse
-	23, // 108: nyttig.v1.Nyttig.ReorderSavedViews:output_type -> nyttig.v1.ListSavedViewsResponse
-	4,  // 109: nyttig.v1.Nyttig.AddAssessor:output_type -> nyttig.v1.Assessor
-	4,  // 110: nyttig.v1.Nyttig.UpdateAssessor:output_type -> nyttig.v1.Assessor
-	69, // 111: nyttig.v1.Nyttig.RemoveAssessor:output_type -> google.protobuf.Empty
-	27, // 112: nyttig.v1.Nyttig.ListAssessors:output_type -> nyttig.v1.ListAssessorsResponse
-	5,  // 113: nyttig.v1.Nyttig.PutAssessment:output_type -> nyttig.v1.Assessment
-	69, // 114: nyttig.v1.Nyttig.RemoveAssessment:output_type -> google.protobuf.Empty
-	43, // 115: nyttig.v1.Nyttig.AddDigestSeries:output_type -> nyttig.v1.DigestSeries
-	43, // 116: nyttig.v1.Nyttig.UpdateDigestSeries:output_type -> nyttig.v1.DigestSeries
-	69, // 117: nyttig.v1.Nyttig.RemoveDigestSeries:output_type -> google.protobuf.Empty
-	51, // 118: nyttig.v1.Nyttig.ListDigestSeries:output_type -> nyttig.v1.ListDigestSeriesResponse
-	51, // 119: nyttig.v1.Nyttig.ReorderDigestSeries:output_type -> nyttig.v1.ListDigestSeriesResponse
-	46, // 120: nyttig.v1.Nyttig.AddDigest:output_type -> nyttig.v1.Digest
-	46, // 121: nyttig.v1.Nyttig.UpdateDigest:output_type -> nyttig.v1.Digest
-	69, // 122: nyttig.v1.Nyttig.RemoveDigest:output_type -> google.protobuf.Empty
-	46, // 123: nyttig.v1.Nyttig.GetDigest:output_type -> nyttig.v1.Digest
-	59, // 124: nyttig.v1.Nyttig.ListDigests:output_type -> nyttig.v1.ListDigestsResponse
-	60, // 125: nyttig.v1.Nyttig.ArchiveItem:output_type -> nyttig.v1.Archive
-	65, // 126: nyttig.v1.Nyttig.ListArchives:output_type -> nyttig.v1.ListArchivesResponse
-	60, // 127: nyttig.v1.Nyttig.GetArchive:output_type -> nyttig.v1.Archive
-	67, // 128: nyttig.v1.Nyttig.GetArchiveContent:output_type -> nyttig.v1.ArchiveContentChunk
-	69, // 129: nyttig.v1.Nyttig.RemoveArchive:output_type -> google.protobuf.Empty
-	40, // 130: nyttig.v1.Nyttig.StreamItems:output_type -> nyttig.v1.ServerMessage
-	36, // 131: nyttig.v1.Nyttig.Search:output_type -> nyttig.v1.SearchResponse
-	69, // 132: nyttig.v1.Nyttig.MarkViewed:output_type -> google.protobuf.Empty
-	91, // [91:133] is the sub-list for method output_type
-	49, // [49:91] is the sub-list for method input_type
+	70, // 91: nyttig.v1.Nyttig.GetVersion:input_type -> google.protobuf.Empty
+	0,  // 92: nyttig.v1.Nyttig.AddSource:output_type -> nyttig.v1.Source
+	70, // 93: nyttig.v1.Nyttig.RemoveSource:output_type -> google.protobuf.Empty
+	0,  // 94: nyttig.v1.Nyttig.UpdateSource:output_type -> nyttig.v1.Source
+	10, // 95: nyttig.v1.Nyttig.ListSources:output_type -> nyttig.v1.ListSourcesResponse
+	70, // 96: nyttig.v1.Nyttig.RefreshSource:output_type -> google.protobuf.Empty
+	3,  // 97: nyttig.v1.Nyttig.AddTag:output_type -> nyttig.v1.Tag
+	3,  // 98: nyttig.v1.Nyttig.UpdateTag:output_type -> nyttig.v1.Tag
+	70, // 99: nyttig.v1.Nyttig.RemoveTag:output_type -> google.protobuf.Empty
+	16, // 100: nyttig.v1.Nyttig.ListTags:output_type -> nyttig.v1.ListTagsResponse
+	6,  // 101: nyttig.v1.Nyttig.AddTagRule:output_type -> nyttig.v1.TagRule
+	70, // 102: nyttig.v1.Nyttig.RemoveTagRule:output_type -> google.protobuf.Empty
+	32, // 103: nyttig.v1.Nyttig.ListTagRules:output_type -> nyttig.v1.ListTagRulesResponse
+	34, // 104: nyttig.v1.Nyttig.TestTagRule:output_type -> nyttig.v1.TestTagRuleResponse
+	18, // 105: nyttig.v1.Nyttig.AddSavedView:output_type -> nyttig.v1.SavedView
+	18, // 106: nyttig.v1.Nyttig.UpdateSavedView:output_type -> nyttig.v1.SavedView
+	70, // 107: nyttig.v1.Nyttig.RemoveSavedView:output_type -> google.protobuf.Empty
+	23, // 108: nyttig.v1.Nyttig.ListSavedViews:output_type -> nyttig.v1.ListSavedViewsResponse
+	23, // 109: nyttig.v1.Nyttig.ReorderSavedViews:output_type -> nyttig.v1.ListSavedViewsResponse
+	4,  // 110: nyttig.v1.Nyttig.AddAssessor:output_type -> nyttig.v1.Assessor
+	4,  // 111: nyttig.v1.Nyttig.UpdateAssessor:output_type -> nyttig.v1.Assessor
+	70, // 112: nyttig.v1.Nyttig.RemoveAssessor:output_type -> google.protobuf.Empty
+	27, // 113: nyttig.v1.Nyttig.ListAssessors:output_type -> nyttig.v1.ListAssessorsResponse
+	5,  // 114: nyttig.v1.Nyttig.PutAssessment:output_type -> nyttig.v1.Assessment
+	70, // 115: nyttig.v1.Nyttig.RemoveAssessment:output_type -> google.protobuf.Empty
+	43, // 116: nyttig.v1.Nyttig.AddDigestSeries:output_type -> nyttig.v1.DigestSeries
+	43, // 117: nyttig.v1.Nyttig.UpdateDigestSeries:output_type -> nyttig.v1.DigestSeries
+	70, // 118: nyttig.v1.Nyttig.RemoveDigestSeries:output_type -> google.protobuf.Empty
+	51, // 119: nyttig.v1.Nyttig.ListDigestSeries:output_type -> nyttig.v1.ListDigestSeriesResponse
+	51, // 120: nyttig.v1.Nyttig.ReorderDigestSeries:output_type -> nyttig.v1.ListDigestSeriesResponse
+	46, // 121: nyttig.v1.Nyttig.AddDigest:output_type -> nyttig.v1.Digest
+	46, // 122: nyttig.v1.Nyttig.UpdateDigest:output_type -> nyttig.v1.Digest
+	70, // 123: nyttig.v1.Nyttig.RemoveDigest:output_type -> google.protobuf.Empty
+	46, // 124: nyttig.v1.Nyttig.GetDigest:output_type -> nyttig.v1.Digest
+	59, // 125: nyttig.v1.Nyttig.ListDigests:output_type -> nyttig.v1.ListDigestsResponse
+	60, // 126: nyttig.v1.Nyttig.ArchiveItem:output_type -> nyttig.v1.Archive
+	65, // 127: nyttig.v1.Nyttig.ListArchives:output_type -> nyttig.v1.ListArchivesResponse
+	60, // 128: nyttig.v1.Nyttig.GetArchive:output_type -> nyttig.v1.Archive
+	67, // 129: nyttig.v1.Nyttig.GetArchiveContent:output_type -> nyttig.v1.ArchiveContentChunk
+	70, // 130: nyttig.v1.Nyttig.RemoveArchive:output_type -> google.protobuf.Empty
+	40, // 131: nyttig.v1.Nyttig.StreamItems:output_type -> nyttig.v1.ServerMessage
+	36, // 132: nyttig.v1.Nyttig.Search:output_type -> nyttig.v1.SearchResponse
+	70, // 133: nyttig.v1.Nyttig.MarkViewed:output_type -> google.protobuf.Empty
+	68, // 134: nyttig.v1.Nyttig.GetVersion:output_type -> nyttig.v1.GetVersionResponse
+	92, // [92:135] is the sub-list for method output_type
+	49, // [49:92] is the sub-list for method input_type
 	49, // [49:49] is the sub-list for extension type_name
 	49, // [49:49] is the sub-list for extension extendee
 	0,  // [0:49] is the sub-list for field type_name
@@ -5344,7 +5396,7 @@ func file_nyttig_v1_nyttig_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_nyttig_v1_nyttig_proto_rawDesc), len(file_nyttig_v1_nyttig_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   68,
+			NumMessages:   69,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

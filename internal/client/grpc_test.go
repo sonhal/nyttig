@@ -106,6 +106,10 @@ func (s *testServer) ListDigestSeries(ctx context.Context, req *pb.ListDigestSer
 	return resp, nil
 }
 
+func (s *testServer) GetVersion(context.Context, *emptypb.Empty) (*pb.GetVersionResponse, error) {
+	return &pb.GetVersionResponse{Version: "v1.2.3"}, nil
+}
+
 func (s *testServer) ListAssessors(ctx context.Context, _ *emptypb.Empty) (*pb.ListAssessorsResponse, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -594,6 +598,16 @@ func TestClient_ListTags(t *testing.T) {
 	}
 	if len(resp.Tags) != 2 {
 		t.Errorf("expected 2 tags, got %d", len(resp.Tags))
+	}
+}
+
+func TestClient_GetVersion(t *testing.T) {
+	c, _, cleanup := setupTest(t)
+	defer cleanup()
+
+	v, err := c.GetVersion(context.Background())
+	if err != nil || v != "v1.2.3" {
+		t.Fatalf("GetVersion = %q, %v; want v1.2.3", v, err)
 	}
 }
 

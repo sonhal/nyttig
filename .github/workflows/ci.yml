@@ -161,7 +161,11 @@ jobs:
       - name: vitest
         run: pnpm test
 
+      # A v* tag is stamped in as the web app's version (:version); other
+      # builds say "dev".
       - name: vite build
+        env:
+          VITE_NYTTIG_VERSION: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || '' }}
         run: pnpm build
 
       - name: Install Chromium for Playwright

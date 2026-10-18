@@ -27,6 +27,7 @@ import (
 	pb "github.com/sonhal/nyttig/internal/proto/nyttig/v1"
 	"github.com/sonhal/nyttig/internal/server/db"
 	"github.com/sonhal/nyttig/internal/server/fetcher"
+	"github.com/sonhal/nyttig/internal/version"
 )
 
 // RefreshSourceFunc is called by RefreshSource RPC. The scheduler registers
@@ -937,6 +938,11 @@ func (s *Service) MarkViewed(ctx context.Context, req *pb.MarkViewedRequest) (*e
 		return nil, status.Errorf(codes.Internal, "mark viewed: %v", err)
 	}
 	return &emptypb.Empty{}, nil
+}
+
+// GetVersion reports which build of the daemon is running.
+func (s *Service) GetVersion(context.Context, *emptypb.Empty) (*pb.GetVersionResponse, error) {
+	return &pb.GetVersionResponse{Version: version.String()}, nil
 }
 
 // ── StreamItems (bidirectional streaming) ──────────────────────────────────

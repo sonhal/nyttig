@@ -62,6 +62,7 @@ const (
 	Nyttig_StreamItems_FullMethodName         = "/nyttig.v1.Nyttig/StreamItems"
 	Nyttig_Search_FullMethodName              = "/nyttig.v1.Nyttig/Search"
 	Nyttig_MarkViewed_FullMethodName          = "/nyttig.v1.Nyttig/MarkViewed"
+	Nyttig_GetVersion_FullMethodName          = "/nyttig.v1.Nyttig/GetVersion"
 )
 
 // NyttigClient is the client API for Nyttig service.
@@ -120,6 +121,8 @@ type NyttigClient interface {
 	Search(ctx context.Context, in *SearchRequest, opts ...grpc.CallOption) (*SearchResponse, error)
 	// View tracking
 	MarkViewed(ctx context.Context, in *MarkViewedRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	// The daemon's version
+	GetVersion(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*GetVersionResponse, error)
 }
 
 type nyttigClient struct {
@@ -562,6 +565,16 @@ func (c *nyttigClient) MarkViewed(ctx context.Context, in *MarkViewedRequest, op
 	return out, nil
 }
 
+func (c *nyttigClient) GetVersion(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*GetVersionResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetVersionResponse)
+	err := c.cc.Invoke(ctx, Nyttig_GetVersion_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // NyttigServer is the server API for Nyttig service.
 // All implementations must embed UnimplementedNyttigServer
 // for forward compatibility.
@@ -618,6 +631,8 @@ type NyttigServer interface {
 	Search(context.Context, *SearchRequest) (*SearchResponse, error)
 	// View tracking
 	MarkViewed(context.Context, *MarkViewedRequest) (*emptypb.Empty, error)
+	// The daemon's version
+	GetVersion(context.Context, *emptypb.Empty) (*GetVersionResponse, error)
 	mustEmbedUnimplementedNyttigServer()
 }
 
@@ -753,6 +768,9 @@ func (UnimplementedNyttigServer) Search(context.Context, *SearchRequest) (*Searc
 }
 func (UnimplementedNyttigServer) MarkViewed(context.Context, *MarkViewedRequest) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method MarkViewed not implemented")
+}
+func (UnimplementedNyttigServer) GetVersion(context.Context, *emptypb.Empty) (*GetVersionResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetVersion not implemented")
 }
 func (UnimplementedNyttigServer) mustEmbedUnimplementedNyttigServer() {}
 func (UnimplementedNyttigServer) testEmbeddedByValue()                {}
@@ -1513,6 +1531,24 @@ func _Nyttig_MarkViewed_Handler(srv interface{}, ctx context.Context, dec func(i
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Nyttig_GetVersion_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(emptypb.Empty)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NyttigServer).GetVersion(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Nyttig_GetVersion_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NyttigServer).GetVersion(ctx, req.(*emptypb.Empty))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Nyttig_ServiceDesc is the grpc.ServiceDesc for Nyttig service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1679,6 +1715,10 @@ var Nyttig_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "MarkViewed",
 			Handler:    _Nyttig_MarkViewed_Handler,
+		},
+		{
+			MethodName: "GetVersion",
+			Handler:    _Nyttig_GetVersion_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

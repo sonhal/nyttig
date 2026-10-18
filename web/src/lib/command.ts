@@ -5,7 +5,9 @@
 // <assessor>|all" filter, ":assessors" is the management page. Digests:
 // ":digests" is the reading page and ":digest <assessor>/<series>" opens one
 // series on it. Columns: ":columns <column>,...|all" (":cols"), alone the
-// column picker. ":archive" saves a copy of the selected item's article and ":archives" is the page of copies. Also ":refresh", ":time", ":follow" and ":help". A unique prefix is enough (":sor", ":un"); a few
+// column picker. ":archive" saves a copy of the selected item's article and
+// ":archives" is the page of copies. Also ":refresh", ":time", ":follow",
+// ":version" and ":help". A unique prefix is enough (":sor", ":un"); a few
 // short forms are fixed so they keep the meaning they had before the
 // longer commands existed (":s" sources, ":r" rules, ":f" feed, ":t" tags,
 // ":q" feed).
@@ -66,6 +68,7 @@ export type Command =
 	| { type: 'follow' }
 	/** Archives the selected item. */
 	| { type: 'archive' }
+	| { type: 'version' }
 	| { type: 'help' };
 
 export interface CommandContext {
@@ -116,6 +119,7 @@ export const COMMANDS: readonly Spec[] = [
 	{ name: 'refresh', args: '[source]', desc: 'fetch all sources now, or one' },
 	{ name: 'time', args: '[relative|absolute]', desc: 'how times are shown, or toggle it' },
 	{ name: 'follow', desc: 'jump to the newest and follow' },
+	{ name: 'version', desc: 'the versions of the web app, nyttig-api and nyttigd' },
 	{ name: 'help', desc: 'the key list' }
 ];
 
@@ -205,6 +209,8 @@ export function parseCommand(input: string, ctx: CommandContext = { sources: [],
 			return arg ? fail('archive takes no argument') : ok({ type: 'archive' });
 		case 'follow':
 			return arg ? fail('follow takes no argument') : ok({ type: 'follow' });
+		case 'version':
+			return arg ? fail('version takes no argument') : ok({ type: 'version' });
 		case 'sort': {
 			if (!arg) return ok({ type: 'sort', sort: 'toggle' });
 			const s = oneOf(arg, ['newest', 'oldest', 'score'] as const);

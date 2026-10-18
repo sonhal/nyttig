@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
+
+	"github.com/sonhal/nyttig/internal/version"
 )
 
 // Status bar styles
@@ -37,7 +39,7 @@ type StatusBar struct {
 // NewStatusBar creates a new StatusBar with default state.
 func NewStatusBar() StatusBar {
 	return StatusBar{
-		Version: "0.1.0",
+		Version: version.String(),
 	}
 }
 

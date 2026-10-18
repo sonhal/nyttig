@@ -454,6 +454,21 @@ func (c *Client) RemoveAssessor(ctx context.Context, id int64) error {
 	return err
 }
 
+// GetVersion returns the daemon's version.
+func (c *Client) GetVersion(ctx context.Context) (string, error) {
+	if err := c.ensureConn(ctx); err != nil {
+		return "", err
+	}
+	c.mu.RLock()
+	client := c.grpc
+	c.mu.RUnlock()
+	resp, err := client.GetVersion(ctx, &emptypb.Empty{})
+	if err != nil {
+		return "", err
+	}
+	return resp.Version, nil
+}
+
 // ListAssessors returns every assessor ordered by name.
 func (c *Client) ListAssessors(ctx context.Context) (*pb.ListAssessorsResponse, error) {
 	if err := c.ensureConn(ctx); err != nil {

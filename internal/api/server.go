@@ -62,6 +62,7 @@ func New(cfg Config) (http.Handler, error) {
 	a := &handlers{client: cfg.Client, now: cfg.Now}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/health", a.health)
+	mux.HandleFunc("GET /api/version", a.versions)
 	mux.HandleFunc("GET /api/sources", a.listSources)
 	mux.HandleFunc("POST /api/sources", a.addSource)
 	mux.HandleFunc("PATCH /api/sources/{id}", a.updateSource)

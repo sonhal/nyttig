@@ -14,6 +14,7 @@ import (
 
 	pb "github.com/sonhal/nyttig/internal/proto/nyttig/v1"
 	"github.com/sonhal/nyttig/internal/server/db"
+	"github.com/sonhal/nyttig/internal/version"
 )
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -69,6 +70,20 @@ func titles(items []*pb.Item) []string {
 		out[i] = it.Title
 	}
 	return out
+}
+
+// ── Version ────────────────────────────────────────────────────────────────
+
+func TestGetVersion(t *testing.T) {
+	old := version.Version
+	t.Cleanup(func() { version.Version = old })
+	version.Version = "v1.2.3"
+
+	svc, _ := newTestService(t)
+	resp, err := svc.GetVersion(context.Background(), nil)
+	if err != nil || resp.Version != "v1.2.3" {
+		t.Fatalf("GetVersion = %v, %v; want v1.2.3", resp, err)
+	}
 }
 
 // ── Sources ────────────────────────────────────────────────────────────────
