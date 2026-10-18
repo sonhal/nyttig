@@ -121,8 +121,8 @@ func RemoveFiles(dir string, id int64) error {
 }
 
 // Reconcile makes the database and the directory agree after a start:
-// running archives go back to pending, saved archives whose file is gone
-// become failed, and files without a row (and leftover temporary files) are
+// running archives go back to pending, archives whose file is gone lose their
+// size (a saved one also becomes failed), and files without a row (and leftover temporary files) are
 // deleted.
 func Reconcile(database *sql.DB, dir string, logger *slog.Logger) error {
 	requeued, err := db.RequeueRunningArchives(database)
@@ -130,9 +130,9 @@ func Reconcile(database *sql.DB, dir string, logger *slog.Logger) error {
 		return fmt.Errorf("requeue running archives: %w", err)
 	}
 
-	saved, err := db.ListSavedArchives(database)
+	saved, err := db.ListArchivesWithCopy(database)
 	if err != nil {
-		return fmt.Errorf("list saved archives: %w", err)
+		return fmt.Errorf("list archives with a copy: %w", err)
 	}
 	missing := 0
 	for _, a := range saved {
@@ -143,8 +143,8 @@ func Reconcile(database *sql.DB, dir string, logger *slog.Logger) error {
 		if !errors.Is(err, os.ErrNotExist) {
 			return fmt.Errorf("stat archive %d: %w", a.ID, err)
 		}
-		if _, err := db.FailArchive(database, a.ID, "file missing"); err != nil {
-			return fmt.Errorf("fail archive %d: %w", a.ID, err)
+		if _, err := db.MarkFileMissing(database, a.ID, "file missing"); err != nil {
+			return fmt.Errorf("mark archive %d missing: %w", a.ID, err)
 		}
 		missing++
 	}

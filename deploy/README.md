@@ -252,9 +252,10 @@ to apply config changes.
 daily and keeps 14 days. Archived articles are state too: they live in
 `/var/lib/nyttig/archives/` (the `archive_dir` setting), and the same job
 copies that directory to `backups/archives-YYYY-MM-DD/`, also for 14 days.
-Each day's copy is a full one, so allow for 14 times the size of `archives/`
-on the disk. These copies are on the same disk, so copy them somewhere else
-too (e.g. `restic`, or `rsync` to your workstation).
+The copy is made of hard links, so it adds almost no disk use: a file takes
+space until the last day that links to it expires, so an archive you remove
+stays on disk for up to 14 days. These copies are on the same disk, so copy
+them somewhere else too (e.g. `restic`, or `rsync` to your workstation).
 
 To restore:
 

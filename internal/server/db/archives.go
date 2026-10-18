@@ -36,7 +36,7 @@ type Archive struct {
 	FinalURL      string
 	ContentType   string
 	HTTPStatus    int
-	Size          int64 // bytes on disk (compressed)
+	Size          int64 // bytes on disk (compressed); above 0 when a copy can be downloaded, whatever the status
 	OriginalSize  int64 // bytes of the page itself
 	MissingAssets int
 	RequestedAt   time.Time
@@ -92,7 +92,8 @@ func scanArchive(r rowScanner) (*Archive, error) {
 //
 // An item has at most one archive. A finished one (done, partial or failed)
 // goes back to pending and its old file stays until the new copy replaces
-// it. One that is already pending or running is returned unchanged.
+// it (size stays above 0 while a copy can be downloaded). One that is already
+// pending or running is returned unchanged.
 func EnqueueArchive(db *sql.DB, itemID int64) (*Archive, error) {
 	_, err := db.Exec(`INSERT INTO archives (item_id, link, title, source_name, status, requested_at)
 		SELECT i.id, i.link, i.title, s.name, 'pending', ?
@@ -100,7 +101,7 @@ func EnqueueArchive(db *sql.DB, itemID int64) (*Archive, error) {
 		WHERE i.id = ?
 		ON CONFLICT(item_id) DO UPDATE SET
 			link = excluded.link, title = excluded.title, source_name = excluded.source_name,
-			status = 'pending', error = '', note = '', requested_at = excluded.requested_at,
+			status = 'pending', error = '', requested_at = excluded.requested_at,
 			started_at = NULL, finished_at = NULL
 		WHERE archives.status IN ('done', 'partial', 'failed')`,
 		utcSecond(time.Now()), itemID)
@@ -146,17 +147,28 @@ func ClaimArchive(db *sql.DB) (*Archive, error) {
 // FinishArchive stores the outcome of a running archive. It reports false when
 // the archive is gone or no longer running (removed, or queued again), in
 // which case nothing is written.
+//
+// A failed outcome only records the error (and the HTTP status, when there is
+// one): the facts of an earlier copy, including its size, stay, so a failed
+// re-archive does not hide a copy that can still be downloaded.
 func FinishArchive(db *sql.DB, id int64, r ArchiveResult) (bool, error) {
+	var res sql.Result
+	var err error
 	switch r.Status {
-	case ArchiveDone, ArchivePartial, ArchiveFailed:
+	case ArchiveDone, ArchivePartial:
+		res, err = db.Exec(`UPDATE archives SET status = ?, error = '', note = ?, final_url = ?, content_type = ?,
+				http_status = ?, size = ?, original_size = ?, missing_assets = ?, finished_at = ?
+			WHERE id = ? AND status = 'running'`,
+			r.Status, r.Note, r.FinalURL, r.ContentType,
+			r.HTTPStatus, r.Size, r.OriginalSize, r.MissingAssets, utcSecond(time.Now()), id)
+	case ArchiveFailed:
+		res, err = db.Exec(`UPDATE archives SET status = 'failed', error = ?,
+				http_status = CASE WHEN ? > 0 THEN ? ELSE http_status END, finished_at = ?
+			WHERE id = ? AND status = 'running'`,
+			r.Error, r.HTTPStatus, r.HTTPStatus, utcSecond(time.Now()), id)
 	default:
 		return false, fmt.Errorf("archive status %q is not a final status", r.Status)
 	}
-	res, err := db.Exec(`UPDATE archives SET status = ?, error = ?, note = ?, final_url = ?, content_type = ?,
-			http_status = ?, size = ?, original_size = ?, missing_assets = ?, finished_at = ?
-		WHERE id = ? AND status = 'running'`,
-		r.Status, r.Error, r.Note, r.FinalURL, r.ContentType,
-		r.HTTPStatus, r.Size, r.OriginalSize, r.MissingAssets, utcSecond(time.Now()), id)
 	if err != nil {
 		return false, err
 	}
@@ -238,11 +250,10 @@ func RequeueRunningArchives(db *sql.DB) (int, error) {
 	return int(n), err
 }
 
-// ListSavedArchives returns the archives that claim a file: done and partial
-// ones.
-func ListSavedArchives(db *sql.DB) ([]*Archive, error) {
-	rows, err := db.Query(`SELECT ` + archiveColumns + ` FROM archives a
-		WHERE a.status IN ('done', 'partial') ORDER BY a.id`)
+// ListArchivesWithCopy returns the archives that claim a file (size above
+// 0), whatever their status.
+func ListArchivesWithCopy(db *sql.DB) ([]*Archive, error) {
+	rows, err := db.Query(`SELECT ` + archiveColumns + ` FROM archives a WHERE a.size > 0 ORDER BY a.id`)
 	if err != nil {
 		return nil, err
 	}
@@ -258,11 +269,15 @@ func ListSavedArchives(db *sql.DB) ([]*Archive, error) {
 	return out, rows.Err()
 }
 
-// FailArchive marks a done or partial archive failed with the reason. It
-// reports whether a row changed.
-func FailArchive(db *sql.DB, id int64, reason string) (bool, error) {
-	res, err := db.Exec(`UPDATE archives SET status = 'failed', error = ?, finished_at = ?
-		WHERE id = ? AND status IN ('done', 'partial')`, reason, utcSecond(time.Now()), id)
+// MarkFileMissing records that an archive's file is gone: size becomes 0, and
+// a done or partial archive becomes failed with the reason. It reports whether
+// a row changed.
+func MarkFileMissing(db *sql.DB, id int64, reason string) (bool, error) {
+	res, err := db.Exec(`UPDATE archives SET size = 0, original_size = 0,
+			error = CASE WHEN status IN ('done', 'partial') THEN ? ELSE error END,
+			finished_at = CASE WHEN status IN ('done', 'partial') THEN ? ELSE finished_at END,
+			status = CASE WHEN status IN ('done', 'partial') THEN 'failed' ELSE status END
+		WHERE id = ? AND size > 0`, reason, utcSecond(time.Now()), id)
 	if err != nil {
 		return false, err
 	}

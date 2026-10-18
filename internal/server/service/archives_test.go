@@ -384,3 +384,38 @@ func mustArchiveID(t *testing.T, database *sql.DB, itemID int64) int64 {
 }
 
 func discardLogger() *slog.Logger { return slog.New(slog.NewTextHandler(io.Discard, nil)) }
+
+func TestArchiveItem_FailedReArchiveStillServesTheOlderCopy(t *testing.T) {
+	ctx := context.Background()
+	healthy := true
+	page := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if !healthy {
+			http.Error(w, "gone", http.StatusForbidden)
+			return
+		}
+		_, _ = io.WriteString(w, "<html>first copy</html>")
+	}))
+	t.Cleanup(page.Close)
+	e := newArchiveEnv(t, fetchPage)
+	client, _ := startGRPC(t, e.svc)
+	item := e.item(t, "twice", page.URL)
+
+	first, _ := e.svc.ArchiveItem(ctx, &pb.ArchiveItemRequest{ItemId: item})
+	done := e.waitFinished(t, first.Id)
+	if done.Status != db.ArchiveDone || done.Size <= 0 {
+		t.Fatalf("first = %v", done)
+	}
+
+	healthy = false
+	again, err := e.svc.ArchiveItem(ctx, &pb.ArchiveItemRequest{ItemId: item})
+	if err != nil || again.Id != first.Id || again.Size != done.Size {
+		t.Fatalf("re-archive = %v, %v; want the same archive, size kept while queued", again, err)
+	}
+	failed := e.waitFinished(t, first.Id)
+	if failed.Status != db.ArchiveFailed || failed.Error != "HTTP 403" || failed.Size != done.Size {
+		t.Fatalf("failed = %v, want failed with the older copy's size %d", failed, done.Size)
+	}
+	if _, body, err := content(t, client, first.Id); err != nil || string(body) != "<html>first copy</html>" {
+		t.Fatalf("content = %q, %v; want the older copy", body, err)
+	}
+}

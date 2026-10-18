@@ -71,7 +71,7 @@ func TestEnqueueArchive_RequeuesAFinishedArchiveKeepingItsFileFacts(t *testing.T
 		t.Fatal(err)
 	}
 	got := mustEnqueue(t, database, item)
-	if got.ID != a.ID || got.Status != ArchivePending || got.Note != "" || got.Error != "" ||
+	if got.ID != a.ID || got.Status != ArchivePending || got.Note != "little text" || got.Error != "" ||
 		got.Title != "New title" || got.FinishedAt != nil || got.StartedAt != nil {
 		t.Fatalf("requeued = %+v", got)
 	}
@@ -276,7 +276,7 @@ func TestArchiveReconcileQueries(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if _, err := FinishArchive(database, saved.ID, ArchiveResult{Status: ArchiveDone}); err != nil {
+	if _, err := FinishArchive(database, saved.ID, ArchiveResult{Status: ArchiveDone, Size: 5}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -287,22 +287,66 @@ func TestArchiveReconcileQueries(t *testing.T) {
 		t.Fatalf("requeued = %+v", got)
 	}
 
-	list, err := ListSavedArchives(database)
+	list, err := ListArchivesWithCopy(database)
 	if err != nil || len(list) != 1 || list[0].ID != saved.ID {
-		t.Fatalf("ListSavedArchives = %v, %v", archiveIDs(list), err)
+		t.Fatalf("ListArchivesWithCopy = %v, %v", archiveIDs(list), err)
 	}
-	if ok, err := FailArchive(database, saved.ID, "file missing"); err != nil || !ok {
-		t.Fatalf("FailArchive = %v, %v", ok, err)
+	if ok, err := MarkFileMissing(database, saved.ID, "file missing"); err != nil || !ok {
+		t.Fatalf("MarkFileMissing = %v, %v", ok, err)
 	}
-	if ok, err := FailArchive(database, running.ID, "x"); err != nil || ok {
-		t.Fatalf("FailArchive of a pending archive = %v, %v; want false", ok, err)
+	if ok, err := MarkFileMissing(database, running.ID, "x"); err != nil || ok {
+		t.Fatalf("MarkFileMissing of an archive without a copy = %v, %v; want false", ok, err)
 	}
-	if got, _ := GetArchive(database, saved.ID); got.Status != ArchiveFailed || got.Error != "file missing" {
+	if got, _ := GetArchive(database, saved.ID); got.Status != ArchiveFailed || got.Error != "file missing" || got.Size != 0 {
 		t.Fatalf("failed = %+v", got)
 	}
 
 	ids, err := ArchiveIDs(database)
 	if err != nil || len(ids) != 2 || !ids[running.ID] || !ids[saved.ID] {
 		t.Fatalf("ArchiveIDs = %v, %v", ids, err)
+	}
+}
+
+func TestFinishArchive_FailedReArchiveKeepsTheOlderCopy(t *testing.T) {
+	database := openTestDB(t)
+	src := testSource(t, database, "feed")
+	item := archiveTestItem(t, database, src, "a")
+	a := mustEnqueue(t, database, item)
+	finish := func(r ArchiveResult) *Archive {
+		t.Helper()
+		if _, err := ClaimArchive(database); err != nil {
+			t.Fatal(err)
+		}
+		if ok, err := FinishArchive(database, a.ID, r); err != nil || !ok {
+			t.Fatalf("FinishArchive = %v, %v", ok, err)
+		}
+		got, err := GetArchive(database, a.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return got
+	}
+
+	// A first archive that fails has no copy.
+	if got := finish(ArchiveResult{Status: ArchiveFailed, Error: "HTTP 500", HTTPStatus: 500}); got.Size != 0 {
+		t.Fatalf("first failure = %+v, want size 0", got)
+	}
+	mustEnqueue(t, database, item)
+	finish(ArchiveResult{Status: ArchiveDone, ContentType: "text/html; charset=utf-8", HTTPStatus: 200, Size: 10, OriginalSize: 40, FinalURL: "http://example.com/final"})
+
+	mustEnqueue(t, database, item)
+	got := finish(ArchiveResult{Status: ArchiveFailed, Error: "HTTP 403", HTTPStatus: 403})
+	if got.Status != ArchiveFailed || got.Error != "HTTP 403" || got.HTTPStatus != 403 {
+		t.Fatalf("failure not recorded: %+v", got)
+	}
+	if got.Size != 10 || got.OriginalSize != 40 || got.ContentType != "text/html; charset=utf-8" || got.FinalURL != "http://example.com/final" {
+		t.Fatalf("older copy lost: %+v", got)
+	}
+
+	// The next success clears the error and replaces the copy's facts.
+	mustEnqueue(t, database, item)
+	got = finish(ArchiveResult{Status: ArchiveDone, ContentType: "application/pdf", HTTPStatus: 200, Size: 3, OriginalSize: 9})
+	if got.Error != "" || got.Size != 3 || got.ContentType != "application/pdf" {
+		t.Fatalf("after success: %+v", got)
 	}
 }

@@ -210,16 +210,20 @@ Phase 2:
 - Archiving an item whose archive is `pending` or `running` returns it
   unchanged instead of resetting it; only `done`, `partial` and `failed`
   archives are queued again.
-- A re-archive that fails ends `failed`, but the old file stays on disk
-  (reconcile keeps files that have a row). `GetArchiveContent` serves only
-  `done` and `partial` archives (`FailedPrecondition` otherwise).
+- A re-archive that fails ends `failed` but keeps the older copy: the failure
+  only records `error` (and a non-zero `http_status`), and `size`,
+  `original_size`, `content_type`, `final_url`, `note` and `missing_assets`
+  stay those of the copy. `Archive.size > 0` means a copy can be downloaded,
+  whatever the status, and `GetArchiveContent` serves it (`FailedPrecondition`
+  when `size` is 0). Reconcile checks every archive with `size > 0`; a missing
+  file sets `size` to 0 and turns a `done` or `partial` archive `failed`.
 - The archive RPCs return `Unavailable` when the service has no archive
   directory (`Service.SetArchives` not called); the daemon always sets it.
 - `Service.PushItemUpdate(itemID)` is exported for the worker's finish callback.
-- The backup unit copies with `cp -a -T` and then `touch`es the copy, since
-  `cp -a` keeps the source's modification time and the 14-day `find` would
-  otherwise delete a fresh copy of a quiet directory. Each day's copy is a
-  full one.
+- The backup unit copies `archives/` with hard links (`cp -al -T`) instead of
+  `cp -a`, since archive files are only ever replaced by rename, and then
+  `touch`es the copy: the 14-day `find` goes by modification time, and the
+  copy would otherwise keep the source directory's.
 
 ## Later
 

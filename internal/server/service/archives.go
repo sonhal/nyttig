@@ -117,8 +117,9 @@ func (s *Service) findArchive(id int64) (*db.Archive, error) {
 	return a, nil
 }
 
-// GetArchiveContent streams the saved page in chunks of up to 1 MiB. An
-// archive that is not done or partial has no content: FailedPrecondition.
+// GetArchiveContent streams the saved page in chunks of up to 1 MiB, whatever
+// the archive's status: a failed re-archive still serves its older copy. An
+// archive without a copy (size 0) is FailedPrecondition.
 func (s *Service) GetArchiveContent(req *pb.GetArchiveContentRequest, stream pb.Nyttig_GetArchiveContentServer) error {
 	if err := s.archivesEnabled(); err != nil {
 		return err
@@ -127,8 +128,8 @@ func (s *Service) GetArchiveContent(req *pb.GetArchiveContentRequest, stream pb.
 	if err != nil {
 		return err
 	}
-	if a.Status != db.ArchiveDone && a.Status != db.ArchivePartial {
-		return status.Errorf(codes.FailedPrecondition, "archive %d is %s and has no content", a.ID, a.Status)
+	if a.Size <= 0 {
+		return status.Errorf(codes.FailedPrecondition, "archive %d is %s and has no copy", a.ID, a.Status)
 	}
 	r, err := archives.OpenFile(s.archiveDir, a.ID, a.ContentType)
 	if errors.Is(err, os.ErrNotExist) {

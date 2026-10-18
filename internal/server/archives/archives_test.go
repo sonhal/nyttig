@@ -104,18 +104,29 @@ func TestReconcile(t *testing.T) {
 	running := queue(t, database, src, "running")
 	withFile := queue(t, database, src, "withfile")
 	noFile := queue(t, database, src, "nofile")
-	for range 3 {
+	failedWithFile := queue(t, database, src, "failedfile")
+	failedNoFile := queue(t, database, src, "failednofile")
+	for range 5 {
 		if _, err := db.ClaimArchive(database); err != nil {
 			t.Fatal(err)
 		}
 	}
 	for _, a := range []*db.Archive{withFile, noFile} {
-		if _, err := db.FinishArchive(database, a.ID, db.ArchiveResult{Status: db.ArchiveDone, ContentType: "text/html; charset=utf-8"}); err != nil {
+		if _, err := db.FinishArchive(database, a.ID, db.ArchiveResult{Status: db.ArchiveDone, ContentType: "text/html; charset=utf-8", Size: 1}); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if _, err := WriteFile(dir, withFile.ID, "text/html", []byte("x")); err != nil {
-		t.Fatal(err)
+	// A failed re-archive keeps its older copy (size above 0).
+	for _, a := range []*db.Archive{failedWithFile, failedNoFile} {
+		if _, err := database.Exec(`UPDATE archives SET status = 'failed', error = 'HTTP 403', size = 1,
+			content_type = 'text/html; charset=utf-8' WHERE id = ?`, a.ID); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, id := range []int64{withFile.ID, failedWithFile.ID} {
+		if _, err := WriteFile(dir, id, "text/html", []byte("x")); err != nil {
+			t.Fatal(err)
+		}
 	}
 	// Files without a row, a leftover temporary file, and something else.
 	for _, name := range []string{"9999.html.gz", "9998.pdf.gz", ".tmp-123", "notes.txt"} {
@@ -137,13 +148,20 @@ func TestReconcile(t *testing.T) {
 	if a, _ := db.GetArchive(database, noFile.ID); a.Status != db.ArchiveFailed || a.Error != "file missing" {
 		t.Errorf("archive without its file = %q %q, want failed: file missing", a.Status, a.Error)
 	}
+	if a, _ := db.GetArchive(database, failedWithFile.ID); a.Status != db.ArchiveFailed || a.Error != "HTTP 403" || a.Size != 1 {
+		t.Errorf("failed archive with its older copy = %+v, want untouched", a)
+	}
+	if a, _ := db.GetArchive(database, failedNoFile.ID); a.Status != db.ArchiveFailed || a.Error != "HTTP 403" || a.Size != 0 {
+		t.Errorf("failed archive without its older copy = %+v, want size 0 and its own error", a)
+	}
 	var left []string
 	entries, _ := os.ReadDir(dir)
 	for _, e := range entries {
 		left = append(left, e.Name())
 	}
-	if len(left) != 2 || left[0] != FileName(withFile.ID, "text/html") || left[1] != "notes.txt" {
-		t.Errorf("files left = %v, want the archive's own file and notes.txt", left)
+	want := []string{FileName(withFile.ID, "text/html"), FileName(failedWithFile.ID, "text/html"), "notes.txt"}
+	if len(left) != 3 || left[0] != want[0] || left[1] != want[1] || left[2] != want[2] {
+		t.Errorf("files left = %v, want %v", left, want)
 	}
 }
 
