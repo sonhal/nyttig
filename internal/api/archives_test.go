@@ -124,7 +124,7 @@ func TestListArchives(t *testing.T) {
 	fc := &fakeClient{}
 	fc.arch().archives = []*pb.Archive{{
 		Id: 1, ItemId: 5, Status: "failed", Link: "javascript:alert(1)", FinalUrl: "https://example.com/a",
-		Title: "evil\x00‮<b>", Error: "bad\x07", Note: "n‮x", SourceName: "s\x00",
+		Title: "evil\x00\u202e<b>", Error: "bad\x07", Note: "n\u202ex", SourceName: "s\x00",
 	}}
 	th := newTestHandler(t, fc)
 
@@ -137,7 +137,7 @@ func TestListArchives(t *testing.T) {
 		t.Errorf("request = %v, want %v", fc.arch().lastList, want)
 	}
 	body := rec.Body.String()
-	for _, bad := range []string{"javascript:", `\u0000`, "‮", `\u0007`} {
+	for _, bad := range []string{"javascript:", `\u0000`, "\u202e", `\u0007`} {
 		if strings.Contains(body, bad) {
 			t.Errorf("body not sanitized (%q): %s", bad, body)
 		}
