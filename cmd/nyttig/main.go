@@ -16,6 +16,8 @@
 //	nyttig add-view -n sec -tag "cyber security" -unviewed   # save a filter as a view
 //	nyttig search -view sec                      # run a saved view's filter
 //	nyttig search -since 7d rust                 # only items from the last 7 days
+//	nyttig archive 42 -wait                      # save a copy of an item's article
+//	nyttig get-archive 7                         # download archive 7 to a file
 //	nyttig refresh                               # force immediate fetch of all sources
 package main
 
@@ -144,6 +146,14 @@ func main() {
 		updateDigestCmd()
 	case "remove-digest":
 		removeDigestCmd()
+	case "archive":
+		archiveCmd()
+	case "list-archives":
+		listArchivesCmd()
+	case "get-archive":
+		getArchiveCmd()
+	case "remove-archive":
+		removeArchiveCmd()
 	case "refresh":
 		refreshCmd()
 	default:
@@ -189,6 +199,10 @@ func printHelp() {
 	fmt.Fprintf(os.Stderr, "  add-digest     Write a digest in a series\n")
 	fmt.Fprintf(os.Stderr, "  update-digest  Overwrite a digest's fields or links\n")
 	fmt.Fprintf(os.Stderr, "  remove-digest  Remove a digest\n")
+	fmt.Fprintf(os.Stderr, "  archive        Save a copy of an item's article (-wait to wait for it)\n")
+	fmt.Fprintf(os.Stderr, "  list-archives  List archives, newest first\n")
+	fmt.Fprintf(os.Stderr, "  get-archive    Download an archive to a file (-o - for stdout)\n")
+	fmt.Fprintf(os.Stderr, "  remove-archive Remove an archive and its saved copy\n")
 	fmt.Fprintf(os.Stderr, "  search         Full-text search stored items (-view NAME runs a saved view)\n")
 	fmt.Fprintf(os.Stderr, "  refresh        Force immediate fetch of all sources (or one with -i)\n")
 	fmt.Fprintf(os.Stderr, "\nGlobal flags:\n")
