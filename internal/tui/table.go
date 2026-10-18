@@ -329,6 +329,11 @@ func (t *Table) renderRow(item *pb.Item, selected bool) string {
 		dateCol = fetchedTimeStyle.Render(formatDate(item.FetchedAt))
 	}
 
+	// The archive chip follows the date.
+	if chip := archiveChip(item.Archive); chip != "" {
+		dateCol += " " + chip
+	}
+
 	// 3. Source chip.
 	sourceCol := t.renderSourceChip(item.SourceId)
 
@@ -344,6 +349,9 @@ func (t *Table) renderRow(item *pb.Item, selected bool) string {
 	// 5. Title + description + domain.
 	// gutter(3) + date(11) + space(1) + source(variable) + space(1) + tags(variable) + space(1) + ...
 	prefixLen := 3 + margin + dateColumnWidth + margin
+	if item.Archive != nil {
+		prefixLen += 1 + lipgloss.Width(archiveChip(item.Archive))
+	}
 	sourceLen := lipgloss.Width(sourceCol)
 	if sourceLen > 0 {
 		sourceLen += margin

@@ -1,6 +1,6 @@
 # Article archive plan
 
-Status: **phases 1 and 2 merged on `feat/article-archive`; phases 3-5 in progress**.
+Status: **phases 1-4 merged on `feat/article-archive`; phase 5 (web) in progress**.
 
 You see an interesting item and press a key: the daemon downloads the
 article behind its link and keeps a **self-contained copy** (one HTML file
@@ -242,6 +242,18 @@ Phase 2:
   `cp -a`, since archive files are only ever replaced by rename, and then
   `touch`es the copy: the 14-day `find` goes by modification time, and the
   copy would otherwise keep the source directory's.
+
+Phases 3 and 4:
+
+- `list-archives` also takes `-before <archive-id>` for paging, like
+  `list-digests`.
+- `get-archive` needs `size > 0` (a copy exists, even after a failed
+  re-archive) and removes a partly written file when the download fails.
+- The archive chip sits after the date, not in the gutter. The error or note
+  is not in `Item.archive`, so the TUI fetches `GetArchive` once per archive
+  status for the selected item and shows it on the `i` line.
+- `b` on a `pending` or `running` archive says so instead of calling the
+  daemon.
 
 ## Later
 

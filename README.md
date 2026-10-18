@@ -195,7 +195,8 @@ changed in a client.
 | `o` | Cycle sort (newest, oldest, score) |
 | `a`, `m` | Cycle assessor / minimum score (0.5, 0.7, 0.9) |
 | `=` | Rate the selected item (`<score> [note]`) |
-| `i` | Show the selected item's assessments |
+| `i` | Show the selected item's assessments and the error or note of its archive |
+| `b`, `B` | Archive the selected item (retries a failed one); `B` archives a saved one again |
 | `j`/`k`, `g`/`G`, `Ctrl+d`/`Ctrl+u` | Move, top/bottom, half page |
 | `Enter` | Open the link in the browser |
 | `r` | Refresh all sources |
@@ -203,7 +204,9 @@ changed in a client.
 | `q` | Quit |
 
 Rows are marked viewed as you scroll past them; `●` marks unviewed rows. With
-an assessor selected, rows it scored above 0.5 get an amber bar.
+an assessor selected, rows it scored above 0.5 get an amber bar. A row's
+archive shows after its date: `⤓` saved, `⤓·` saved with missing parts, `…`
+queued or running, `✗` failed. Download copies with `nyttig get-archive`.
 
 ## CLI
 
@@ -243,6 +246,10 @@ nyttig add-digest      <series> -title <text> -start <time> -end <time> (-body <
 nyttig update-digest   <digest-id> [same flags as add-digest]
 nyttig remove-digest   <digest-id>
 nyttig search          [-view <name|id>] [filter flags] [-l limit] [-offset N] [-exact] [query...]
+nyttig archive         <item-id> [-wait]
+nyttig list-archives   [-status pending|running|done|partial|failed] [-limit N] [-before <archive-id>]
+nyttig get-archive     <archive-id> [-o <path>|-] [-f]
+nyttig remove-archive  <archive-id>
 nyttig refresh         [-id <source_id>]
 ```
 
@@ -260,6 +267,10 @@ views `-columns <list>`.
 - `search -view NAME` runs a saved view; other flags override its fields.
 - `<series>` is `<assessor>/<name>` or an ID. Digest times are RFC 3339 or
   `YYYY-MM-DD` (UTC).
+- `archive` saves a self-contained copy of the article behind an item's link;
+  `-wait` blocks until it finishes and exits 1 if it failed. `get-archive`
+  writes `<title>.html` (or `.pdf`) to the current directory, refuses to
+  overwrite without `-f`, and `-o -` writes to stdout.
 - Tag rules apply to items fetched after the rule is added. Try a pattern
   with `test-tag-rule` first.
 
