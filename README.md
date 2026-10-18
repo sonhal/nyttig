@@ -332,8 +332,8 @@ pnpm --dir web install && pnpm --dir web dev     # http://localhost:5173
 
 **Common keys:** `j`/`k` move, `/` query bar, `s`/`t` cycle source/tag,
 `S`/`T`/`v`/`a` pick a source/tag/view/assessor by name, `1`-`9` favorite
-views, `0` unfiltered, `C` columns, `F` follow newest, `=` rate, `Enter` open,
-`Space` expand, `:` command line.
+views, `0` unfiltered, `C` columns, `F` follow newest, `=` rate, `b` archive,
+`Enter` open, `Space` expand, `:` command line.
 
 **Query bar:** `kernel tag:rust src:"Hacker News" is:unviewed since:7d sort:oldest`.
 Also `score:claude>=0.7`, `unassessed:claude`, `sort:score` (needs a `score:`
@@ -341,7 +341,7 @@ term) and `cols:title,source`. Other words are the full-text search. The
 filter is kept in the URL, so it can be bookmarked.
 
 **Commands:** `:sources`, `:tags`, `:rules`, `:views`, `:assessors`,
-`:digests`, `:save [name]` (save the filter into the open view, or as a new
+`:digests`, `:archives`, `:archive`, `:save [name]` (save the filter into the open view, or as a new
 one), `:view <name>`, `:rate <score> [note]`, `:refresh`, `:help`.
 
 ## Remote access with mutual TLS
@@ -451,6 +451,25 @@ In a body, `[#123]` links to item 123 when it is one of the digest's items.
 Digests are untrusted text, and injection compounds: a poisoned daily is read
 by every digest built from it, so treat earlier digests like feed text in the
 assessor's prompt.
+
+### Archives
+
+`b` (or `:archive`, or the button on a touch screen) saves a copy of the
+selected item's article; the row shows `…` while it is queued, `⤓` when saved
+(`⤓~` when some images or styles are missing) and `✗` when it failed. The
+expanded row has the error or note and a download link. `:archives` lists the
+copies by status, with download (`o`), retry (`r`) and remove (`x`).
+
+| Route | Does |
+|---|---|
+| `POST /api/items/{id}/archive` | Queue an item (or archive it again); answers `202` with the archive |
+| `GET /api/archives?status=&before=<id>&limit=` | A page of archives, newest first |
+| `GET`, `DELETE /api/archives/{id}` | Read or remove one |
+| `GET /api/archives/{id}/file` | Download the copy |
+
+An archive is untrusted HTML. The file is served only as an attachment
+(`application/octet-stream`, `nosniff`, `Content-Security-Policy: sandbox`,
+`no-store`), never as a page of the app.
 
 ## License
 

@@ -255,6 +255,23 @@ Phases 3 and 4:
 - `b` on a `pending` or `running` archive says so instead of calling the
   daemon.
 
+Phase 5:
+
+- Added `GET /api/archives/{id}` (metadata): `Item.archive` has only the ID and
+  status, and the expanded row needs the error and note.
+- The expanded row has an archive button (retry for a failed archive) for
+  touch screens, which have no `b` key.
+- `b` on an item that is already archived (`done` or `partial`) only says so;
+  saving it again is `r` on the `/archives` page. Pending and running say
+  "already archiving".
+- Management tools `download` (`o`) and `filter` (`f`); `r` is retry.
+- The `/archives` page lists the newest 200 and polls every 3 s while any
+  archive is pending or running.
+- The e2e test covers the failed path (the stub archiver fails): the badge,
+  the error in the row, the page and removal. The feed server's
+  `/article/<name>.html` and the download check (`data:` image, no
+  `<script>`, `Content-Disposition: attachment`) wait for the real archiver.
+
 ## Later
 
 - Archiving by rule (a tag, a score at or above a threshold).
